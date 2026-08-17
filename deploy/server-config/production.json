@@ -1,0 +1,14 @@
+{
+  "runtime": {
+    "profile": "server-production",
+    "require_databases_for_readiness": true
+  },
+  "tools": {
+    "blastn_executable": "blastn",
+    "mafft_executable": "mafft",
+    "allow_development_fallback": false
+  },
+  "databases": {
+    "catalog_path": "/config/database-catalog.json"
+  }
+}

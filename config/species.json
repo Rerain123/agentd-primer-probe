@@ -1,0 +1,28 @@
+{
+  "pig": {
+    "scientific_name": "Sus scrofa",
+    "blast_db": "sus_scrofa",
+    "assembly": "Sscrofa11.1 (GCF_000003025.6)"
+  },
+  "cattle": {
+    "scientific_name": "Bos taurus",
+    "blast_db": "bos_taurus",
+    "assembly": "ARS-UCD2.0 (GCF_002263795.3)"
+  },
+  "chicken": {
+    "scientific_name": "Gallus gallus",
+    "blast_db": "gallus_gallus",
+    "assembly": "GRCg7b (GCF_016699485.2)"
+  },
+  "sheep": {
+    "scientific_name": "Ovis aries",
+    "blast_db": "ovis_aries",
+    "assembly": "ARS-UI_Ramb_v2.0 (GCF_016772045.2)"
+  },
+  "goat": {
+    "scientific_name": "Capra hircus",
+    "blast_db": "capra_hircus",
+    "assembly": "ARS1.2 (GCF_001704415.2)"
+  }
+}
+

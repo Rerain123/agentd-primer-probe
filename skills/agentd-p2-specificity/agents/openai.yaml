@@ -1,0 +1,4 @@
+interface:
+  display_name: "Agent D P2 Specificity"
+  short_description: "Assess target, host, and cross-species specificity"
+  default_prompt: "Use $agentd-p2-specificity to assess qPCR assay specificity."

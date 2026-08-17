@@ -1,0 +1,96 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://wens.example/schemas/agent-interaction-v1.json",
+  "title": "Agent Interaction Popup",
+  "description": "A frontend-rendered workflow pause. One question is flat; multiple questions use interactions.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["type", "task", "flowControl"],
+  "properties": {
+    "type": {"const": "agent_interaction"},
+    "task": {"type": "string", "minLength": 1},
+    "flowControl": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["action", "stopCurrentTurn", "resumeMessageType"],
+      "properties": {
+        "action": {"const": "WAIT_FOR_USER"},
+        "stopCurrentTurn": {"const": true},
+        "resumeMessageType": {"const": "agent_interaction_response"}
+      }
+    },
+    "interactionId": {"type": "string", "minLength": 1},
+    "reason": {"type": "string", "minLength": 1},
+    "question": {"type": "string", "minLength": 1},
+    "inputType": {"enum": ["SINGLE_SELECT", "MULTI_SELECT", "TEXT", "FORM"]},
+    "options": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/option"}
+    },
+    "inputFields": {
+      "type": "array",
+      "items": {"type": "object"}
+    },
+    "answer": {"type": "null"},
+    "interactions": {
+      "type": "array",
+      "minItems": 2,
+      "items": {"$ref": "#/$defs/interaction"}
+    }
+  },
+  "oneOf": [
+    {
+      "required": [
+        "interactionId",
+        "reason",
+        "question",
+        "inputType",
+        "options",
+        "answer"
+      ]
+    },
+    {"required": ["interactions"]}
+  ],
+  "$defs": {
+    "option": {
+      "type": "object",
+      "required": ["value", "label"],
+      "properties": {
+        "value": {"type": "string", "minLength": 1},
+        "label": {"type": "string", "minLength": 1},
+        "description": {"type": "string"},
+        "inputRequired": {"type": "boolean"},
+        "inputKey": {"type": "string", "minLength": 1},
+        "inputType": {"type": "string", "minLength": 1}
+      },
+      "additionalProperties": true
+    },
+    "interaction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "interactionId",
+        "reason",
+        "question",
+        "inputType",
+        "options",
+        "answer"
+      ],
+      "properties": {
+        "interactionId": {"type": "string", "minLength": 1},
+        "reason": {"type": "string", "minLength": 1},
+        "question": {"type": "string", "minLength": 1},
+        "inputType": {"enum": ["SINGLE_SELECT", "MULTI_SELECT", "TEXT", "FORM"]},
+        "options": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/option"}
+        },
+        "inputFields": {
+          "type": "array",
+          "items": {"type": "object"}
+        },
+        "answer": {"type": "null"}
+      }
+    }
+  }
+}

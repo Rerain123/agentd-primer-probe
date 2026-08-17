@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://wens.example/schemas/primer-design-input-update-v1.json",
+  "title": "Primer Design User Field Update",
+  "description": "Minimal role=user message emitted when the frontend form is submitted.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["type", "data"],
+  "properties": {
+    "type": {"const": "primer_design_input_update"},
+    "interactionId": {
+      "type": "string",
+      "pattern": "^design-input-[a-f0-9]{32}$"
+    },
+    "data": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "designInput": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "targetOrganism": {"type": "string"},
+            "host": {"type": "string"},
+            "coverageRequirement": {"type": "string"}
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,46 @@
+{
+  "resources": {
+    "cross:default:blast": {
+      "kind": "blast_database",
+      "path": "/data/blastdb/cross_species/current/db",
+      "version": "SET_ON_SERVER",
+      "required": true
+    },
+    "host:pig:blast": {
+      "kind": "blast_database",
+      "path": "/data/blastdb/host/sus_scrofa/current/db",
+      "version": "SET_ON_SERVER",
+      "required": true
+    },
+    "host:cattle:blast": {
+      "kind": "blast_database",
+      "path": "/data/blastdb/host/bos_taurus/current/db",
+      "version": "SET_ON_SERVER",
+      "required": false
+    },
+    "host:chicken:blast": {
+      "kind": "blast_database",
+      "path": "/data/blastdb/host/gallus_gallus/current/db",
+      "version": "SET_ON_SERVER",
+      "required": false
+    },
+    "internal:pig:ACTB:sequences": {
+      "kind": "fasta",
+      "path": "/data/sequences/internal/pig/ACTB.fasta",
+      "version": "SET_ON_SERVER",
+      "required": true
+    },
+    "internal:pig:GAPDH:sequences": {
+      "kind": "fasta",
+      "path": "/data/sequences/internal/pig/GAPDH.fasta",
+      "version": "SET_ON_SERVER",
+      "required": false
+    },
+    "internal:pig:18S rRNA:sequences": {
+      "kind": "fasta",
+      "path": "/data/sequences/internal/pig/18S_rRNA.fasta",
+      "version": "SET_ON_SERVER",
+      "required": false
+    }
+  }
+}

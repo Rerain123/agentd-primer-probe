@@ -1,0 +1,168 @@
+{
+  "schema_version": "3.0.0-phase3",
+  "minimum_template_length": 80,
+  "maximum_candidates": 50,
+  "top_candidates": 3,
+  "thermodynamics": {
+    "mv_conc_mm": 50.0,
+    "dv_conc_mm": 3.0,
+    "dntp_conc_mm": 0.8,
+    "primer_dna_conc_nm": 250.0,
+    "probe_dna_conc_nm": 200.0,
+    "temperature_c": 37.0,
+    "max_loop": 30,
+    "algorithm": "SantaLucia 1998"
+  },
+  "standard_design": {
+    "product_min_bp": 70,
+    "product_max_bp": 150,
+    "primer_min_size": 18,
+    "primer_opt_size": 20,
+    "primer_max_size": 28,
+    "primer_min_tm": 58.0,
+    "primer_opt_tm": 60.0,
+    "primer_max_tm": 62.0,
+    "primer_min_gc": 35.0,
+    "primer_max_gc": 65.0,
+    "probe_min_size": 18,
+    "probe_opt_size": 25,
+    "probe_max_size": 30,
+    "probe_min_tm": 68.0,
+    "probe_opt_tm": 70.0,
+    "probe_max_tm": 72.0
+  },
+  "relaxation_rounds": [
+    {
+      "label": "L1",
+      "product_min_bp": 60,
+      "product_max_bp": 180,
+      "primer_min_tm": 58.0,
+      "primer_opt_tm": 60.0,
+      "primer_max_tm": 65.0,
+      "probe_min_size": 18,
+      "probe_opt_size": 25,
+      "probe_max_size": 30
+    },
+    {
+      "label": "L2",
+      "product_min_bp": 60,
+      "product_max_bp": 180,
+      "primer_min_tm": 50.0,
+      "primer_opt_tm": 58.0,
+      "primer_max_tm": 65.0,
+      "probe_min_size": 18,
+      "probe_opt_size": 25,
+      "probe_max_size": 30
+    },
+    {
+      "label": "L3",
+      "product_min_bp": 60,
+      "product_max_bp": 180,
+      "primer_min_tm": 50.0,
+      "primer_opt_tm": 55.0,
+      "primer_max_tm": 65.0,
+      "probe_min_size": 13,
+      "probe_opt_size": 18,
+      "probe_max_size": 20
+    }
+  ],
+  "conservation_rounds": [
+    {"minimum_conservation": 0.95, "minimum_length": 150, "label": "standard"},
+    {"minimum_conservation": 0.92, "minimum_length": 120, "label": "relaxed_1"},
+    {"minimum_conservation": 0.90, "minimum_length": 90, "label": "relaxed_2"}
+  ],
+  "scoring": {
+    "conservation_weight": 0.30,
+    "thermodynamics_weight": 0.25,
+    "specificity_weight": 0.25,
+    "amplicon_weight": 0.20,
+    "warning_penalties_percent": {
+      "R-01b": 5,
+      "R-03b": 2,
+      "R-11": 3,
+      "R-12": 3,
+      "R-13": 5,
+      "R-SUPPLEMENT_WARNING": 3,
+      "R-SUPPLEMENT_CAUTION": 1,
+      "low_confidence_conservation": 10
+    }
+  },
+  "mgb": {
+    "enabled_for_short_probe": true,
+    "default_fluorophore": "FAM",
+    "design_min_tm_c": 50.0,
+    "design_opt_tm_c": 57.0,
+    "design_max_tm_c": 65.0,
+    "target_tm_min_c": 65.0,
+    "target_tm_max_c": 72.0
+  },
+  "structure": {
+    "temperature_c": 60.0,
+    "salt_na_mm": 50.0,
+    "warning_below_dg_kcal": -30.0,
+    "caution_below_dg_kcal": -20.0,
+    "num_subopt": 10,
+    "subopt_delta_kcal": 5.0
+  },
+  "degenerate": {
+    "trigger_min_variant_sites": 2,
+    "max_degenerate_positions": 3,
+    "max_combinations": 8,
+    "feasible_tm_spread_c": 2.0,
+    "marginal_tm_spread_c": 4.0
+  },
+  "variation": {
+    "minimum_sequences": 30,
+    "minimum_variant_observations": 2,
+    "robust_coverage": 0.98,
+    "acceptable_coverage": 0.95,
+    "high_frequency": 0.05,
+    "tm_shift_warning_c": 2.0
+  },
+  "multiplex": {
+    "minimum_targets": 2,
+    "maximum_targets": 4,
+    "maximum_panel_combinations": 500,
+    "top_panels": 3,
+    "standard_cross_dimer_dg_kcal": -6.0,
+    "relaxed_cross_dimer_dg_kcal": -7.0,
+    "three_prime_dimer_dg_kcal": -7.0,
+    "tm_spread_max_c": 3.0,
+    "tm_spread_relaxed_c": 4.0,
+    "gc_spread_caution_percent": 15.0,
+    "gc_spread_warning_percent": 20.0,
+    "minimum_amplicon_length_difference_bp": 20,
+    "default_instrument": "CFX96"
+  },
+  "internal_control": {
+    "supported_species": ["pig", "cattle", "chicken"],
+    "minimum_homolog_sequences": 5,
+    "pass_conservation": 0.99,
+    "caution_conservation": 0.97,
+    "default_fluorophore": "Cy5",
+    "default_quencher": "BHQ-2",
+    "top_candidates": 3,
+    "gene_priority": {
+      "pig": ["ACTB", "GAPDH", "18S rRNA"],
+      "cattle": ["ACTB", "GAPDH", "18S rRNA"],
+      "chicken": ["ACTB", "GAPDH", "18S rRNA"]
+    },
+    "refseq": {
+      "pig": {"ACTB": "NM_213978", "GAPDH": "NM_001206359.1", "18S rRNA": "NR_046261"},
+      "cattle": {"ACTB": "NM_173979.3", "GAPDH": "NM_001034034.2", "18S rRNA": "NR_036642"},
+      "chicken": {"ACTB": "NM_205518.1", "GAPDH": "NM_204305.1", "18S rRNA": "NR_046237"}
+    }
+  },
+  "runtime": {
+    "profile": "local-framework",
+    "require_databases_for_readiness": false
+  },
+  "databases": {
+    "catalog_path": null
+  },
+  "tools": {
+    "blastn_executable": "blastn",
+    "mafft_executable": "mafft",
+    "allow_development_fallback": false
+  }
+}

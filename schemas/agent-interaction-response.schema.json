@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://wens.example/schemas/agent-interaction-response-v1.json",
+  "title": "Agent Interaction Response",
+  "description": "A frontend submission answering one flat question or every question in a multi-question popup.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["type", "task"],
+  "properties": {
+    "type": {"const": "agent_interaction_response"},
+    "task": {"type": "string", "minLength": 1},
+    "interactionId": {"type": "string", "minLength": 1},
+    "answer": {"type": ["string", "array", "object"]},
+    "fieldValues": {"type": "object"},
+    "customInstruction": {"type": ["string", "null"]},
+    "interactions": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/response"}
+    }
+  },
+  "oneOf": [
+    {"required": ["interactionId", "answer"]},
+    {"required": ["interactions"]}
+  ],
+  "$defs": {
+    "response": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["interactionId", "answer"],
+      "properties": {
+        "interactionId": {"type": "string", "minLength": 1},
+        "answer": {"type": ["string", "array", "object"]},
+        "fieldValues": {"type": "object"},
+        "customInstruction": {"type": ["string", "null"]}
+      }
+    }
+  }
+}

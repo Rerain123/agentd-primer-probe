@@ -1,0 +1,40 @@
+{
+  "resources": {
+    "target:fixture_target:sequences": {
+      "kind": "fasta",
+      "path": "../testdata/variation.fasta",
+      "version": "fixture-1",
+      "required": false
+    },
+    "target:fixture_target:blast": {
+      "kind": "blast_database",
+      "path": "../testdata/target.fasta",
+      "version": "fixture-1",
+      "required": false
+    },
+    "host:pig:blast": {
+      "kind": "blast_database",
+      "path": "../testdata/host.fasta",
+      "version": "fixture-1",
+      "required": false
+    },
+    "cross:default:blast": {
+      "kind": "blast_database",
+      "path": "../testdata/cross_species.fasta",
+      "version": "fixture-1",
+      "required": false
+    },
+    "nt:default:blast": {
+      "kind": "blast_database",
+      "path": "SET_ON_SERVER",
+      "version": "SET_ON_SERVER",
+      "required": false
+    },
+    "internal:pig:ACTB:sequences": {
+      "kind": "fasta",
+      "path": "../testdata/variation.fasta",
+      "version": "fixture-1",
+      "required": false
+    }
+  }
+}

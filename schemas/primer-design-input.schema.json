@@ -1,0 +1,70 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://wens.example/schemas/primer-design-input-v1.json",
+  "title": "Primer Design Frontend Input",
+  "description": "Conversation message rendered as the WF-01 design confirmation form.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["type", "data"],
+  "properties": {
+    "type": {"const": "primer_design_input"},
+    "data": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "confirmed",
+        "canStart",
+        "summaryText",
+        "sourceFile",
+        "designInput",
+        "issues"
+      ],
+      "properties": {
+        "status": {"const": "WAITING_USER"},
+        "confirmed": {"const": false},
+        "canStart": {"type": "boolean"},
+        "summaryText": {"type": "string"},
+        "sourceFile": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["fileName", "fileType"],
+          "properties": {
+            "fileName": {"type": "string", "minLength": 1},
+            "fileType": {"const": "FASTA"},
+            "inputMode": {
+              "enum": ["UPLOADED_FILE", "INLINE_SEQUENCE"]
+            },
+            "inputArtifactId": {
+              "type": "string",
+              "pattern": "^himat-[a-f0-9]{32}$"
+            }
+          }
+        },
+        "designInput": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["targetOrganism", "host", "coverageRequirement"],
+          "properties": {
+            "targetOrganism": {"type": "string"},
+            "host": {"type": "string"},
+            "coverageRequirement": {"type": "string"}
+          }
+        },
+        "issues": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["code", "level", "message", "field"],
+            "properties": {
+              "code": {"type": "string"},
+              "level": {"enum": ["BLOCKER", "WARNING"]},
+              "message": {"type": "string"},
+              "field": {"type": "string"}
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,142 @@
+{
+  "baseline_id": "wf01-prd-v0.2-m0",
+  "status": "READY_FOR_REVIEW",
+  "authoritative_source": "引物智能体WF01_PRD_v0.2(1).pdf",
+  "scope": {
+    "workflow": "WF-01",
+    "assay_type": "ordinary_taqman_singleplex_per_target",
+    "template_model": "one_fasta_record_equals_one_independent_target",
+    "fixed_top_candidates": 10,
+    "minimum_template_length_nt": 80,
+    "allowed_parameter_profiles": ["user", "default", "L1", "L2"],
+    "excluded_capabilities": [
+      "template_auto_fetch",
+      "multiple_sequence_alignment",
+      "conservation_scoring",
+      "degenerate_primers",
+      "L3",
+      "MGB",
+      "multiplex",
+      "internal_control",
+      "amplicon_secondary_structure",
+      "existing_assay_validation"
+    ]
+  },
+  "parameters": {
+    "primer_tm_c": {"minimum": 50, "maximum": 65, "pair_delta_max": 2},
+    "amplicon_length_bp": {"minimum": 70, "maximum": 200, "default": [70, 150], "L1": [70, 180], "L2": [70, 200]},
+    "primer_length_nt": {"minimum": 18, "maximum": 28, "default_optimum": 20},
+    "probe_length_nt": {"minimum": 22, "maximum": 32},
+    "probe_tm_relative_to_primer_mean_c": {"minimum": 8, "maximum": 10}
+  },
+  "hard_rules": {
+    "R01": "primer_tm_50_to_65_and_pair_delta_at_most_2",
+    "R02": "amplicon_length_70_to_200",
+    "R03": "last_5_primer_bases_gc_at_most_2_and_no_4_consecutive_g",
+    "R04": "primer_length_18_to_28",
+    "R05": "probe_5_prime_not_g",
+    "R06": "probe_between_primers_nonoverlap_and_each_gap_at_least_5",
+    "R07": "ordinary_probe_tm_primer_mean_plus_8_to_10",
+    "R08": "ordinary_probe_length_22_to_32",
+    "R09": "three_prime_dimer_dg_not_less_than_minus_6_and_no_strong_self_complementarity",
+    "R10": "three_prime_cross_dimer_dg_not_less_than_minus_9"
+  },
+  "soft_rules": {
+    "low_primer_tm": {"condition": "primer_tm_below_55", "penalty_percent": 5},
+    "amplicon_at_lower_boundary": {"condition": "amplicon_length_equals_70", "action": "warning_and_length_score_70_only"},
+    "three_prime_risk": {"condition": "last_5_gc_zero_or_three_identical_bases", "penalty_percent": 2},
+    "R11": {"condition": "hairpin_dg_less_than_minus_3", "penalty_percent": 3},
+    "R12": {"condition": "non_three_prime_weak_dimer_dg_between_minus_9_and_minus_6", "penalty_percent": 3}
+  },
+  "scoring": {
+    "conservation_in_score": false,
+    "weights": {"thermodynamics": 0.357, "specificity": 0.357, "amplicon_features": 0.286},
+    "penalty_method": "additive",
+    "probe_relative_tm_score": {"minimum_delta_c": 8, "maximum_delta_c": 10, "score": 100},
+    "amplicon_length_score": {
+      "70": 70,
+      "71_to_150": 100,
+      "151_to_200": 70
+    }
+  },
+  "allowed_rule_statuses": ["PASS", "WARNING", "FAIL", "NOT_EVALUATED", "NOT_APPLICABLE"],
+  "requirements": [
+    "SCP-01", "SCP-02", "SCP-03", "SCP-04",
+    "IN-01", "IN-02", "IN-03", "IN-04", "IN-05", "IN-06",
+    "EXE-01", "EXE-02", "EXE-03",
+    "PAR-01", "PAR-02", "PAR-03",
+    "R01-R10", "R11-R12", "SCO-01", "SCO-02", "DED-01",
+    "SPE-01", "SPE-02", "SPE-03", "STA-01", "STA-02",
+    "RPT-01", "RPT-02", "RPT-03", "VER-01"
+  ],
+  "acceptance_cases": [
+    {
+      "id": "AC-IN-01",
+      "requirements": ["SCP-01", "IN-01"],
+      "fixture": "multi_target_valid.fasta",
+      "expected": {"target_count": 3, "target_record_order": ["target_001", "target_002", "target_003"], "uses_alignment": false}
+    },
+    {
+      "id": "AC-IN-03",
+      "requirements": ["IN-03"],
+      "fixture": "short_79.fasta",
+      "expected": {"can_auto_run": false, "issue_code": "TEMPLATE_TOO_SHORT", "minimum_length_nt": 80}
+    },
+    {
+      "id": "AC-IN-04",
+      "requirements": ["IN-04"],
+      "fixture": "duplicate_ids.fasta",
+      "expected": {"can_auto_run": false, "issue_code": "DUPLICATE_RECORD_ID", "scope": "BATCH"}
+    },
+    {
+      "id": "AC-IN-05",
+      "requirements": ["SCP-03", "IN-06"],
+      "input": {"target_organism": "Synthetic test virus", "accession": "NC_000000.0", "host": "pig"},
+      "expected": {"can_auto_run": false, "issue_code": "MISSING_TEMPLATE", "template_auto_fetch": false}
+    },
+    {
+      "id": "AC-PAR-01",
+      "requirements": ["PAR-01", "PAR-02"],
+      "expected": {"profiles": ["default", "L1", "L2"], "has_L3": false, "fixed_top_candidates": 10}
+    },
+    {
+      "id": "AC-EXE-04",
+      "requirements": ["EXE-03"],
+      "expected": {"top10_is_stop_condition": false, "all_manifest_units_reach_terminal_state": true}
+    },
+    {
+      "id": "AC-DED-01",
+      "requirements": ["DED-01"],
+      "expected": {"scope": "target_only", "key": "SHA256(forward+reverse+probe)", "merge_sources": true, "duplicates_increase_score": false}
+    },
+    {
+      "id": "AC-DED-02",
+      "requirements": ["DED-01"],
+      "expected": {"cross_target_deduplication": false}
+    },
+    {
+      "id": "AC-SCO-01",
+      "requirements": ["SCO-01"],
+      "expected": {"soft_penalty_method": "additive", "amplicon_70_reduces_amplicon_dimension_only": true, "amplicon_70_length_score": 70, "recommended_length_score": 100, "non_recommended_allowed_length_score": 70}
+    },
+    {
+      "id": "AC-SCO-02",
+      "requirements": ["SCO-02"],
+      "expected": {"conservation_in_score": false, "weights": {"thermodynamics": 0.357, "specificity": 0.357, "amplicon_features": 0.286}}
+    },
+    {
+      "id": "AC-RPT-04",
+      "requirements": ["SCP-04", "RPT-01"],
+      "expected": {"MGB": "NOT_APPLICABLE", "multiplex": "NOT_APPLICABLE", "internal_control": "NOT_APPLICABLE", "conservation": "NOT_EVALUATED", "amplicon_secondary_structure": "NOT_EVALUATED"}
+    },
+    {
+      "id": "AC-VER-01",
+      "requirements": ["VER-01"],
+      "expected": {"creates_new_version": true, "source_task_immutable": true, "changed_target": "RERUN_REQUIRED", "unchanged_target": "REUSED", "records_field_diff": true}
+    }
+  ],
+  "resolved_decisions": {
+    "DEC-05": "agent_repository_backend_report_adapter"
+  },
+  "unresolved_decisions": ["DEC-01", "DEC-02", "DEC-03", "DEC-04", "DEC-06"]
+}

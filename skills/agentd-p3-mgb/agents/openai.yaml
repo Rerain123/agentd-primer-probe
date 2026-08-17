@@ -1,0 +1,4 @@
+interface:
+  display_name: "Agent D P3 MGB"
+  short_description: "Evaluate MGB probe corrected Tm and rules"
+  default_prompt: "Use $agentd-p3-mgb to evaluate an MGB probe."

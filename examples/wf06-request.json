@@ -1,0 +1,16 @@
+{
+  "assay_id": "fixture_complete_panel_v1",
+  "host_species": "pig",
+  "sample_type": "synthetic_fixture",
+  "include_internal_control": false,
+  "allow_fallback": true,
+  "targets": [
+    {
+      "target_id": "fixture_target",
+      "target_species": "Synthetic test virus",
+      "gene": "development_fixture",
+      "selection_reason": "阶段三端到端验收数据",
+      "sequence": "TGGGCGAACTTGGTCACCCCGAAGTATCTGATGAGATGATCACCGAGAGCCGGGGCGAGGAAGATGTACGGATACTTTCCGCACAGGGACTAGGTTAACCGCGATTTCTTATCCTGCGATAGCCGGCCGTGTAAACCTTTCTTAGGCATGGCAGAAAATGCAATCATATAACGGGGTTAGAAGGGAGCCTGTAGCATGCTGCCCGATTTCCCGTGTACCCCTGTCGCTGCGAAGTATATCCAGAGGTGCCGGTGCTAGCC"
+    }
+  ]
+}

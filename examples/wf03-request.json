@@ -1,0 +1,9 @@
+{
+  "assay_id": "fixture_internal_control_v1",
+  "host_species": "pig",
+  "preferred_genes": ["ACTB"],
+  "gene_fasta_paths": {
+    "ACTB": "testdata/variation.fasta"
+  },
+  "allow_fallback": true
+}

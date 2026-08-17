@@ -1,0 +1,110 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://wens.example/schemas/agentd-output.phase3.json",
+  "title": "Agent D Phase Three Output",
+  "type": "object",
+  "required": [
+    "schema_version", "job_id", "created_at", "workflow", "status", "assay_id",
+    "input", "target", "candidates", "tool_status", "warnings", "errors",
+    "provenance", "evidence_level", "reports", "workflow_trace", "disclaimer"
+  ],
+  "properties": {
+    "schema_version": {"const": "3.0.0-phase3"},
+    "job_id": {"type": "string", "format": "uuid"},
+    "created_at": {"type": "string", "format": "date-time"},
+    "workflow": {"enum": ["WF-01", "WF-02", "WF-03", "WF-04", "WF-05", "WF-06", "WF-07"]},
+    "status": {"enum": ["SUCCEEDED", "PARTIAL", "FAILED"]},
+    "assay_id": {"type": "string", "minLength": 1},
+    "input": {"type": "object"},
+    "target": {"type": "object"},
+    "candidates": {"type": "array", "items": {"$ref": "#/$defs/candidate"}},
+    "specificity": {"type": ["object", "null"]},
+    "variation": {"type": ["object", "null"]},
+    "multiplex": {"type": ["object", "null"]},
+    "internal_control": {"type": ["object", "null"]},
+    "recommended_conditions": {"type": ["object", "null"]},
+    "diagnosis": {"type": ["object", "null"]},
+    "relaxation_metadata": {"type": "object"},
+    "degenerate_strategy": {"type": ["object", "null"]},
+    "self_check": {"type": "object"},
+    "reports": {
+      "type": "object",
+      "required": ["C29_candidate_comparison_markdown", "C30_interpretation"],
+      "properties": {
+        "C29_candidate_comparison_markdown": {"type": "string"},
+        "C30_interpretation": {"type": "object"}
+      }
+    },
+    "workflow_trace": {"type": "array", "items": {"type": "object"}},
+    "tool_status": {"type": "object"},
+    "warnings": {"type": "array", "items": {"type": "string"}},
+    "errors": {"type": "array", "items": {"type": "object"}},
+    "provenance": {"type": "object"},
+    "evidence_level": {"enum": ["in_silico_only", "blast_verified", "experimentally_validated"]},
+    "disclaimer": {"type": "string", "minLength": 10}
+  },
+  "$defs": {
+    "oligo": {
+      "type": "object",
+      "required": ["sequence_5to3", "length_nt", "tm_celsius", "gc_percent", "thermo_method"],
+      "properties": {
+        "sequence_5to3": {"type": "string", "pattern": "^[ACGT]+$"},
+        "length_nt": {"type": "integer", "minimum": 1},
+        "tm_celsius": {"type": ["number", "null"]},
+        "gc_percent": {"type": "number", "minimum": 0, "maximum": 100},
+        "position_start": {"type": ["integer", "null"]},
+        "position_end": {"type": ["integer", "null"]},
+        "hairpin_dg_kcal": {"type": ["number", "null"]},
+        "homodimer_dg_kcal": {"type": ["number", "null"]},
+        "three_prime_dimer_dg_kcal": {"type": ["number", "null"]},
+        "thermo_method": {"type": "string"}
+      }
+    },
+    "rule": {
+      "type": "object",
+      "required": ["code", "category", "status", "actual", "threshold", "source", "message"],
+      "properties": {
+        "code": {"type": "string"},
+        "category": {"enum": ["hard", "soft", "platform", "metadata"]},
+        "status": {"enum": ["PASS", "FAIL", "WARNING", "NOT_EVALUATED", "NOT_APPLICABLE"]},
+        "actual": {},
+        "threshold": {"type": "string"},
+        "source": {"type": "string"},
+        "message": {"type": "string"}
+      }
+    },
+    "candidate": {
+      "type": "object",
+      "required": [
+        "candidate_id", "forward_primer", "reverse_primer", "probe", "amplicon",
+        "evidence_level", "rules", "warnings", "score", "verdict", "metadata"
+      ],
+      "properties": {
+        "candidate_id": {"type": "string"},
+        "forward_primer": {"$ref": "#/$defs/oligo"},
+        "reverse_primer": {"$ref": "#/$defs/oligo"},
+        "probe": {"anyOf": [{"$ref": "#/$defs/oligo"}, {"type": "null"}]},
+        "amplicon": {
+          "type": "object",
+          "required": ["sequence_5to3", "length_bp", "start", "end"],
+          "properties": {
+            "sequence_5to3": {"type": "string"},
+            "length_bp": {"type": "integer", "minimum": 0},
+            "start": {"type": "integer"},
+            "end": {"type": "integer"}
+          }
+        },
+        "evidence_level": {"enum": ["in_silico_only", "blast_verified", "experimentally_validated"]},
+        "specificity": {"type": ["object", "null"]},
+        "mgb_assessment": {"type": ["object", "null"]},
+        "amplicon_structure": {"type": ["object", "null"]},
+        "rules": {"type": "array", "items": {"$ref": "#/$defs/rule"}},
+        "warnings": {"type": "array", "items": {"type": "string"}},
+        "score": {"type": "number", "minimum": 0, "maximum": 1},
+        "rank": {"type": ["integer", "null"]},
+        "verdict": {"enum": ["PENDING", "PASS", "PASS_WITH_WARNINGS", "PARTIAL", "FAIL"]},
+        "metadata": {"type": "object"}
+      }
+    }
+  }
+}

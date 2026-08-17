@@ -1,0 +1,4 @@
+interface:
+  display_name: "Agent D P5 Internal Control"
+  short_description: "Design and validate a qPCR internal control"
+  default_prompt: "Use $agentd-p5-internal-control to design a qPCR internal control."

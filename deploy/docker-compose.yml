@@ -1,0 +1,76 @@
+name: agentd-primer-probe
+
+services:
+  agentd:
+    build:
+      context: ..
+      dockerfile: deploy/docker/Dockerfile
+    image: agentd-primer-probe:${AGENTD_IMAGE_TAG:-1.0.3}
+    restart: unless-stopped
+    init: true
+    ports:
+      - "${AGENTD_BIND_ADDRESS:-127.0.0.1}:${AGENTD_PORT:-8000}:8000"
+    environment:
+      AGENTD_CONFIG: /config/production.json
+      AGENTD_DATABASE_CATALOG: /config/database-catalog.json
+      AGENTD_STATE_DIR: /data/jobs
+      AGENTD_RUNTIME_PROFILE: server-production
+      AGENTD_REQUIRE_DATABASES: "${AGENTD_REQUIRE_DATABASES:-true}"
+      BLASTDB: /data/blastdb
+      MCP_AUTH_REQUIRED: "${MCP_AUTH_REQUIRED:-true}"
+      MCP_JWT_SECRET: "${JWT_SECRET:?Set JWT_SECRET in deploy/.env}"
+      MCP_JWT_ALGORITHM: "${MCP_JWT_ALGORITHM:-HS256}"
+      MCP_JWT_REQUIRE_EXP: "${MCP_JWT_REQUIRE_EXP:-true}"
+      MCP_PUBLIC_WF01_ARTIFACTS: "${MCP_PUBLIC_WF01_ARTIFACTS:-true}"
+      MCP_MAX_TOOL_RESULT_BYTES: "${MCP_MAX_TOOL_RESULT_BYTES:-65536}"
+      MCP_DESIGN_INPUT_DEDUP_SECONDS: "${MCP_DESIGN_INPUT_DEDUP_SECONDS:-10}"
+      MCP_PUBLIC_BASE_URL: "${MCP_PUBLIC_BASE_URL:-}"
+      MCP_ALLOWED_HOSTS: "${MCP_ALLOWED_HOSTS:-}"
+      MCP_ALLOWED_ORIGINS: "${MCP_ALLOWED_ORIGINS:-}"
+      HIMAT_FILE_DOWNLOAD_BASE_URL: "${HIMAT_FILE_DOWNLOAD_BASE_URL:-https://himat.ne.scqcyz.cn/api/files/download}"
+      HIMAT_FILE_DOWNLOAD_TIMEOUT_SECONDS: "${HIMAT_FILE_DOWNLOAD_TIMEOUT_SECONDS:-300}"
+      AGENTD_INPUT_FILE_MAX_BYTES: "${AGENTD_INPUT_FILE_MAX_BYTES:-1073741824}"
+      BLAST_SEARCH_SERVICE_URL: "${BLAST_SEARCH_SERVICE_URL:-}"
+      BLAST_SEARCH_TIMEOUT_SECONDS: "${BLAST_SEARCH_TIMEOUT_SECONDS:-360}"
+      BLAST_SEARCH_MAX_SEQS: "${BLAST_SEARCH_MAX_SEQS:-100}"
+      RUSTFS_ENABLED: "${RUSTFS_ENABLED:-false}"
+      RUSTFS_ENDPOINT_URL: "${RUSTFS_ENDPOINT_URL:-https://rustfs.ne.scqcyz.cn}"
+      RUSTFS_ACCESS_KEY_ID: "${RUSTFS_ACCESS_KEY_ID:-}"
+      RUSTFS_SECRET_ACCESS_KEY: "${RUSTFS_SECRET_ACCESS_KEY:-}"
+      RUSTFS_BUCKET: "${RUSTFS_BUCKET:-wens}"
+      RUSTFS_REGION: "${RUSTFS_REGION:-us-east-1}"
+      RUSTFS_OBJECT_PREFIX: "${RUSTFS_OBJECT_PREFIX:-data}"
+      RUSTFS_PUBLIC_BASE_URL: "${RUSTFS_PUBLIC_BASE_URL:-https://rustfs.ne.scqcyz.cn}"
+      RUSTFS_VERIFY_TLS: "${RUSTFS_VERIFY_TLS:-true}"
+      RUSTFS_CONNECT_TIMEOUT_SECONDS: "${RUSTFS_CONNECT_TIMEOUT_SECONDS:-5}"
+      RUSTFS_READ_TIMEOUT_SECONDS: "${RUSTFS_READ_TIMEOUT_SECONDS:-30}"
+      TZ: Asia/Shanghai
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./server-config/production.json:/config/production.json:ro
+      - ./server-config/database-catalog.json:/config/database-catalog.json:ro
+      - ${AGENTD_BLASTDB_DIR:-./server-data/blastdb}:/data/blastdb:ro
+      - ${AGENTD_SEQUENCE_DATA_DIR:-./server-data/sequences}:/data/sequences:ro
+      - agentd-jobs:/data/jobs
+    read_only: true
+    tmpfs:
+      - /tmp:size=512m,mode=1777
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/ready', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      start_period: 30s
+      retries: 5
+    cpus: "${AGENTD_CPUS:-4.0}"
+    mem_limit: ${AGENTD_MEMORY_LIMIT:-8g}
+    pids_limit: 256
+    stop_grace_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"
+
+volumes:
+  agentd-jobs:

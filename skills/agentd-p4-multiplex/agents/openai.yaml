@@ -1,0 +1,4 @@
+interface:
+  display_name: "Agent D P4 Multiplex"
+  short_description: "Check multiplex qPCR panel compatibility"
+  default_prompt: "Use $agentd-p4-multiplex to check a multiplex qPCR panel."

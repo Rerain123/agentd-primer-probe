@@ -1,0 +1,356 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agentd.local/schemas/wf01-v02-canonical-report.schema.json",
+  "title": "AgentD WF-01 PRD v0.2 Canonical Report",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "schema_version",
+    "export_contract_version",
+    "report_id",
+    "batch_id",
+    "batch_code",
+    "task_version",
+    "workflow",
+    "prd_version",
+    "generated_at",
+    "generator",
+    "data_scope",
+    "batch_overview",
+    "target_index",
+    "targets",
+    "batch_search_records",
+    "out_of_scope",
+    "disclaimer",
+    "version_diff",
+    "completeness",
+    "content_sha256"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "wf01-prd-v0.2-canonical-report-v1"
+    },
+    "export_contract_version": {
+      "const": "wf01-prd-v0.2-export-v3"
+    },
+    "report_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "batch_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "batch_code": {
+      "type": "string",
+      "pattern": "^WF01-[0-9]{6}-[0-9]{4}-[A-F0-9]{4}$"
+    },
+    "task_version": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "workflow": {
+      "const": "WF-01"
+    },
+    "prd_version": {
+      "const": "0.2"
+    },
+    "generated_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "generator": {
+      "type": "object",
+      "required": [
+        "stage",
+        "engine_version",
+        "scientific_recalculation",
+        "source_stages"
+      ],
+      "properties": {
+        "stage": {
+          "const": "M6"
+        },
+        "scientific_recalculation": {
+          "const": false
+        }
+      }
+    },
+    "data_scope": {
+      "type": "object",
+      "required": [
+        "scope",
+        "target_filter_applied",
+        "pagination_applied",
+        "ui_filter_can_mutate_export",
+        "user_download_formats",
+        "default_generated_formats",
+        "on_demand_formats",
+        "user_json_download"
+      ],
+      "properties": {
+        "scope": {
+          "const": "COMPLETE_BATCH"
+        },
+        "target_filter_applied": {
+          "const": false
+        },
+        "pagination_applied": {
+          "const": false
+        },
+        "ui_filter_can_mutate_export": {
+          "const": false
+        },
+        "user_download_formats": {
+          "const": [
+            "html",
+            "process_html",
+            "rules_html",
+            "scientific_data",
+            "csv",
+            "pdf"
+          ]
+        },
+        "default_generated_formats": {
+          "const": [
+            "html",
+            "process_html",
+            "rules_html",
+            "scientific_data"
+          ]
+        },
+        "on_demand_formats": {
+          "const": ["csv", "pdf"]
+        },
+        "user_json_download": {
+          "const": false
+        }
+      }
+    },
+    "batch_overview": {
+      "type": "object",
+      "required": [
+        "status",
+        "search_complete",
+        "technical_search_complete",
+        "target_total",
+        "target_counts",
+        "candidate_counts"
+      ]
+    },
+    "target_index": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "target_id",
+          "status",
+          "search_complete",
+          "candidate_counts"
+        ]
+      }
+    },
+    "targets": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/targetReport"
+      }
+    },
+    "out_of_scope": {
+      "$ref": "#/$defs/outOfScope"
+    },
+    "disclaimer": {
+      "type": "object",
+      "required": [
+        "evidence_scope",
+        "experimental_validation",
+        "research_use_only",
+        "text"
+      ],
+      "properties": {
+        "experimental_validation": {
+          "const": false
+        },
+        "research_use_only": {
+          "const": true
+        },
+        "text": {
+          "type": "string",
+          "minLength": 20
+        }
+      }
+    },
+    "completeness": {
+      "type": "object",
+      "required": [
+        "status",
+        "validator_version",
+        "issue_count",
+        "issues"
+      ],
+      "properties": {
+        "status": {
+          "const": "COMPLETE"
+        },
+        "issue_count": {
+          "const": 0
+        }
+      }
+    },
+    "content_sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    }
+  },
+  "$defs": {
+    "outOfScope": {
+      "type": "object",
+      "required": [
+        "mgb",
+        "multiplex",
+        "internal_control",
+        "conservation",
+        "amplicon_secondary_structure"
+      ],
+      "properties": {
+        "mgb": {
+          "$ref": "#/$defs/notApplicable"
+        },
+        "multiplex": {
+          "$ref": "#/$defs/notApplicable"
+        },
+        "internal_control": {
+          "$ref": "#/$defs/notApplicable"
+        },
+        "conservation": {
+          "$ref": "#/$defs/notEvaluated"
+        },
+        "amplicon_secondary_structure": {
+          "$ref": "#/$defs/notEvaluated"
+        }
+      }
+    },
+    "notApplicable": {
+      "type": "object",
+      "required": [
+        "status",
+        "reason"
+      ],
+      "properties": {
+        "status": {
+          "const": "NOT_APPLICABLE"
+        }
+      }
+    },
+    "notEvaluated": {
+      "type": "object",
+      "required": [
+        "status",
+        "reason"
+      ],
+      "properties": {
+        "status": {
+          "const": "NOT_EVALUATED"
+        }
+      }
+    },
+    "targetReport": {
+      "type": "object",
+      "required": [
+        "target_id",
+        "input",
+        "conclusion",
+        "candidate_counts",
+        "top10",
+        "all_qualified_candidates",
+        "all_deliverable_candidates",
+        "all_excluded_candidates",
+        "all_specificity_incomplete_candidates",
+        "all_primer3_candidates",
+        "primer3_candidate_occurrences",
+        "rule_summary",
+        "search_records",
+        "specificity_evidence",
+        "out_of_scope"
+      ],
+      "properties": {
+        "top10": {
+          "type": "array",
+          "maxItems": 10,
+          "items": {
+            "$ref": "#/$defs/candidate"
+          }
+        },
+        "all_qualified_candidates": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/candidate"
+          }
+        },
+        "all_excluded_candidates": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/candidate"
+          }
+        },
+        "all_primer3_candidates": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/candidate"
+          }
+        },
+        "out_of_scope": {
+          "$ref": "#/$defs/outOfScope"
+        }
+      }
+    },
+    "candidate": {
+      "type": "object",
+      "required": [
+        "candidate_id",
+        "dedupe_key",
+        "forward_primer",
+        "reverse_primer",
+        "probe",
+        "amplicon",
+        "rules",
+        "specificity",
+        "thermodynamic_metadata",
+        "scoring_detail",
+        "amplicon_secondary_structure",
+        "conservation",
+        "report_membership",
+        "exclusion_reasons"
+      ],
+      "properties": {
+        "rules": {
+          "type": "array",
+          "minItems": 21,
+          "maxItems": 21,
+          "items": {
+            "type": "object",
+            "required": [
+              "code",
+              "status",
+              "evaluation_state",
+              "threshold",
+              "source",
+              "message"
+            ],
+            "properties": {
+              "code": {
+                "pattern": "^R(?:0[1-9]|1[0-9]|2[01])$"
+              }
+            }
+          }
+        },
+        "amplicon_secondary_structure": {
+          "$ref": "#/$defs/notEvaluated"
+        },
+        "conservation": {
+          "$ref": "#/$defs/notEvaluated"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://wens.example/schemas/primer-design-output-v1.json",
+  "title": "Primer Design Output",
+  "description": "The user-facing report message emitted only after a primer-design workflow finishes.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["type", "data"],
+  "properties": {
+    "type": {"const": "primer_design_output"},
+    "data": {"$ref": "#/$defs/outputData"}
+  },
+  "$defs": {
+    "attachment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["attachmentId", "fileName", "fileType", "mimeType", "fileUrl"],
+      "properties": {
+        "attachmentId": {"type": "string", "minLength": 1},
+        "fileName": {"type": "string", "minLength": 1},
+        "fileType": {"enum": ["HTML", "CSV", "PDF", "ZIP"]},
+        "mimeType": {"type": "string", "minLength": 1},
+        "fileUrl": {
+          "type": "string",
+          "oneOf": [
+            {
+              "pattern": "^https://rustfs\\.ne\\.scqcyz\\.cn/wens/data/[^/?#]+$"
+            },
+            {
+              "pattern": "^/data/[^/]+$"
+            }
+          ]
+        }
+      }
+    },
+    "outputData": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "reportTitle",
+        "summaryText",
+        "primaryAttachmentId",
+        "attachments",
+        "issues"
+      ],
+      "properties": {
+        "status": {"enum": ["COMPLETED", "FAILED"]},
+        "reportTitle": {"type": "string", "minLength": 1},
+        "summaryText": {"type": "string", "minLength": 1},
+        "primaryAttachmentId": {"type": ["string", "null"]},
+        "attachments": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/attachment"}
+        },
+        "issues": {
+          "type": "array",
+          "items": {"type": "string"}
+        }
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"status": {"const": "COMPLETED"}}},
+          "then": {
+            "properties": {
+              "primaryAttachmentId": {"type": "string", "minLength": 1},
+              "attachments": {"minItems": 1}
+            }
+          },
+          "else": {
+            "properties": {
+              "primaryAttachmentId": {"type": "null"},
+              "attachments": {"maxItems": 0}
+            }
+          }
+        }
+      ]
+    }
+  }
+}

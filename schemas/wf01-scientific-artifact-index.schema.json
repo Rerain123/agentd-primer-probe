@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://wens.example/schemas/wf01-scientific-artifact-index-v1.json",
+  "title": "WF-01 Scientific Artifact Index",
+  "description": "Bounded manifest of raw scientific artifacts available for authenticated expert download.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "batchId", "artifacts"],
+  "properties": {
+    "schemaVersion": {"const": "wf01-scientific-artifact-index-v1"},
+    "batchId": {"type": "string", "minLength": 1},
+    "artifactCount": {"type": "integer", "minimum": 0},
+    "artifacts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "artifactId",
+          "stage",
+          "tools",
+          "targetId",
+          "fileName",
+          "mimeType",
+          "sizeBytes",
+          "sha256",
+          "downloadUrl",
+          "createdAt",
+          "dataScope"
+        ],
+        "properties": {
+          "artifactId": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9._-]{0,127}$"
+          },
+          "stage": {"enum": ["M1", "M2", "M3", "M4", "M5", "M6", "M7"]},
+          "tools": {
+            "type": "array",
+            "minItems": 1,
+            "items": {"type": "string", "minLength": 1}
+          },
+          "targetId": {"type": ["string", "null"]},
+          "fileName": {"type": "string", "pattern": "^[^/\\\\]+\\.json$"},
+          "mimeType": {"const": "application/json; charset=utf-8"},
+          "sizeBytes": {"type": "integer", "minimum": 1},
+          "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+          "downloadUrl": {
+            "type": "string",
+            "pattern": "^/v1/wf01/tasks/[^/]+/scientific-artifacts/[^/]+$"
+          },
+          "createdAt": {"type": "string", "format": "date-time"},
+          "dataScope": {"const": "RAW_SCIENTIFIC_STAGE_OUTPUT"}
+        }
+      }
+    }
+  }
+}

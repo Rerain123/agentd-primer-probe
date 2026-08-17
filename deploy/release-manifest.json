@@ -1,0 +1,28 @@
+{
+  "name": "agentd-primer-probe-server",
+  "description": "OligoSmith 引物与探针设计、验证、优化和报告生成 MCP 服务",
+  "version": "1.0.3",
+  "phase": 3,
+  "schema_version": "3.0.0-phase3",
+  "package_type": "docker-compose-source-bundle",
+  "target_platform": "Linux server with Docker Engine and Compose v2",
+  "minimum_resources": {
+    "cpu_cores": 4,
+    "memory_gb": 8,
+    "application_disk_gb": 10,
+    "database_disk": "depends on mounted BLAST and FASTA resources"
+  },
+  "default_binding": "127.0.0.1:8020",
+  "mcp_transport": "streamableHttp",
+  "mcp_endpoint": "/mcp",
+  "authentication": "Bearer JWT for MCP and workflow mutations; read-only WF-01 deliverables are public by deployment default",
+  "persistent_state": "agentd-jobs Docker volume for jobs and HiMat input artifacts plus optional RustFS S3 publication for user attachments",
+  "external_data": [
+    "versioned BLAST nucleotide database prefixes",
+    "versioned target and internal-control FASTA files",
+    "HiMat uploaded-file download endpoint",
+    "RustFS S3 endpoint and least-privilege credentials when attachment publication is enabled"
+  ],
+  "offline_image_included": false,
+  "offline_note": "Build on a connected Linux Docker host and run deploy/scripts/export_offline_image.sh."
+}

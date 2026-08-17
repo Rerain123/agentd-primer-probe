@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://wens.example/schemas/primer-agent-interaction-v1.json",
+  "title": "Primer Agent User Interaction",
+  "type": "object",
+  "required": ["type", "schemaVersion", "data"],
+  "properties": {
+    "type": {"const": "primer_agent_interaction"},
+    "schemaVersion": {"const": "1.0"},
+    "data": {
+      "type": "object",
+      "required": [
+        "interactionId", "taskId", "status", "stage", "blocker", "message",
+        "context", "options", "inputFields", "userResponse"
+      ],
+      "properties": {
+        "interactionId": {"type": "string", "minLength": 1},
+        "taskId": {"type": "string", "minLength": 1},
+        "status": {"enum": ["WAITING_USER", "USER_SUBMITTED", "RUNNING", "RESOLVED", "CANCELLED"]},
+        "stage": {"type": "string", "minLength": 1},
+        "blocker": {
+          "type": "object",
+          "required": ["code", "blocking", "message"],
+          "properties": {
+            "code": {"type": "string", "minLength": 1},
+            "blocking": {"type": "boolean"},
+            "message": {"type": "string", "minLength": 1}
+          }
+        },
+        "message": {"type": "string", "minLength": 1},
+        "context": {"type": "object"},
+        "options": {"type": "array", "items": {"type": "object"}},
+        "inputFields": {"type": "array", "items": {"type": "object"}},
+        "userResponse": {
+          "type": "object",
+          "required": ["selectedOption", "fieldValues", "customInstruction", "submittedAt"],
+          "properties": {
+            "selectedOption": {"type": ["string", "null"]},
+            "fieldValues": {"type": "object"},
+            "customInstruction": {"type": ["string", "null"]},
+            "submittedAt": {"type": ["string", "null"]}
+          }
+        }
+      }
+    }
+  }
+}

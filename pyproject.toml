@@ -1,0 +1,53 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "agentd-primer-probe"
+version = "1.0.3"
+description = "Agent D 第三阶段引物与探针完整工作流框架"
+readme = "README.md"
+requires-python = ">=3.11"
+license = {text = "Proprietary"}
+authors = [{name = "Wens AI4S Project"}]
+dependencies = []
+
+[project.optional-dependencies]
+scientific = [
+  "biopython>=1.83,<2",
+  "primer3-py>=2.0.3,<3",
+  "ViennaRNA>=2.5,<3",
+]
+api = [
+  "boto3>=1.35,<2",
+  "fastapi>=0.115,<1",
+  "pypdf>=5.0,<7",
+  "reportlab>=4.2,<5",
+  "uvicorn>=0.34,<1",
+]
+mcp = [
+  "mcp[cli]>=1.27.2,<2",
+  "PyJWT>=2.8,<3",
+]
+dev = [
+  "pytest>=8,<10",
+  "httpx>=0.27,<1",
+  "jsonschema>=4,<5",
+  "PyYAML>=6,<7",
+]
+
+[project.scripts]
+agentd = "agentd.cli:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+agentd = ["static/*.html", "static/*.css", "static/*.js"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q -p no:cacheprovider"

@@ -1,0 +1,34 @@
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Local secrets and machine-specific configuration
+.env
+.env.local
+.env.*.local
+
+# IDE and browser-automation artifacts
+.idea/
+.vscode/
+.playwright-cli/
+
+# Runtime, QA, build, and scratch outputs
+runtime/
+outputs/
+output/
+tmp/
+*.log
+*.pid
+deploy/.env
+deploy/server-data/
+dist/
+
+# Operating-system metadata
+.DS_Store
+Thumbs.db

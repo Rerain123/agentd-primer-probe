@@ -1,0 +1,13 @@
+.venv
+.git
+__pycache__
+*.pyc
+*.egg-info
+.pytest_cache
+runtime
+outputs
+testdata
+tests
+deploy/.env
+deploy/server-data
+dist
