@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://wens.example/schemas/primer-agent-interaction-v1.json",
-  "title": "Primer Agent User Interaction",
+  "title": "引物设计智能体用户交互",
   "type": "object",
   "required": ["type", "schemaVersion", "data"],
   "properties": {

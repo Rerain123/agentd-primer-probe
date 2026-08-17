@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://wens.example/schemas/primer-design-output-v1.json",
-  "title": "Primer Design Output",
-  "description": "The user-facing report message emitted only after a primer-design workflow finishes.",
+  "title": "引物设计输出",
+  "description": "仅在引物设计工作流完成后发出的面向用户报告消息。",
   "type": "object",
   "additionalProperties": false,
   "required": ["type", "data"],

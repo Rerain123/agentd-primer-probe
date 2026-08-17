@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://wens.example/schemas/agent-interaction-v1.json",
-  "title": "Agent Interaction Popup",
-  "description": "A frontend-rendered workflow pause. One question is flat; multiple questions use interactions.",
+  "title": "智能体交互弹窗",
+  "description": "前端渲染的工作流暂停消息；单个问题使用平铺结构，多个问题使用 interactions。",
   "type": "object",
   "additionalProperties": false,
   "required": ["type", "task", "flowControl"],

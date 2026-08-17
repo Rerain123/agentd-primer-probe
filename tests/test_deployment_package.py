@@ -40,8 +40,26 @@ class DeploymentPackageTests(unittest.TestCase):
             self.assertIn(layer, skill_text)
             self.assertNotIn("TODO", skill_text)
             self.assertGreater(len(contract_text.strip()), 200)
+            self.assertGreater(
+                sum("\u4e00" <= char <= "\u9fff" for char in skill_text),
+                100,
+                f"{skill_name}/SKILL.md 应以中文说明为主",
+            )
+            self.assertGreater(
+                sum("\u4e00" <= char <= "\u9fff" for char in contract_text),
+                40,
+                f"{skill_name}/references/contract.md 应以中文说明为主",
+            )
             self.assertEqual(ui["interface"]["display_name"].split()[2], layer)
             self.assertIn(f"${skill_name}", ui["interface"]["default_prompt"])
+            for field in ("display_name", "short_description", "default_prompt"):
+                self.assertRegex(
+                    ui["interface"][field],
+                    r"[\u4e00-\u9fff]",
+                    f"{skill_name} 的 {field} 应包含中文",
+                )
+            self.assertGreaterEqual(len(ui["interface"]["short_description"]), 25)
+            self.assertLessEqual(len(ui["interface"]["short_description"]), 64)
 
     def test_release_manifest_matches_package_version(self) -> None:
         release = json.loads((ROOT / "deploy" / "release-manifest.json").read_text(encoding="utf-8"))

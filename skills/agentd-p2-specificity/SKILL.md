@@ -1,44 +1,29 @@
 ---
 name: agentd-p2-specificity
-description: "Assess qPCR assay target, host-genome, and cross-species specificity through Agent D P2 BLAST orchestration. Use for requests mentioning BLAST verification, host exclusion, cross-reactivity, non-specific amplification, 宿主排除、特异性验证、近缘种交叉 or BLAST 数据库."
+description: "通过 Agent D P2 编排 BLAST，评估 qPCR 检测体系的靶标、宿主基因组及跨物种特异性。用于 BLAST 验证、宿主排除、交叉反应、非特异扩增、近缘种交叉或 BLAST 数据库相关请求。"
 ---
 
-# Agent D P2 Specificity
+# Agent D P2 特异性评估
 
-Use P2 to orchestrate BLAST+ and P1 thermodynamics through Agent D. P2 is
-database-dependent: never claim `blast_verified` without actual versioned
-target and cross-species databases. A host database is additionally required
-when the user supplied a host and requested host-genome exclusion.
+使用 P2 编排 Agent D 中的 BLAST+ 与 P1 热力学能力。P2 依赖数据库：没有真实、版本化的靶标库和跨物种库时，不得声称结果已经 `blast_verified`。用户提供宿主并要求宿主基因组排除时，还必须具备对应宿主数据库。
 
-## Route the request
+## 请求路由
 
-- Validate a supplied assay: run `WF-04` with `target_db`, `host_db` and
-  `cross_db` when available.
-- Design and verify a new assay: run `WF-01` with the same database fields.
-- Diagnose suspected off-target amplification: run `WF-07`, which invokes
-  existing-assay validation first.
+- 验证已有检测体系：运行 `WF-04`，并在可用时传入 `target_db`、`host_db` 和 `cross_db`。
+- 设计并验证新检测体系：运行 `WF-01`，传入相同数据库字段。
+- 诊断疑似脱靶扩增：运行 `WF-07`，先执行已有检测体系验证。
 
-## Execute
+## 执行
 
-1. Check P1, C6 and C0 status. In production require BLAST+ and a valid
-   versioned database catalog.
-2. Pass the target species and all configured database resources. Pass host
-   species when the user supplied it; do not infer a host or substitute a
-   database from another host species.
-3. Always inspect `check_target` and `check_cross_species`. Inspect
-   `check_host` when host exclusion was requested; otherwise require an
-   explicit not-applicable result.
-4. Report the method and evidence level exactly as returned. `NOT_CHECKED`,
-   exact-FASTA fallback, or mixed methods cannot be presented as BLAST proof.
-5. On a FAIL, keep the hit evidence and route redesign to WF-01 rather than
-   editing an oligo sequence manually.
+1. 检查 P1、C6 和 C0 状态。生产模式必须具备 BLAST+ 和有效的版本化数据库目录。
+2. 传入靶标物种及全部已配置数据库资源。仅在用户提供宿主时传入宿主物种；不得猜测宿主，也不得替换为其他宿主物种的数据库。
+3. 始终检查 `check_target` 和 `check_cross_species`。要求宿主排除时检查 `check_host`；未要求时必须得到明确的不适用结果。
+4. 严格按返回值报告方法和证据等级。不得把 `NOT_CHECKED`、精确 FASTA 降级或混合方法表述为 BLAST 证据。
+5. 结果为 `FAIL` 时保留命中证据，并把重新设计交回 WF-01；不得手工修改寡核苷酸序列。
 
-## Boundaries
+## 边界
 
-- P2 does not design primers or assign a wet-lab specificity conclusion.
-- Host is optional workflow context. Missing host must not prevent target and
-  broad-background specificity evaluation.
-- Do not send sequences to a public BLAST service. P2 only uses BLAST+ with
-  locally configured, versioned target, host and cross/background databases.
-- Read [references/contract.md](references/contract.md) for database and
-  verdict semantics.
+- P2 不负责设计引物，也不负责给出湿实验特异性结论。
+- 宿主是可选工作流上下文；缺少宿主不得阻断靶标与广谱背景特异性评估。
+- 不得把序列发送到公共 BLAST 服务。P2 仅使用本地配置、版本化的靶标、宿主及跨物种/背景数据库。
+- 读取 [references/contract.md](references/contract.md)，确认数据库与判定语义。

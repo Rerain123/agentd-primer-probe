@@ -1,42 +1,29 @@
 ---
 name: agentd-p1-primer3
-description: "Design or validate qPCR primer/probe oligos with Agent D P1 Primer3 thermodynamics. Use for requests about TaqMan primer/probe design, primer Tm, hairpins, dimers, or existing assay validation, including Chinese requests such as 引物设计、探针设计、Tm、二聚体、已有引物验证."
+description: "通过 Agent D P1 Primer3 设计或验证 qPCR 引物、探针及热力学性质。用于 TaqMan 引物探针设计、引物 Tm、发卡、二聚体、已有检测体系验证，以及用户提到引物设计、探针设计、Tm、二聚体或已有引物验证时。"
 ---
 
-# Agent D P1 Primer3
+# Agent D P1 Primer3 引物与探针设计
 
-Use P1 as the only thermodynamics and oligo-design authority. Invoke the
-existing Agent D service; do not recreate Primer3 parameters, calculate Tm
-with an alternate formula, or silently enable a fallback.
+把 P1 作为寡核苷酸设计与热力学计算的唯一依据。调用现有 Agent D 服务；不得自行重建 Primer3 参数、改用其他公式计算 Tm，也不得静默启用降级算法。
 
-## Route the request
+## 请求路由
 
-- Design a new assay: run `WF-01` (`POST /v1/wf01/design`).
-- Validate supplied forward/reverse primers, optionally with a probe: run
-  `WF-04` (`POST /v1/wf04/validate`).
-- Include MGB correction only when the request explicitly requires an MGB
-  probe; set `use_mgb: true` and let P3 evaluate it.
-- Decline SYBR design as out of the current Agent D delivery scope; do not
-  label a probe-based result as SYBR.
+- 设计新检测体系：运行 `WF-01`（`POST /v1/wf01/design`）。
+- 验证已有上游/下游引物及可选探针：运行 `WF-04`（`POST /v1/wf04/validate`）。
+- 仅在用户明确要求 MGB 探针时启用 MGB 修正；设置 `use_mgb: true`，交由 P3 评估。
+- 当前 Agent D 交付范围不包含 SYBR 设计；不得把含探针的结果标记为 SYBR。
 
-## Execute
+## 执行
 
-1. Check `GET /v1/tool-status` or `agentd tool-status`; require `P1.available`.
-2. Validate the request sequence as 5′→3′ DNA and preserve the caller's
-   assay/target identifiers.
-3. Submit the workflow request without overriding scientific thresholds.
-4. Return candidate sequences, amplicon sequence and length, Tm method,
-   salt/DNA concentration metadata, rules, evidence level, warnings and the
-   experimental-validation disclaimer.
-5. If P1 is unavailable, report the actual tool status. A development fallback
-   may only be used when the caller explicitly requests it; its output remains
-   `PARTIAL` and `in_silico_only`.
+1. 检查 `GET /v1/tool-status` 或 `agentd tool-status`，确认 `P1.available` 为真。
+2. 验证请求序列为 5′→3′ DNA，并保留调用方提供的检测体系与靶标标识。
+3. 提交工作流请求，不得覆盖科学阈值。
+4. 返回候选序列、扩增子序列与长度、Tm 方法、盐浓度与 DNA 浓度元数据、规则、证据等级、警告及实验验证免责声明。
+5. P1 不可用时如实报告工具状态。仅当调用方明确要求时才允许开发降级；降级结果必须保持 `PARTIAL` 和 `in_silico_only`。
 
-## Boundaries
+## 边界
 
-- Leave MGB correction to P3, specificity to P2, multiplex compatibility to
-  P4 and amplicon folding to P6.
-- Treat all calculated values as design evidence, never clinical or production
-  conclusions.
-- Read [references/contract.md](references/contract.md) before composing a
-  request or interpreting a P1 result.
+- MGB 修正交给 P3，特异性评估交给 P2，多重兼容性评估交给 P4，扩增子折叠评估交给 P6。
+- 把所有计算值视为设计证据，不得视为临床或生产结论。
+- 构造请求或解释 P1 结果前，读取 [references/contract.md](references/contract.md)。

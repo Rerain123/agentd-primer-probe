@@ -1,22 +1,15 @@
-# P2 runtime contract
+# P2 运行契约
 
-Use `WF-01` for a new design and `WF-04` for an existing assay. In the API,
-use `/v1/wf01/design` or `/v1/wf04/validate`.
+新设计使用 `WF-01`，已有检测体系使用 `WF-04`。API 分别调用 `/v1/wf01/design` 或 `/v1/wf04/validate`。
 
-| P2 mode | Database field | Result semantics |
+| P2 模式 | 数据库字段 | 结果语义 |
 |---|---|---|
-| Target confirmation | `target_db` | Forward and reverse need qualified target hits |
-| Host exclusion (optional) | `host_db` + `host_species` | When a host is supplied, high-risk host hits fail the assay; otherwise this mode is not applicable |
-| Cross species | `cross_db` + `target_species` | Hits produce a cross-reactivity caution |
+| 靶标确认 | `target_db` | 上游和下游引物都必须具有合格靶标命中 |
+| 宿主排除（可选） | `host_db` + `host_species` | 提供宿主时，高风险宿主命中导致检测体系失败；否则该模式不适用 |
+| 跨物种检查 | `cross_db` + `target_species` | 命中产生交叉反应警告 |
 
-The service uses `blastn-short`; target/cross e-value is `1e-5`, host e-value
-is `0.1`. A normal production result has `specificity.method = blastn`, target
-and cross/background modes evaluated, and host mode evaluated only when a host
-was supplied. Database versions and path resolution are stored in
-`provenance.database_resolution` when a catalog supplied them.
+服务使用 `blastn-short`；靶标/跨物种 e-value 为 `1e-5`，宿主 e-value 为 `0.1`。正常生产结果应满足 `specificity.method = blastn`，并已评估靶标与跨物种/背景模式；仅在提供宿主时评估宿主模式。目录提供数据库信息时，数据库版本及路径解析保存在 `provenance.database_resolution`。
 
-## Database boundary
+## 数据库边界
 
-P2 only runs BLAST+ against locally configured, versioned target, host and
-cross/background databases. No public remote BLAST submission or asynchronous
-review endpoint is part of this contract.
+P2 仅对本地配置、版本化的靶标、宿主及跨物种/背景数据库运行 BLAST+。本契约不包含公共远程 BLAST 提交或异步复核端点。

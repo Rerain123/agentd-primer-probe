@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://wens.example/schemas/agent-interaction-response-v1.json",
-  "title": "Agent Interaction Response",
-  "description": "A frontend submission answering one flat question or every question in a multi-question popup.",
+  "title": "智能体交互回复",
+  "description": "前端提交的回复，用于回答单个平铺问题或多问题弹窗中的全部问题。",
   "type": "object",
   "additionalProperties": false,
   "required": ["type", "task"],

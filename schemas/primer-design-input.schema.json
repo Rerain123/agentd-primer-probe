@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://wens.example/schemas/primer-design-input-v1.json",
-  "title": "Primer Design Frontend Input",
-  "description": "Conversation message rendered as the WF-01 design confirmation form.",
+  "title": "引物设计前端输入",
+  "description": "在会话中渲染为 WF-01 设计确认表单的消息。",
   "type": "object",
   "additionalProperties": false,
   "required": ["type", "data"],

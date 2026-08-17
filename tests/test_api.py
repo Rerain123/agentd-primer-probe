@@ -17,6 +17,25 @@ sys.path.insert(0, str(ROOT / "src"))
 
 @unittest.skipUnless(importlib.util.find_spec("fastapi") is not None, "FastAPI extra not installed")
 class ApiTests(unittest.TestCase):
+    def test_openapi_operation_text_is_chinese(self) -> None:
+        from agentd.api import app
+
+        for path, path_item in app.openapi()["paths"].items():
+            for method, operation in path_item.items():
+                if not isinstance(operation, dict):
+                    continue
+                self.assertRegex(
+                    operation["summary"],
+                    r"[\u4e00-\u9fff]",
+                    f"{method.upper()} {path} 的 OpenAPI summary 应包含中文",
+                )
+                if "description" in operation:
+                    self.assertRegex(
+                        operation["description"],
+                        r"[\u4e00-\u9fff]",
+                        f"{method.upper()} {path} 的 OpenAPI description 应包含中文",
+                    )
+
     def test_cli_serve_propagates_service_overrides(self) -> None:
         from agentd.cli import main
 

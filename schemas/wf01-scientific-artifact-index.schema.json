@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://wens.example/schemas/wf01-scientific-artifact-index-v1.json",
-  "title": "WF-01 Scientific Artifact Index",
-  "description": "Bounded manifest of raw scientific artifacts available for authenticated expert download.",
+  "title": "WF-01 科学工件索引",
+  "description": "供已认证专家下载的原始科学工件有界清单。",
   "type": "object",
   "additionalProperties": false,
   "required": ["schemaVersion", "batchId", "artifacts"],

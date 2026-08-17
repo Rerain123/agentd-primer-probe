@@ -1,4 +1,4 @@
 interface:
-  display_name: "Agent D P2 Specificity"
-  short_description: "Assess target, host, and cross-species specificity"
-  default_prompt: "Use $agentd-p2-specificity to assess qPCR assay specificity."
+  display_name: "Agent D P2 特异性评估"
+  short_description: "基于本地 BLAST 数据库评估靶标、宿主与跨物种特异性"
+  default_prompt: "使用 $agentd-p2-specificity 评估一套 qPCR 检测体系的特异性。"

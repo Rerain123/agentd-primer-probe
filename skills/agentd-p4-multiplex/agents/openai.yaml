@@ -1,4 +1,4 @@
 interface:
-  display_name: "Agent D P4 Multiplex"
-  short_description: "Check multiplex qPCR panel compatibility"
-  default_prompt: "Use $agentd-p4-multiplex to check a multiplex qPCR panel."
+  display_name: "Agent D P4 多重兼容性"
+  short_description: "检查多重 qPCR 荧光通道、交叉二聚体及面板兼容性"
+  default_prompt: "使用 $agentd-p4-multiplex 检查一个多重 qPCR 面板的兼容性。"

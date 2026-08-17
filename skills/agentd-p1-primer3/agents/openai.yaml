@@ -1,4 +1,4 @@
 interface:
-  display_name: "Agent D P1 Primer3"
-  short_description: "Design and validate qPCR primers and probes"
-  default_prompt: "Use $agentd-p1-primer3 to design or validate a qPCR primer and probe assay."
+  display_name: "Agent D P1 Primer3 引物设计"
+  short_description: "基于 Primer3 设计并验证 qPCR 引物、探针及热力学规则"
+  default_prompt: "使用 $agentd-p1-primer3 设计或验证一套 qPCR 引物与探针方案。"

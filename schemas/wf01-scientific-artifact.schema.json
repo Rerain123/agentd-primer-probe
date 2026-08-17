@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://wens.example/schemas/wf01-scientific-artifact-v1.json",
-  "title": "WF-01 Scientific Artifact",
-  "description": "Immutable expert-facing raw output captured after one WF-01 scientific processing stage.",
+  "title": "WF-01 科学工件",
+  "description": "在 WF-01 某个科学处理阶段完成后捕获的不可变专家级原始输出。",
   "type": "object",
   "additionalProperties": false,
   "required": [

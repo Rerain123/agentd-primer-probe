@@ -1,4 +1,4 @@
 interface:
-  display_name: "Agent D P5 Internal Control"
-  short_description: "Design and validate a qPCR internal control"
-  default_prompt: "Use $agentd-p5-internal-control to design a qPCR internal control."
+  display_name: "Agent D P5 宿主内标设计"
+  short_description: "设计并验证宿主 qPCR 内标、保守性及靶标交叉兼容性"
+  default_prompt: "使用 $agentd-p5-internal-control 设计并验证一个宿主 qPCR 内标。"

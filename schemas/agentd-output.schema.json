@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://wens.example/schemas/agentd-output.phase3.json",
-  "title": "Agent D Phase Three Output",
+  "title": "Agent D 第三阶段输出",
   "type": "object",
   "required": [
     "schema_version", "job_id", "created_at", "workflow", "status", "assay_id",

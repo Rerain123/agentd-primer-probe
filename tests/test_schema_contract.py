@@ -14,6 +14,21 @@ from agentd.service import AgentDService
 
 
 class JsonSchemaContractTests(unittest.TestCase):
+    def test_schema_metadata_exposed_to_models_is_chinese(self) -> None:
+        for schema_path in sorted((ROOT / "schemas").glob("*.json")):
+            schema = json.loads(schema_path.read_text(encoding="utf-8"))
+            self.assertRegex(
+                schema["title"],
+                r"[\u4e00-\u9fff]",
+                f"{schema_path.name} 的 title 应包含中文",
+            )
+            if "description" in schema:
+                self.assertRegex(
+                    schema["description"],
+                    r"[\u4e00-\u9fff]",
+                    f"{schema_path.name} 的 description 应包含中文",
+                )
+
     def test_primer_design_form_and_user_update_have_separate_schemas(self) -> None:
         import jsonschema
 

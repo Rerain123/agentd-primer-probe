@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://wens.example/schemas/primer-design-input-update-v1.json",
-  "title": "Primer Design User Field Update",
-  "description": "Minimal role=user message emitted when the frontend form is submitted.",
+  "title": "引物设计用户字段更新",
+  "description": "前端表单提交时发出的最小 role=user 消息。",
   "type": "object",
   "additionalProperties": false,
   "required": ["type", "data"],

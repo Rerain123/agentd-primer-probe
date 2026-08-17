@@ -1,19 +1,14 @@
-# P6 runtime contract
+# P6 运行契约
 
-P6 runs indirectly through WF-01, WF-03, WF-04, WF-06 and WF-07. Inspect
-`candidates[].amplicon_structure` or `internal_control.candidates[]`.
+P6 通过 WF-01、WF-03、WF-04、WF-06 和 WF-07 间接运行。检查 `candidates[].amplicon_structure` 或 `internal_control.candidates[]`。
 
-The adapter loads ViennaRNA DNA Mathews 2004 parameters on every protected
-call, folds DNA after T→U conversion at 60°C and 50 mM Na+, and supports up to
-500 nt.
+适配器在每次受保护调用时加载 ViennaRNA DNA Mathews 2004 参数，在 60°C、50 mM Na+ 条件下把 T→U 后折叠 DNA，最大支持 500 nt。
 
-| MFE ΔG | Status |
+| MFE ΔG | 状态 |
 |---|---|
-| ≥ -20 kcal/mol | PASS |
-| -30 to below -20 kcal/mol | CAUTION |
-| < -30 kcal/mol | WARNING |
-| Tool/amplicon unavailable | `not_evaluated` |
+| ≥ -20 kcal/mol | `PASS` |
+| -30 至低于 -20 kcal/mol | `CAUTION` |
+| < -30 kcal/mol | `WARNING` |
+| 工具或扩增子不可用 | `not_evaluated` |
 
-The full adapter can return suboptimal structures; workflow results normally
-carry the MFE assessment. This is a soft rule with approximate predictive
-power and must not replace PCR optimization.
+完整适配器可以返回次优结构；工作流结果通常携带 MFE 评估。这是一项预测能力有限的软规则，不得代替 PCR 优化。

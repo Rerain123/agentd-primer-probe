@@ -1,4 +1,4 @@
 interface:
-  display_name: "Agent D P3 MGB"
-  short_description: "Evaluate MGB probe corrected Tm and rules"
-  default_prompt: "Use $agentd-p3-mgb to evaluate an MGB probe."
+  display_name: "Agent D P3 MGB 探针评估"
+  short_description: "评估 MGB 探针修正 Tm、专用规则、置信度及估计误差"
+  default_prompt: "使用 $agentd-p3-mgb 评估一条 MGB 探针及其修正 Tm。"

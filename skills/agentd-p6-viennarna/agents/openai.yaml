@@ -1,4 +1,4 @@
 interface:
-  display_name: "Agent D P6 ViennaRNA"
-  short_description: "Assess qPCR amplicon secondary structure"
-  default_prompt: "Use $agentd-p6-viennarna to assess amplicon secondary structure."
+  display_name: "Agent D P6 ViennaRNA 结构评估"
+  short_description: "使用 ViennaRNA 评估 qPCR 扩增子二级结构风险"
+  default_prompt: "使用 $agentd-p6-viennarna 评估 qPCR 扩增子的二级结构风险。"

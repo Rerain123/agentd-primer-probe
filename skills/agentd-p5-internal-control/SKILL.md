@@ -1,32 +1,22 @@
 ---
 name: agentd-p5-internal-control
-description: "Design and validate a host qPCR internal control with Agent D P5. Use for ACTB, GAPDH, 18S rRNA, housekeeping genes, internal controls, 内标、管家基因、ACTB、GAPDH or 18S rRNA requests."
+description: "通过 Agent D P5 设计并验证宿主 qPCR 内标。用于 ACTB、GAPDH、18S rRNA、管家基因、内标、内参、宿主内标或内标检测体系设计相关请求。"
 ---
 
-# Agent D P5 Internal Control
+# Agent D P5 宿主内标设计
 
-Use P5 through WF-03, WF-02 or WF-06. It selects a host housekeeping-gene
-assay from user-supplied or server-catalog sequences; it does not fetch an
-unversioned sequence from the public internet during a production run.
+通过 WF-03、WF-02 或 WF-06 使用 P5。P5 从用户提供或服务器目录中的序列选择宿主管家基因检测体系；生产运行中不得从公共互联网获取未版本化序列。
 
-## Execute
+## 执行
 
-1. Require `host_species`; supported built-in priorities are pig, cattle and
-   chicken.
-2. Supply at least five homologous sequences through `gene_sequences`,
-   `gene_fasta_paths`, or configured catalog resource
-   `internal:<species>:<gene>:sequences`.
-3. Run `WF-03` (`POST /v1/wf03/internal-control`). Include existing target
-   oligos for a cross-dimer check when building a panel.
-4. Report selected gene, RefSeq identifier, conservation, candidate assays,
-   target-cross check, specificity check, P6 status and warnings.
-5. Treat `NOT_CONFIGURED` as an integration gap, not a successful internal
-   control. For 18S rRNA preserve the 50–100 nM limiting-primer strategy.
+1. 要求提供 `host_species`；内置优先级支持猪、牛和鸡。
+2. 通过 `gene_sequences`、`gene_fasta_paths` 或目录资源 `internal:<species>:<gene>:sequences` 提供至少 5 条同源序列。
+3. 运行 `WF-03`（`POST /v1/wf03/internal-control`）。构建面板时传入已有靶标寡核苷酸，以执行交叉二聚体检查。
+4. 报告所选基因、RefSeq 标识、保守性、候选检测体系、靶标交叉检查、特异性检查、P6 状态及警告。
+5. 把 `NOT_CONFIGURED` 视为集成缺口，不得视为内标设计成功。对 18S rRNA 保留 50–100 nM 限制性引物策略。
 
-## Boundaries
+## 边界
 
-- Sequence conservation is necessary but does not establish expression
-  stability; require experimental geNorm/NormFinder-style confirmation.
-- P5 does not assign a final multiplex dye when P4 reports a channel conflict.
-- Read [references/contract.md](references/contract.md) for sources and
-  verdict rules.
+- 序列保守性不能证明表达稳定；必须要求 geNorm/NormFinder 类实验确认。
+- P4 报告通道冲突时，P5 不得自行确定最终多重荧光染料。
+- 读取 [references/contract.md](references/contract.md)，确认数据来源与判定规则。

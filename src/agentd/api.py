@@ -31,12 +31,12 @@ def local_interface() -> FileResponse:
     return FileResponse(STATIC_DIR / "index.html")
 
 
-@app.get("/health")
+@app.get("/health", summary="健康检查")
 def health() -> dict:
     return {"status": "ok", "service": "agentd-primer-probe", "phase": 3}
 
 
-@app.get("/ready")
+@app.get("/ready", summary="就绪检查")
 def readiness() -> dict:
     result = service.readiness()
     if result["status"] != "ready":
@@ -44,33 +44,33 @@ def readiness() -> dict:
     return result
 
 
-@app.get("/v1/capabilities")
+@app.get("/v1/capabilities", summary="查询服务能力")
 def capabilities() -> dict:
     return service.capabilities()
 
 
-@app.get("/v1/tool-status")
+@app.get("/v1/tool-status", summary="查询科学工具状态")
 def tool_status() -> dict:
     return service.tool_status()
 
 
-@app.post("/v1/tools/primer3/design")
+@app.post("/v1/tools/primer3/design", summary="独立 Primer3 引物探针设计")
 def design_with_primer3(payload: dict) -> dict:
-    """Generate primer/probe candidates from sequence only; no specificity."""
+    """仅根据序列生成引物/探针候选；不评估特异性。"""
     try:
         return service.design_with_primer3(payload)
     except AgentDError as exc:
         raise HTTPException(status_code=422, detail=exc.to_dict()) from exc
 
 
-@app.get("/v1/audit/agent")
+@app.get("/v1/audit/agent", summary="查询智能体审计日志")
 def get_agent_audit_log(
     trace_id: str | None = None,
     batch_id: str | None = None,
     operation: str | None = None,
     limit: int = 100,
 ) -> dict:
-    """Return redacted observable MCP tool events for debugging."""
+    """返回用于调试的已脱敏可观察 MCP 工具事件。"""
     try:
         return service.get_agent_audit_log(
             trace_id=trace_id,
@@ -82,7 +82,7 @@ def get_agent_audit_log(
         raise HTTPException(status_code=422, detail=exc.to_dict()) from exc
 
 
-@app.get("/v1/jobs/{job_id}")
+@app.get("/v1/jobs/{job_id}", summary="查询任务结果")
 def get_job(job_id: str) -> dict:
     try:
         return service.get_job(job_id)
@@ -90,31 +90,31 @@ def get_job(job_id: str) -> dict:
         raise HTTPException(status_code=404, detail=exc.to_dict()) from exc
 
 
-@app.post("/v1/wf01/tasks/preflight")
+@app.post("/v1/wf01/tasks/preflight", summary="执行 WF-01 输入预检")
 def preflight_wf01_v02(payload: dict) -> dict:
-    """PRD v0.2 intake validation; does not run Primer3."""
+    """执行 PRD v0.2 输入预检；不运行 Primer3。"""
     try:
         return service.preflight_wf01_v02(payload)
     except AgentDError as exc:
         raise HTTPException(status_code=422, detail=exc.to_dict()) from exc
 
 
-@app.post("/v1/wf01/design-input")
+@app.post("/v1/wf01/design-input", summary="构造 WF-01 设计输入表单")
 def prepare_wf01_design_input(payload: dict) -> dict:
-    """Build the authoritative pre-design HiMat message without LLM output."""
+    """构造权威的设计前 HiMat 消息；不由 LLM 生成。"""
     return service.prepare_wf01_design_input(payload)
 
 
-@app.post("/v1/wf01/tasks")
+@app.post("/v1/wf01/tasks", summary="创建 WF-01 批次")
 def create_wf01_v02_batch(payload: dict) -> dict:
-    """Create a v0.2 batch in QUEUED or PENDING_CONFIRMATION."""
+    """以 QUEUED 或 PENDING_CONFIRMATION 状态创建 v0.2 批次。"""
     try:
         return service.create_wf01_v02_batch(payload)
     except AgentDError as exc:
         raise HTTPException(status_code=422, detail=exc.to_dict()) from exc
 
 
-@app.get("/v1/wf01/tasks/{batch_id}")
+@app.get("/v1/wf01/tasks/{batch_id}", summary="查询 WF-01 批次")
 def get_wf01_v02_batch(batch_id: str) -> dict:
     try:
         return service.get_wf01_v02_batch(batch_id)
@@ -122,106 +122,112 @@ def get_wf01_v02_batch(batch_id: str) -> dict:
         raise HTTPException(status_code=404, detail=exc.to_dict()) from exc
 
 
-@app.patch("/v1/wf01/tasks/{batch_id}/targets")
+@app.patch("/v1/wf01/tasks/{batch_id}/targets", summary="修改 WF-01 靶标清单")
 def revise_wf01_v02_target_manifest(batch_id: str, payload: dict) -> dict:
-    """Edit or remove target drafts, then rerun target-level preflight."""
+    """修改或移除靶标草稿，然后重新执行逐靶标预检。"""
     try:
         return service.revise_wf01_v02_target_manifest(batch_id, payload)
     except AgentDError as exc:
         raise HTTPException(status_code=422, detail=exc.to_dict()) from exc
 
 
-@app.post("/v1/wf01/tasks/{batch_id}/confirm")
+@app.post("/v1/wf01/tasks/{batch_id}/confirm", summary="确认 WF-01 靶标清单")
 def confirm_wf01_v02_target_manifest(batch_id: str) -> dict:
-    """Confirm a ready target manifest before running the batch."""
+    """运行批次前确认已就绪的靶标清单。"""
     try:
         return service.confirm_wf01_v02_target_manifest(batch_id)
     except AgentDError as exc:
         raise HTTPException(status_code=422, detail=exc.to_dict()) from exc
 
 
-@app.post("/v1/wf01/tasks/{batch_id}/run-until-blocked")
+@app.post(
+    "/v1/wf01/tasks/{batch_id}/run-until-blocked",
+    summary="续跑 WF-01 至阻塞点",
+)
 def run_wf01_v02_until_blocked(batch_id: str, payload: dict | None = None) -> dict:
-    """Run deterministic stages until user input is needed or M6 completes."""
+    """运行确定性阶段，直到需要用户输入或 M6 完成。"""
     try:
         return service.run_wf01_v02_until_blocked(batch_id, payload or {})
     except AgentDError as exc:
         raise HTTPException(status_code=422, detail=exc.to_dict()) from exc
 
 
-@app.get("/v1/wf01/tasks/{batch_id}/interactions")
+@app.get("/v1/wf01/tasks/{batch_id}/interactions", summary="查询 WF-01 交互记录")
 def get_wf01_v02_interactions(batch_id: str) -> dict:
-    """Return Agent D interaction payloads pending or recorded for the batch."""
+    """返回批次中待处理或已记录的 Agent D 交互载荷。"""
     try:
         return service.get_wf01_v02_interactions(batch_id)
     except AgentDError as exc:
         raise HTTPException(status_code=404, detail=exc.to_dict()) from exc
 
 
-@app.post("/v1/wf01/tasks/{batch_id}/interactions/response")
+@app.post(
+    "/v1/wf01/tasks/{batch_id}/interactions/response",
+    summary="提交 WF-01 交互回复",
+)
 def submit_wf01_v02_interaction_response(batch_id: str, payload: dict) -> dict:
-    """Persist and deterministically route a complete interaction response."""
+    """持久化完整交互回复，并按确定性规则继续路由。"""
     try:
         return service.submit_wf01_v02_interaction_response(batch_id, payload)
     except AgentDError as exc:
         raise HTTPException(status_code=422, detail=exc.to_dict()) from exc
 
 
-@app.post("/v1/wf01/tasks/{batch_id}/run-m2")
+@app.post("/v1/wf01/tasks/{batch_id}/run-m2", summary="执行 WF-01 M2 阶段")
 def execute_wf01_v02_m2(batch_id: str, payload: dict | None = None) -> dict:
-    """Run Primer3 plus v0.2 R01-R12; M3/M4 remain pending."""
+    """运行 Primer3 及 v0.2 R01–R12；M3/M4 保持待运行。"""
     try:
         return service.execute_wf01_v02_m2(batch_id, payload or {})
     except AgentDError as exc:
         raise HTTPException(status_code=422, detail=exc.to_dict()) from exc
 
 
-@app.post("/v1/wf01/tasks/{batch_id}/run-m3")
+@app.post("/v1/wf01/tasks/{batch_id}/run-m3", summary="执行 WF-01 M3 阶段")
 def execute_wf01_v02_m3(batch_id: str, payload: dict | None = None) -> dict:
-    """Validate exploration, deduplicate and prepare a non-final Top10."""
+    """验证探索范围、去重，并生成非最终 Top10。"""
     try:
         return service.execute_wf01_v02_m3(batch_id, payload or {})
     except AgentDError as exc:
         raise HTTPException(status_code=422, detail=exc.to_dict()) from exc
 
 
-@app.post("/v1/wf01/tasks/{batch_id}/run-m4")
+@app.post("/v1/wf01/tasks/{batch_id}/run-m4", summary="执行 WF-01 M4 阶段")
 def execute_wf01_v02_m4(batch_id: str, payload: dict | None = None) -> dict:
-    """Evaluate target, host and related/background specificity evidence."""
+    """评估靶标、宿主及近缘种/背景特异性证据。"""
     try:
         return service.execute_wf01_v02_m4(batch_id, payload or {})
     except AgentDError as exc:
         raise HTTPException(status_code=422, detail=exc.to_dict()) from exc
 
 
-@app.post("/v1/wf01/tasks/{batch_id}/run-m5")
+@app.post("/v1/wf01/tasks/{batch_id}/run-m5", summary="执行 WF-01 M5 阶段")
 def execute_wf01_v02_m5(batch_id: str, payload: dict | None = None) -> dict:
-    """Assemble target and batch statuses without rerunning scientific tools."""
+    """在不重复运行科学工具的情况下汇总靶标与批次状态。"""
     try:
         return service.execute_wf01_v02_m5(batch_id, payload or {})
     except AgentDError as exc:
         raise HTTPException(status_code=422, detail=exc.to_dict()) from exc
 
 
-@app.post("/v1/wf01/tasks/{batch_id}/run-m6")
+@app.post("/v1/wf01/tasks/{batch_id}/run-m6", summary="执行 WF-01 M6 阶段")
 def execute_wf01_v02_m6(batch_id: str, payload: dict | None = None) -> dict:
-    """Assemble the canonical report and default HTML export."""
+    """组装规范化报告及默认 HTML 导出。"""
     try:
         return service.execute_wf01_v02_m6(batch_id, payload or {})
     except AgentDError as exc:
         raise HTTPException(status_code=422, detail=exc.to_dict()) from exc
 
 
-@app.post("/v1/wf01/tasks/{batch_id}/versions")
+@app.post("/v1/wf01/tasks/{batch_id}/versions", summary="创建 WF-01 重新设计版本")
 def create_wf01_v02_version(batch_id: str, payload: dict | None = None) -> dict:
-    """Create an immutable M7 redesign version from explicit target changes."""
+    """根据明确的靶标变更创建不可变的 M7 重新设计版本。"""
     try:
         return service.create_wf01_v02_version(batch_id, payload or {})
     except AgentDError as exc:
         raise HTTPException(status_code=422, detail=exc.to_dict()) from exc
 
 
-@app.get("/v1/wf01/tasks/{batch_id}/report")
+@app.get("/v1/wf01/tasks/{batch_id}/report", summary="查询 WF-01 规范化报告")
 def get_wf01_v02_report(
     batch_id: str,
     target_id: str | None = None,
@@ -229,7 +235,7 @@ def get_wf01_v02_report(
     page: int = 1,
     page_size: int = 50,
 ) -> dict:
-    """Internal JSON contract for the complete WF-01 report."""
+    """返回完整 WF-01 报告的内部 JSON 契约。"""
     try:
         return service.get_wf01_v02_report(
             batch_id,
@@ -242,12 +248,15 @@ def get_wf01_v02_report(
         raise HTTPException(status_code=404, detail=exc.to_dict()) from exc
 
 
-@app.get("/v1/wf01/tasks/{batch_id}/scientific-artifacts")
+@app.get(
+    "/v1/wf01/tasks/{batch_id}/scientific-artifacts",
+    summary="列出 WF-01 科学工件",
+)
 def list_wf01_v02_scientific_artifacts(
     batch_id: str,
     stage: str | None = None,
 ) -> dict:
-    """List raw scientific outputs available for expert review."""
+    """列出可供专家复核的原始科学输出。"""
     try:
         return service.get_wf01_v02_scientific_artifacts(
             batch_id,
@@ -258,13 +267,14 @@ def list_wf01_v02_scientific_artifacts(
 
 
 @app.get(
-    "/v1/wf01/tasks/{batch_id}/scientific-artifacts/{artifact_id}"
+    "/v1/wf01/tasks/{batch_id}/scientific-artifacts/{artifact_id}",
+    summary="下载 WF-01 科学工件",
 )
 def download_wf01_v02_scientific_artifact(
     batch_id: str,
     artifact_id: str,
 ) -> FileResponse:
-    """Download one immutable raw stage snapshot for expert review."""
+    """下载一个供专家复核的不可变阶段原始快照。"""
     try:
         path = service.get_wf01_v02_scientific_artifact_path(
             batch_id,
@@ -279,12 +289,15 @@ def download_wf01_v02_scientific_artifact(
     )
 
 
-@app.get("/v1/wf01/tasks/{batch_id}/exports/{format_name}")
+@app.get(
+    "/v1/wf01/tasks/{batch_id}/exports/{format_name}",
+    summary="下载 WF-01 导出文件",
+)
 def download_wf01_v02_export(
     batch_id: str,
     format_name: str,
 ) -> FileResponse:
-    """Download an M6 export generated from the full canonical report."""
+    """下载根据完整规范化报告生成的 M6 导出文件。"""
     try:
         path = service.get_wf01_v02_export_path(batch_id, format_name)
     except AgentDError as exc:
@@ -305,12 +318,15 @@ def download_wf01_v02_export(
     )
 
 
-@app.get("/v1/wf01/tasks/{batch_id}/exports/{format_name}/preview")
+@app.get(
+    "/v1/wf01/tasks/{batch_id}/exports/{format_name}/preview",
+    summary="预览 WF-01 HTML 报告",
+)
 def preview_wf01_v02_export(
     batch_id: str,
     format_name: str,
 ) -> FileResponse:
-    """Render the completed HTML report inline for a frontend preview action."""
+    """以内联方式呈现已完成的 HTML 报告，供前端预览。"""
     selected = format_name.lower()
     if selected not in {"html", "process_html", "rules_html"}:
         raise HTTPException(
@@ -328,12 +344,15 @@ def preview_wf01_v02_export(
     )
 
 
-@app.get("/data/reports/{batch_id}/{file_name}")
+@app.get(
+    "/data/reports/{batch_id}/{file_name}",
+    summary="获取 WF-01 稳定报告文件",
+)
 def get_wf01_v02_report_file(
     batch_id: str,
     file_name: str,
 ) -> FileResponse:
-    """Serve one generated report through the stable fileUrl returned to the UI."""
+    """通过返回给前端的稳定 fileUrl 提供一份已生成报告。"""
     formats = {
         ".html": ("html", "text/html; charset=utf-8", "inline"),
         ".pdf": ("pdf", "application/pdf", "inline"),
@@ -361,9 +380,9 @@ def get_wf01_v02_report_file(
     )
 
 
-@app.get("/data/{file_name}")
+@app.get("/data/{file_name}", summary="获取 WF-01 附件")
 def get_wf01_v02_attachment(file_name: str) -> FileResponse:
-    """Serve the flat attachment URL used by primer_design_output.fileUrl."""
+    """提供 primer_design_output.fileUrl 使用的扁平附件地址。"""
     try:
         path = service.get_wf01_v02_export_path_by_filename(file_name)
     except AgentDError as exc:
@@ -387,7 +406,7 @@ def get_wf01_v02_attachment(file_name: str) -> FileResponse:
     )
 
 
-@app.post("/v1/wf01/design")
+@app.post("/v1/wf01/design", summary="运行 WF-01 单靶标设计")
 def design(payload: dict) -> dict:
     try:
         return service.run("WF-01", payload)
@@ -395,7 +414,7 @@ def design(payload: dict) -> dict:
         raise HTTPException(status_code=422, detail=exc.to_dict()) from exc
 
 
-@app.post("/v1/wf02/multiplex")
+@app.post("/v1/wf02/multiplex", summary="运行 WF-02 多重面板设计")
 def multiplex(payload: dict) -> dict:
     try:
         return service.run("WF-02", payload)
@@ -403,7 +422,7 @@ def multiplex(payload: dict) -> dict:
         raise HTTPException(status_code=422, detail=exc.to_dict()) from exc
 
 
-@app.post("/v1/wf03/internal-control")
+@app.post("/v1/wf03/internal-control", summary="运行 WF-03 宿主内标设计")
 def internal_control(payload: dict) -> dict:
     try:
         return service.run("WF-03", payload)
@@ -411,7 +430,7 @@ def internal_control(payload: dict) -> dict:
         raise HTTPException(status_code=422, detail=exc.to_dict()) from exc
 
 
-@app.post("/v1/wf04/validate")
+@app.post("/v1/wf04/validate", summary="运行 WF-04 已有检测体系验证")
 def validate(payload: dict) -> dict:
     try:
         return service.run("WF-04", payload)
@@ -419,7 +438,7 @@ def validate(payload: dict) -> dict:
         raise HTTPException(status_code=422, detail=exc.to_dict()) from exc
 
 
-@app.post("/v1/wf05/variation")
+@app.post("/v1/wf05/variation", summary="运行 WF-05 变异耐受性分析")
 def variation(payload: dict) -> dict:
     try:
         return service.run("WF-05", payload)
@@ -427,7 +446,7 @@ def variation(payload: dict) -> dict:
         raise HTTPException(status_code=422, detail=exc.to_dict()) from exc
 
 
-@app.post("/v1/wf06/complete-panel")
+@app.post("/v1/wf06/complete-panel", summary="运行 WF-06 完整面板设计")
 def complete_panel(payload: dict) -> dict:
     try:
         return service.run("WF-06", payload)
@@ -435,7 +454,7 @@ def complete_panel(payload: dict) -> dict:
         raise HTTPException(status_code=422, detail=exc.to_dict()) from exc
 
 
-@app.post("/v1/wf07/diagnose")
+@app.post("/v1/wf07/diagnose", summary="运行 WF-07 问题诊断")
 def diagnose(payload: dict) -> dict:
     try:
         return service.run("WF-07", payload)
@@ -443,7 +462,7 @@ def diagnose(payload: dict) -> dict:
         raise HTTPException(status_code=422, detail=exc.to_dict()) from exc
 
 
-@app.post("/v1/workflows/{workflow}/run")
+@app.post("/v1/workflows/{workflow}/run", summary="运行指定工作流")
 def run_workflow(workflow: str, payload: dict) -> dict:
     try:
         return service.run(workflow, payload)

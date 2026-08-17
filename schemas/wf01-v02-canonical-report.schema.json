@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://agentd.local/schemas/wf01-v02-canonical-report.schema.json",
-  "title": "AgentD WF-01 PRD v0.2 Canonical Report",
+  "title": "Agent D WF-01 PRD v0.2 规范化报告",
   "type": "object",
   "additionalProperties": true,
   "required": [
