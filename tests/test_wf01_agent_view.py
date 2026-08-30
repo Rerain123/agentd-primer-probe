@@ -262,7 +262,11 @@ class WF01AgentViewTests(unittest.TestCase):
                     "filename": "CSFV_引物探针设计报告.html",
                     "file_url": "/data/CSFV_引物探针设计报告.html",
                     "download_endpoint": "/v1/wf01/tasks/batch/exports/html",
-                }
+                },
+                "rules_html": {
+                    "filename": "legacy-rules.html",
+                    "file_url": "/data/legacy-rules.html",
+                },
             },
             "export_status": "COMPLETE",
             "export_failures": {},
@@ -277,6 +281,8 @@ class WF01AgentViewTests(unittest.TestCase):
             summary["artifacts"],
             {"htmlUrl": "/data/CSFV_引物探针设计报告.html"},
         )
+        self.assertEqual(summary["report"]["generated_formats"], ["html"])
+        self.assertNotIn("rulesHtmlUrl", summary["artifacts"])
         self.assertNotIn("exports", summary["report"])
         context = summary["conversation_context"]
         self.assertEqual(context["activeBatchId"], batch["batch_id"])

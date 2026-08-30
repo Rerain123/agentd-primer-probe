@@ -87,7 +87,59 @@ class AgentAuditLogTests(unittest.TestCase):
                 completed["result"]["mcp_input_mapping"]["user_updated_fields"],
                 ["host", "coverageRequirement"],
             )
+            self.assertEqual(completed["output_source"], "tool_result")
+            self.assertEqual(
+                completed["output"]["mcp_input_mapping"]["user_updated_fields"],
+                ["host", "coverageRequirement"],
+            )
             self.assertNotIn(fasta, json.dumps(result, ensure_ascii=False))
+
+    def test_completed_terminal_tool_records_exact_client_output(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="agentd-audit-") as state_dir:
+            audit = AgentAuditLog(state_dir)
+            card = {
+                "data": {
+                    "issues": [],
+                    "status": "COMPLETED",
+                    "attachments": [
+                        {
+                            "fileUrl": (
+                                "https://rustfs.ne.scqcyz.cn/wens/data/"
+                                "WF04-TEST_report.html"
+                            ),
+                            "fileName": "WF04-TEST_report.html",
+                            "fileType": "HTML",
+                            "mimeType": "text/html; charset=utf-8",
+                            "attachmentId": "attachment_html",
+                        }
+                    ],
+                    "reportTitle": "WF-04 终态报告",
+                    "summaryText": "完整结果见 HTML 附件。",
+                    "primaryAttachmentId": "attachment_html",
+                },
+                "type": "primer_design_output",
+            }
+            trace_id = audit.start(
+                "wf04_get_report",
+                {"job_id": "00000000-0000-4000-8000-000000000004"},
+            )
+            audit.complete(
+                trace_id,
+                "wf04_get_report",
+                {
+                    "workflow": "WF-04",
+                    "job_id": "00000000-0000-4000-8000-000000000004",
+                    "status": "SUCCEEDED",
+                    "ui_message": card,
+                    "internal_result": {"not_returned_to_client": True},
+                },
+            )
+
+            completed = audit.read(trace_id=trace_id)["events"][-1]
+            self.assertEqual(completed["event"], "TOOL_COMPLETED")
+            self.assertEqual(completed["output_source"], "ui_message")
+            self.assertEqual(completed["output"], card)
+            self.assertNotIn("internal_result", completed["output"])
 
     def test_failed_tool_is_queryable_and_limit_is_bounded(self) -> None:
         with tempfile.TemporaryDirectory(prefix="agentd-audit-") as state_dir:

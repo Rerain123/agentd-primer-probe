@@ -220,6 +220,7 @@ class RustFSArtifactPublisher:
         batch_id: str,
         media_type: str,
         sha256: str,
+        object_name: str | None = None,
     ) -> dict[str, Any] | None:
         if not self.enabled:
             return None
@@ -228,7 +229,8 @@ class RustFSArtifactPublisher:
                 "RustFS 待上传附件不存在",
                 details={"filename": path.name},
             )
-        key = self.object_key(path.name)
+        published_name = object_name or path.name
+        key = self.object_key(published_name)
         size = path.stat().st_size
         disposition = "inline" if path.suffix.lower() in {".html", ".pdf"} else "attachment"
         disposition = (
@@ -287,7 +289,7 @@ class RustFSArtifactPublisher:
             "version_id": response.get("VersionId"),
             "size_bytes": size,
             "sha256": sha256,
-            "file_url": self.file_url(path.name),
+            "file_url": self.file_url(published_name),
             "published_at": datetime.now(timezone.utc).isoformat(),
         }
 

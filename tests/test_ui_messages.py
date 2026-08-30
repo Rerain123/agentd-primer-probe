@@ -8,7 +8,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from agentd.ui_messages import build_primer_design_input
+from agentd.ui_messages import (
+    build_primer_design_input,
+    build_primer_design_output,
+)
 
 
 class PrimerDesignInputFileNameTests(unittest.TestCase):
@@ -59,6 +62,57 @@ class PrimerDesignInputFileNameTests(unittest.TestCase):
             self._file_name({"file_name": "C:\\fakepath\\sample.fasta"}),
             "sample.fasta",
         )
+
+
+class PrimerDesignOutputAttachmentTests(unittest.TestCase):
+    def test_legacy_standalone_rules_export_is_not_returned(self) -> None:
+        exports = {
+            "html": {
+                "filename": "report.html",
+                "media_type": "text/html; charset=utf-8",
+                "file_url": "/data/report.html",
+            },
+            "process_html": {
+                "filename": "detail.html",
+                "media_type": "text/html; charset=utf-8",
+                "file_url": "/data/detail.html",
+            },
+            "rules_html": {
+                "filename": "legacy-rules.html",
+                "media_type": "text/html; charset=utf-8",
+                "file_url": "/data/legacy-rules.html",
+            },
+            "scientific_data": {
+                "filename": "support-files.zip",
+                "media_type": "application/zip",
+                "file_url": "/data/support-files.zip",
+            },
+        }
+        message = build_primer_design_output(
+            {
+                "batch_id": "batch-legacy",
+                "workflow": "WF-01",
+                "m6_outcome": "COMPLETED",
+                "m6_execution": {
+                    "exports": exports,
+                    "export_failures": {},
+                },
+            }
+        )
+
+        self.assertIsNotNone(message)
+        attachments = message["data"]["attachments"]
+        self.assertEqual(
+            [item["attachmentId"] for item in attachments],
+            [
+                "attachment_html",
+                "attachment_process_html",
+                "attachment_scientific_data",
+            ],
+        )
+        self.assertNotIn("legacy-rules.html", str(message))
+        self.assertIn("均已生成", message["data"]["summaryText"])
+        self.assertNotIn("请查看", message["data"]["summaryText"])
 
 
 if __name__ == "__main__":

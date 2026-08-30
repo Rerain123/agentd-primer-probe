@@ -1,22 +1,37 @@
-"""P5 internal-control design orchestrator with server-injectable sequence data."""
+"""P5 internal-control design orchestrator with built-in Entrez acquisition."""
 
 from __future__ import annotations
 
 import copy
-import tempfile
 from collections import Counter
 from pathlib import Path
+from typing import Any
 
 from .alignment import MafftAdapter
 from .database import DatabaseCatalog
-from .errors import ToolUnavailableError
-from .models import Candidate, EvidenceLevel, RuleStatus, SequenceRecord
+from .entrez_sequences import EntrezSequenceError, NCBIEntrezProvider
+from .errors import InputValidationError, ToolUnavailableError
+from .models import (
+    Candidate,
+    EvidenceLevel,
+    RuleStatus,
+    SequenceRecord,
+    SpecificityModeResult,
+    SpecificityResult,
+)
 from .primer3_tool import Primer3Adapter
 from .rules import HARD_RULES, RuleEngine
 from .scoring import score_candidate
-from .sequence import format_fasta, normalize_sequence
-from .specificity import BlastAdapter
+from .sequence import normalize_sequence
+from .specificity import P2SpecificityBatchService
 from .structure import ViennaRNAAdapter
+
+
+P5_PRIMARY_SCIENTIFIC_NAMES = {
+    "pig": "Sus scrofa",
+    "cattle": "Bos taurus",
+    "chicken": "Gallus gallus",
+}
 
 
 def _alignment_conservation(records: list[SequenceRecord]) -> float:
@@ -33,22 +48,42 @@ def _alignment_conservation(records: list[SequenceRecord]) -> float:
 
 
 class InternalControlDesigner:
-    def __init__(self, config: dict, catalog: DatabaseCatalog) -> None:
+    def __init__(
+        self,
+        config: dict,
+        catalog: DatabaseCatalog,
+        *,
+        p2_service: P2SpecificityBatchService | None = None,
+    ) -> None:
         self.config = config
         self.catalog = catalog
+        self.entrez = NCBIEntrezProvider(config)
+        self.p2_service = p2_service
+
+    def _get_p2_service(
+        self,
+        *,
+        allow_fallback: bool,
+    ) -> P2SpecificityBatchService:
+        return self.p2_service or P2SpecificityBatchService(
+            self.config,
+            allow_development_fallback=allow_fallback,
+        )
 
     def status(self, *, allow_fallback: bool = False) -> dict:
         primer3 = Primer3Adapter(self.config, allow_fallback=allow_fallback)
         mafft = MafftAdapter(self.config["tools"]["mafft_executable"], allow_fallback=allow_fallback)
-        blast = BlastAdapter(self.config["tools"]["blastn_executable"], allow_fallback=allow_fallback)
+        p2 = self._get_p2_service(allow_fallback=allow_fallback)
         dependencies = {
             "P1": primer3.status(),
             "C5": mafft.status(),
-            "P2_C6": blast.status(),
+            "P2_C6": p2.status(),
+            "NCBI_ENTREZ": self.entrez.status(),
             "C0": self.catalog.status(),
         }
         full_dependencies_available = all(
-            dependencies[key]["available"] for key in ("P1", "C5", "P2_C6")
+            dependencies[key]["available"]
+            for key in ("P1", "C5", "P2_C6", "NCBI_ENTREZ")
         )
         return {
             "tool": "P5_Internal_Control",
@@ -110,60 +145,211 @@ class InternalControlDesigner:
             "verdict": verdict,
         }
 
-    def _specificity(
-        self,
+    @staticmethod
+    def _candidate_queries(
         candidates: list[Candidate],
-        blast: BlastAdapter,
-        *,
-        reference: SequenceRecord,
-        host_db: str | None,
-        cross_db: str | None,
-        temp_dir: str,
-    ) -> dict:
+    ) -> tuple[dict[str, str], list[dict[str, str]]]:
         queries: dict[str, str] = {}
-        for candidate in candidates:
-            queries[f"{candidate.candidate_id}:forward"] = candidate.forward_primer.sequence_5to3
-            queries[f"{candidate.candidate_id}:reverse"] = candidate.reverse_primer.sequence_5to3
+        query_maps: list[dict[str, str]] = []
+        for index, candidate in enumerate(candidates, start=1):
+            prefix = f"p5_c{index:04d}"
+            query_ids = {
+                "forward": f"{prefix}_forward",
+                "reverse": f"{prefix}_reverse",
+            }
             if candidate.probe:
-                queries[f"{candidate.candidate_id}:probe"] = candidate.probe.sequence_5to3
-        reference_path = Path(temp_dir) / "internal-control-reference.fasta"
-        reference_path.write_text(format_fasta([reference]), encoding="utf-8")
-        modes: dict[str, dict] = {}
-        all_blast = True
-        try:
-            reference_hits, reference_method = blast.search(queries, reference_path, evalue=1e-5, mode="internal_reference")
-            reference_hit_ids = {hit["query_id"] for hit in reference_hits if hit["identity_pct"] >= 95 and hit["query_coverage_pct"] >= 95}
-            reference_verdict = "PASS" if set(queries).issubset(reference_hit_ids) else "FAIL"
-            if reference_method != "blastn" and reference_verdict == "PASS":
-                reference_verdict = "CAUTION"
-                all_blast = False
-            modes["reference_locus"] = {"verdict": reference_verdict, "hits": len(reference_hits), "method": reference_method}
-        except ToolUnavailableError as exc:
-            modes["reference_locus"] = {"verdict": "NOT_CHECKED", "hits": 0, "method": "not_run", "reason": exc.message}
-            all_blast = False
-        for name, database, evalue in (("host_genome", host_db, 0.1), ("pathogen_cross", cross_db, 1e-5)):
-            if not database:
-                modes[name] = {"verdict": "NOT_CHECKED", "hits": 0, "method": "not_run"}
-                all_blast = False
-                continue
+                query_ids["probe"] = f"{prefix}_probe"
+            queries[query_ids["forward"]] = candidate.forward_primer.sequence_5to3
+            queries[query_ids["reverse"]] = candidate.reverse_primer.sequence_5to3
+            if candidate.probe:
+                queries[query_ids["probe"]] = candidate.probe.sequence_5to3
+            query_maps.append(query_ids)
+        return queries, query_maps
+
+    @staticmethod
+    def _payload_resource_version(payload: dict, field: str) -> str | None:
+        direct = payload.get(f"{field}_version")
+        if direct:
+            return str(direct)
+        versions = payload.get("database_versions")
+        if isinstance(versions, dict) and versions.get(field):
+            return str(versions[field])
+        for resolution in payload.get("_database_resolution") or []:
+            if (
+                isinstance(resolution, dict)
+                and resolution.get("field") == field
+                and resolution.get("version")
+            ):
+                return str(resolution["version"])
+        return None
+
+    def _resolve_p2_resource(
+        self,
+        payload: dict,
+        *,
+        field: str,
+        keys: list[str],
+        scope: dict[str, Any],
+    ) -> dict[str, Any] | None:
+        catalog_resource = self.catalog.resolve_versioned(*keys, scope=scope)
+        supplied_path = payload.get(field)
+        if not supplied_path:
+            return catalog_resource
+        resolved_supplied = str(Path(str(supplied_path)).resolve())
+        if (
+            catalog_resource
+            and catalog_resource.get("path") == resolved_supplied
+        ):
+            return catalog_resource
+        return self.catalog.request_resource(
+            resolved_supplied,
+            key=f"request:{field}",
+            version=self._payload_resource_version(payload, field),
+            scope=scope,
+        )
+
+    @staticmethod
+    def _mode_from_p2(
+        source: dict[str, Any],
+        *,
+        mode: str,
+    ) -> SpecificityModeResult:
+        status = str(source.get("status") or "NOT_EVALUATED").upper()
+        return SpecificityModeResult(
+            mode=mode,
+            verdict="NOT_CHECKED" if status == "NOT_EVALUATED" else status,
+            blast_hits=len(source.get("hits") or []),
+            details=copy.deepcopy(source.get("hits") or []),
+            recommendation=str(source.get("reason") or "") or None,
+            mode_specific={
+                **copy.deepcopy(source.get("mode_specific") or {}),
+                "p2_status": status,
+                "database": copy.deepcopy(source.get("database")),
+            },
+            method=str(source.get("method") or "not_run"),
+        )
+
+    @classmethod
+    def _specificity_model(
+        cls,
+        specificity: dict[str, Any],
+    ) -> SpecificityResult:
+        primary = cls._mode_from_p2(
+            specificity.get("primary_match") or {},
+            mode="check_host",
+        )
+        related = cls._mode_from_p2(
+            specificity.get("related_background_nt") or {},
+            mode="check_cross_species",
+        )
+        target = SpecificityModeResult(
+            mode="check_target",
+            verdict="NOT_APPLICABLE",
+            blast_hits=0,
+            recommendation="P5_PROFILE_DOES_NOT_REQUIRE_TARGET_MODE",
+            method="not_run",
+        )
+        overall = str(
+            specificity.get("overall_status") or "NOT_EVALUATED"
+        ).upper()
+        rating = {
+            "PASS": "PASS",
+            "CAUTION": "PASS_WITH_WARNINGS",
+            "FAIL": "FAIL",
+            "NOT_EVALUATED": "NOT_EVALUATED",
+        }.get(overall, "NOT_EVALUATED")
+        methods = {primary.method, related.method}
+        warnings = [
+            str(item.get("reason"))
+            for item in (
+                specificity.get("primary_match") or {},
+                specificity.get("related_background_nt") or {},
+            )
+            if item.get("status") != "PASS" and item.get("reason")
+        ]
+        return SpecificityResult(
+            target=target,
+            host=primary,
+            cross_species=related,
+            rating=rating,
+            method="blastn" if methods == {"blastn"} else "mixed_or_degraded",
+            warnings=warnings,
+        )
+
+    @classmethod
+    def _apply_p2_candidate_results(
+        cls,
+        candidates: list[Candidate],
+        p2_result: dict[str, Any],
+    ) -> None:
+        results = p2_result.get("candidate_results")
+        if not isinstance(results, list) or len(results) != len(candidates):
+            raise InputValidationError(
+                "P2返回的候选结果数量与P5输入不一致",
+                details={
+                    "expected_candidates": len(candidates),
+                    "actual_candidates": (
+                        len(results) if isinstance(results, list) else None
+                    ),
+                },
+            )
+        allowed = {"PASS", "CAUTION", "FAIL", "NOT_EVALUATED"}
+        for index, (candidate, item) in enumerate(zip(candidates, results)):
+            specificity = (
+                item.get("specificity") if isinstance(item, dict) else None
+            )
+            status = (
+                str(specificity.get("overall_status") or "").upper()
+                if isinstance(specificity, dict)
+                else ""
+            )
+            if status not in allowed:
+                raise InputValidationError(
+                    "P2返回了无效的P5候选状态",
+                    details={"candidate_index": index, "status": status},
+                )
+            evidence = str(
+                item.get("evidence_level") or "in_silico_only"
+            )
             try:
-                hits, method = blast.search(queries, database, evalue=evalue, mode=f"internal_{name}")
-                if name == "host_genome":
-                    # A host hit is expected; multiple genomic loci need review.
-                    counts = Counter(hit["query_id"] for hit in hits if hit["identity_pct"] >= 95 and hit["query_coverage_pct"] >= 90)
-                    verdict = "PASS" if counts and all(value == 1 for value in counts.values()) and set(queries).issubset(counts) else "CAUTION"
-                else:
-                    verdict = "FAIL" if any(hit["identity_pct"] >= 95 and hit["query_coverage_pct"] >= 90 for hit in hits) else "PASS"
-                if method != "blastn":
-                    verdict = "CAUTION" if verdict == "PASS" else verdict
-                    all_blast = False
-                modes[name] = {"verdict": verdict, "hits": len(hits), "method": method}
-            except ToolUnavailableError as exc:
-                modes[name] = {"verdict": "NOT_CHECKED", "hits": 0, "method": "not_run", "reason": exc.message}
-                all_blast = False
-        verdicts = {item["verdict"] for item in modes.values()}
-        overall = "FAIL" if "FAIL" in verdicts else ("PASS" if verdicts == {"PASS"} else "CAUTION")
-        return {"verdict": overall, "modes": modes, "blast_verified": all_blast and overall == "PASS"}
+                candidate.evidence_level = EvidenceLevel(evidence)
+            except ValueError as exc:
+                raise InputValidationError(
+                    "P2返回了无效的证据等级",
+                    details={"candidate_index": index, "evidence_level": evidence},
+                ) from exc
+            candidate.metadata["_p2_specificity"] = copy.deepcopy(specificity)
+            candidate.specificity = cls._specificity_model(specificity)
+
+    @staticmethod
+    def _specificity_summary(
+        candidates: list[Candidate],
+        p2_result: dict[str, Any],
+    ) -> dict[str, Any]:
+        candidate_results = p2_result.get("candidate_results") or []
+        return {
+            "verdict": p2_result.get("overall_status", "NOT_EVALUATED"),
+            "blast_verified": bool(candidates)
+            and all(
+                item.get("evidence_level") == EvidenceLevel.BLAST_VERIFIED.value
+                for item in candidate_results
+                if isinstance(item, dict)
+            )
+            and len(candidate_results) == len(candidates),
+            "profile": p2_result.get("profile"),
+            "policy_version": p2_result.get("policy_version"),
+            "candidate_results": copy.deepcopy(candidate_results),
+            "provider_status": copy.deepcopy(p2_result.get("provider_status")),
+            "remote_background_provider_status": copy.deepcopy(
+                p2_result.get("remote_background_provider_status")
+            ),
+            "effective_related_resource": copy.deepcopy(
+                p2_result.get("effective_related_resource")
+            ),
+            "raw_search_outputs": copy.deepcopy(
+                p2_result.get("raw_search_outputs") or {}
+            ),
+        }
 
     def design(self, payload: dict) -> dict:
         host_species = str(payload.get("host_species", "")).strip().lower()
@@ -175,24 +361,49 @@ class InternalControlDesigner:
             return {
                 "status": "NOT_CONFIGURED",
                 "verdict": "FAIL",
-                "warnings": [f"P5未配置{host_species}默认管家基因；请提供preferred_genes和gene_sequences或服务器目录资源"],
+                "warnings": [f"P5未配置{host_species}默认管家基因"],
                 "candidates": [],
-                "recommendation": "提供自定义管家基因序列，或部署后配置internal:<species>:<gene>:sequences资源",
+                "recommendation": "提供自定义管家基因及RefSeq编号，或使用P5已支持的宿主物种",
             }
         allow_fallback = bool(payload.get("allow_fallback", self.config["tools"]["allow_development_fallback"]))
         selected: dict | None = None
         attempts: list[dict] = []
         warnings: list[str] = []
         for gene in preferred:
-            records, source = self.catalog.housekeeping_records(payload, host_species, str(gene))
-            if not records:
-                attempts.append({"gene": gene, "status": "NOT_CONFIGURED", "data_source": source})
-                continue
+            gene_name = str(gene)
+            refseq = (
+                payload.get("gene_accessions", {}).get(gene_name)
+                or settings["refseq"].get(host_species, {}).get(gene_name)
+            )
+            records, source = self.catalog.housekeeping_records(
+                payload, host_species, gene_name
+            )
             minimum_sequences = int(settings["minimum_homolog_sequences"])
+            if not records:
+                try:
+                    records, source = self.entrez.fetch_housekeeping_records(
+                        host_species=host_species,
+                        gene=gene_name,
+                        refseq_accession=str(refseq or ""),
+                        minimum_records=minimum_sequences,
+                    )
+                except EntrezSequenceError as exc:
+                    attempts.append(
+                        {
+                            "gene": gene_name,
+                            "status": "SEQUENCE_FETCH_FAILED",
+                            "message": str(exc),
+                            "data_source": {
+                                "method": "ncbi_entrez_live",
+                                "refseq_accession": refseq,
+                            },
+                        }
+                    )
+                    continue
             if len(records) < minimum_sequences:
                 attempts.append(
                     {
-                        "gene": gene,
+                        "gene": gene_name,
                         "status": "INSUFFICIENT_SEQUENCES",
                         "sequence_count": len(records),
                         "minimum_sequence_count": minimum_sequences,
@@ -205,31 +416,30 @@ class InternalControlDesigner:
             try:
                 aligned, method, alignment_warnings = mafft.align(records)
             except ToolUnavailableError as exc:
-                attempts.append({"gene": gene, "status": "TOOL_UNAVAILABLE", "message": exc.message, "data_source": source})
+                attempts.append({"gene": gene_name, "status": "TOOL_UNAVAILABLE", "message": exc.message, "data_source": source})
                 continue
             conservation = _alignment_conservation(aligned)
             status = "PASS" if conservation >= float(settings["pass_conservation"]) else ("CAUTION" if conservation >= float(settings["caution_conservation"]) else "FAIL")
-            attempts.append({"gene": gene, "status": status, "conservation": conservation, "sequence_count": len(records), "alignment_method": method, "data_source": source})
+            attempts.append({"gene": gene_name, "status": status, "conservation": conservation, "sequence_count": len(records), "alignment_method": method, "data_source": source})
             warnings.extend(alignment_warnings)
             if status == "FAIL":
                 continue
             if selected is None or (selected["status"] == "CAUTION" and status == "PASS"):
-                selected = {"gene": str(gene), "records": records, "conservation": conservation, "status": status, "alignment_method": method, "data_source": source}
+                selected = {"gene": gene_name, "records": records, "conservation": conservation, "status": status, "alignment_method": method, "data_source": source, "refseq_accession": refseq}
             if status == "PASS":
                 break
         if selected is None:
-            missing_only = attempts and all(item["status"] == "NOT_CONFIGURED" for item in attempts)
             return {
-                "status": "NOT_CONFIGURED" if missing_only else "FAILED",
+                "status": "FAILED",
                 "verdict": "FAIL",
                 "gene_attempts": attempts,
                 "candidates": [],
                 "warnings": warnings + ["未获得满足保守性要求的管家基因序列"],
-                "recommendation": "服务器配置管家基因序列资源，或提供自定义gene_sequences；仍失败时考虑外源性异源内标",
+                "recommendation": "检查服务器到NCBI Entrez的网络与RefSeq配置；仍失败时考虑外源性异源内标",
             }
 
         gene = selected["gene"]
-        refseq = settings["refseq"].get(host_species, {}).get(gene) or payload.get("gene_accessions", {}).get(gene)
+        refseq = selected.get("refseq_accession")
         design_config = copy.deepcopy(self.config)
         design_config["maximum_candidates"] = 5
         if gene == "18S rRNA":
@@ -240,7 +450,7 @@ class InternalControlDesigner:
             "product_max_bp": 120,
         }
         primer3 = Primer3Adapter(design_config, allow_fallback=allow_fallback)
-        blast = BlastAdapter(self.config["tools"]["blastn_executable"], allow_fallback=allow_fallback)
+        p2 = self._get_p2_service(allow_fallback=allow_fallback)
         vienna = ViennaRNAAdapter(self.config)
         try:
             candidates = primer3.design(selected["records"][0].sequence, sequence_id=f"IC-{host_species}-{gene}", parameters=parameters)
@@ -278,23 +488,98 @@ class InternalControlDesigner:
 
         existing_targets = payload.get("existing_targets") or []
         cross_check = self._cross_check(accepted, existing_targets, primer3)
-        with tempfile.TemporaryDirectory(prefix="agentd-p5-") as temp_dir:
-            specificity = self._specificity(
-                accepted,
-                blast,
-                reference=selected["records"][0],
-                host_db=payload.get("host_db"),
-                cross_db=payload.get("cross_db"),
-                temp_dir=temp_dir,
-            )
-        evidence = EvidenceLevel.BLAST_VERIFIED if specificity["blast_verified"] else EvidenceLevel.IN_SILICO_ONLY
+        primary_object = {
+            "object_id": f"p5:primary:{host_species}",
+            "role": "P5_PRIMARY",
+            "identifier_type": "CANONICAL_NAME",
+            "identifier": host_species,
+            "normalized_name": host_species,
+            "scientific_name": P5_PRIMARY_SCIENTIFIC_NAMES.get(host_species),
+        }
+        primary_scope = {
+            "role": "P5_PRIMARY",
+            "object_id": primary_object["object_id"],
+            "identifier": host_species,
+        }
+        related_scope = {
+            "role": "RELATED_BACKGROUND",
+            "target_object_id": primary_object["object_id"],
+            "mode": "P5_BROAD_BACKGROUND",
+        }
+        primary_resource = self._resolve_p2_resource(
+            payload,
+            field="host_db",
+            keys=[f"host:{host_species}:blast", f"host:{host_species}"],
+            scope=primary_scope,
+        )
+        related_resource = self._resolve_p2_resource(
+            payload,
+            field="cross_db",
+            keys=[
+                "nt:default:blast",
+                "nt:default",
+                "cross:default:blast",
+                "cross:default",
+            ],
+            scope=related_scope,
+        )
+        queries, query_maps = self._candidate_queries(accepted)
+        related_background_objects = copy.deepcopy(
+            payload.get("related_background_objects") or []
+        )
+        contract_error: dict[str, Any] | None = None
+        p2_result = p2.evaluate_p5_batch(
+            queries=queries,
+            query_maps=query_maps,
+            primary_object=primary_object,
+            primary_resource=primary_resource,
+            related_background_objects=related_background_objects,
+            related_resource=related_resource,
+        )
+        try:
+            self._apply_p2_candidate_results(accepted, p2_result)
+        except InputValidationError as exc:
+            contract_error = {
+                **exc.to_dict(),
+                "code": "P2_CONTRACT_ERROR",
+            }
+            p2_result = {
+                **p2_result,
+                "overall_status": "NOT_EVALUATED",
+                "candidate_results": [],
+                "contract_error": contract_error,
+            }
+            for candidate in accepted:
+                candidate.specificity = None
+                candidate.evidence_level = EvidenceLevel.IN_SILICO_ONLY
+                candidate.metadata.pop("_p2_specificity", None)
+            warnings.append("P2_CONTRACT_ERROR")
+        specificity = self._specificity_summary(accepted, p2_result)
+        if contract_error:
+            specificity["contract_error"] = contract_error
+        for item in p2_result.get("candidate_results") or []:
+            candidate_specificity = item.get("specificity") or {}
+            if candidate_specificity.get("overall_status") != "PASS":
+                reason = candidate_specificity.get("reason")
+                if reason:
+                    warnings.append(f"P2:{reason}")
+        evidence = (
+            EvidenceLevel.BLAST_VERIFIED
+            if specificity["blast_verified"]
+            else EvidenceLevel.IN_SILICO_ONLY
+        )
         for candidate in accepted:
-            candidate.evidence_level = evidence
             candidate.rules = rule_engine.evaluate(candidate)
             rule_engine.apply_verdict(candidate)
+            score_candidate(candidate, design_config)
             if cross_check and cross_check["verdict"] in {"CAUTION", "FAIL"}:
                 candidate.warnings.append("P5_TARGET_CROSS_DIMER")
-        if cross_check and cross_check["verdict"] == "FAIL":
+        accepted.sort(key=lambda item: (-item.score, item.candidate_id))
+        for rank, candidate in enumerate(accepted, start=1):
+            candidate.rank = rank
+        if contract_error:
+            verdict = "FAIL"
+        elif cross_check and cross_check["verdict"] == "FAIL":
             verdict = "FAIL"
         elif specificity["verdict"] == "FAIL":
             verdict = "FAIL"
@@ -303,9 +588,13 @@ class InternalControlDesigner:
         else:
             verdict = "PASS"
         if any(target.get("fluorophore") == "Cy5" for target in existing_targets):
-            warnings.append("靶标已占用Cy5，内标通道需在WF-02/WF-06重新指派")
+            warnings.append("靶标已占用Cy5，内标通道需在WF-02重新指派")
         return {
-            "status": "COMPLETED" if verdict != "FAIL" else "FAILED",
+            "status": (
+                "P2_CONTRACT_ERROR"
+                if contract_error
+                else ("COMPLETED" if verdict != "FAIL" else "FAILED")
+            ),
             "gene_selected": gene,
             "refseq_accession": refseq,
             "conservation": selected["conservation"],
@@ -320,5 +609,10 @@ class InternalControlDesigner:
             "evidence_level": evidence.value,
             "verdict": verdict,
             "warnings": sorted(set(warnings)),
-            "tool_status": {"P1": primer3.status(), "P2_C6": blast.status(), "P6": vienna.status()},
+            "errors": [contract_error] if contract_error else [],
+            "tool_status": {
+                "P1": primer3.status(),
+                "P2_C6": p2.status(),
+                "P6": vienna.status(),
+            },
         }

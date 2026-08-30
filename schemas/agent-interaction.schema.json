@@ -9,6 +9,12 @@
   "properties": {
     "type": {"const": "agent_interaction"},
     "task": {"type": "string", "minLength": 1},
+    "taskId": {"type": "string", "minLength": 1},
+    "draftId": {"type": "string", "minLength": 1},
+    "targetId": {"type": ["string", "null"]},
+    "field": {"type": ["string", "null"]},
+    "blockerCode": {"type": ["string", "null"]},
+    "inputEcho": {"type": "object"},
     "flowControl": {
       "type": "object",
       "additionalProperties": false,
@@ -78,6 +84,9 @@
       ],
       "properties": {
         "interactionId": {"type": "string", "minLength": 1},
+        "targetId": {"type": ["string", "null"]},
+        "field": {"type": ["string", "null"]},
+        "blockerCode": {"type": ["string", "null"]},
         "reason": {"type": "string", "minLength": 1},
         "question": {"type": "string", "minLength": 1},
         "inputType": {"enum": ["SINGLE_SELECT", "MULTI_SELECT", "TEXT", "FORM"]},

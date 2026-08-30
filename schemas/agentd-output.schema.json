@@ -12,7 +12,7 @@
     "schema_version": {"const": "3.0.0-phase3"},
     "job_id": {"type": "string", "format": "uuid"},
     "created_at": {"type": "string", "format": "date-time"},
-    "workflow": {"enum": ["WF-01", "WF-02", "WF-03", "WF-04", "WF-05", "WF-06", "WF-07"]},
+    "workflow": {"enum": ["WF-01", "WF-02", "WF-03", "WF-04", "WF-05"]},
     "status": {"enum": ["SUCCEEDED", "PARTIAL", "FAILED"]},
     "assay_id": {"type": "string", "minLength": 1},
     "input": {"type": "object"},

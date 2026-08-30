@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://wens.example/schemas/wf03-v01-retry.json",
+  "title": "WF-03 Step 1 重入补丁",
+  "description": "由后端恢复父任务输入；本对象只包含用户新增证据或修复后的资源参数。",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "preferred_genes": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "oneOf": [
+          {"type": "string", "minLength": 1},
+          {
+            "type": "object",
+            "required": ["gene"],
+            "properties": {
+              "gene": {"type": "string", "minLength": 1},
+              "refseq_accession": {"type": "string", "minLength": 1}
+            }
+          }
+        ]
+      }
+    },
+    "gene_accessions": {
+      "type": "object",
+      "additionalProperties": {"type": "string", "minLength": 1}
+    },
+    "gene_sequences": {"type": "object"},
+    "gene_fasta_paths": {
+      "type": "object",
+      "additionalProperties": {"type": "string", "minLength": 1}
+    },
+    "existing_targets": {"type": "array", "items": {"type": "object"}},
+    "host_db": {"type": "string", "minLength": 1},
+    "cross_db": {"type": "string", "minLength": 1},
+    "allow_fallback": {"type": "boolean"},
+    "reason": {"type": "string"}
+  }
+}

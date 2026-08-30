@@ -4,28 +4,49 @@ import json
 import sys
 import tempfile
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 from pathlib import Path
-
-from jsonschema import Draft202012Validator
-
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from agentd.config import load_config
 from agentd.database import DatabaseCatalog
+from agentd.errors import InputValidationError
 from agentd.multiplex import MultiplexEvaluator, channel_order
 from agentd.primer3_tool import Primer3Adapter
-from agentd.schema import validate_output
 from agentd.service import AgentDService
 
 
-def load(name: str) -> dict:
-    return json.loads((ROOT / "examples" / name).read_text(encoding="utf-8"))
-
-
-OUTPUT_SCHEMA = json.loads((ROOT / "schemas" / "agentd-output.schema.json").read_text(encoding="utf-8"))
+def wf02_request() -> dict:
+    sequence = (
+        "TGGGCGAACTTGGTCACCCCGAAGTATCTGATGAGATGATCACCGAGAGCCGGGGCGAGGAAG"
+        "ATGTACGGATACTTTCCGCACAGGGACTAGGTTAACCGCGATTTCTTATCCTGCGATAGCCGGC"
+        "CGTGTAAACCTTTCTTAGGCATGGCAGAAAATGCAATCATATAACGGGGTTAGAAGGGAGCCTGT"
+        "AGCATGCTGCCCGATTTCCCGTGTACCCCTGTCGCTGCGAAGTATATCCAGAGGTGCCGGTGCTA"
+        "GCC"
+    )
+    return {
+        "assay_id": "fixture_multiplex_v1",
+        "host_species": "pig",
+        "instrument": "CFX96",
+        "include_internal_control": False,
+        "allow_fallback": True,
+        "targets": [
+            {
+                "target_id": "fixture_A",
+                "target_species": "Synthetic virus A",
+                "gene": "gene_A",
+                "sequence": sequence,
+            },
+            {
+                "target_id": "fixture_B",
+                "target_species": "Synthetic virus B",
+                "gene": "gene_B",
+                "sequence": sequence,
+            },
+        ],
+    }
 
 
 class PhaseThreeFrameworkTests(unittest.TestCase):
@@ -37,6 +58,38 @@ class PhaseThreeFrameworkTests(unittest.TestCase):
         self.assertTrue(Path(enriched["target_db"]).exists())
         self.assertTrue(Path(enriched["host_db"]).exists())
         self.assertTrue(catalog.status()["configured"])
+
+    def test_database_catalog_normalizes_host_selector_aliases(self) -> None:
+        config = load_config(
+            overrides={
+                "databases": {
+                    "catalog_path": str(
+                        ROOT / "config" / "database-catalog.example.json"
+                    )
+                }
+            }
+        )
+        catalog = DatabaseCatalog(config)
+
+        for selector in ("pig", "PIG", "猪", "猪 (pig)", "pig（猪）"):
+            with self.subTest(selector=selector):
+                enriched = catalog.enrich_payload(
+                    "WF-04",
+                    {"host_species": selector},
+                )
+                self.assertTrue(Path(enriched["host_db"]).exists())
+                resolution = enriched["_database_resolution"][0]
+                self.assertEqual(resolution["key"], "host:pig:blast")
+                self.assertIn(
+                    resolution["selector_match_method"],
+                    {"canonical", "embedded_canonical", "configured_alias"},
+                )
+
+        unresolved = catalog.enrich_payload(
+            "WF-04",
+            {"host_species": "unconfigured-selector"},
+        )
+        self.assertNotIn("host_db", unresolved)
 
     def test_database_catalog_recognizes_blast_index_prefix(self) -> None:
         with tempfile.TemporaryDirectory(prefix="agentd-blast-prefix-") as temp_dir:
@@ -73,7 +126,7 @@ class PhaseThreeFrameworkTests(unittest.TestCase):
                 json.dumps(
                     {
                         "resources": {
-                            "internal:pig:ACTB:sequences": {
+                            "target:fixture:sequences": {
                                 "kind": "fasta",
                                 "path": str(fasta),
                                 "version": "SET_ON_SERVER",
@@ -85,7 +138,7 @@ class PhaseThreeFrameworkTests(unittest.TestCase):
                 encoding="utf-8",
             )
             status = DatabaseCatalog(load_config(), catalog_path=catalog_path).status()
-        self.assertEqual(status["required_missing"], ["internal:pig:ACTB:sequences"])
+        self.assertEqual(status["required_missing"], ["target:fixture:sequences"])
         self.assertTrue(status["resources"][0]["path_available"])
         self.assertFalse(status["resources"][0]["version_valid"])
 
@@ -157,34 +210,84 @@ class PhaseThreeFrameworkTests(unittest.TestCase):
         self.assertEqual(report["verdict"], "INCOMPATIBLE")
         self.assertEqual(report["spectral_check"]["status"], "FAIL")
 
+    def test_p4_cross_dimer_boundaries_are_exclusive(self) -> None:
+        config = load_config()
+        primer3 = Mock()
+        base = {
+            "fwd_seq": "GCGAGGAAGATGTACGGATA",
+            "rev_seq": "GCTACAGGCTCCCTTCTAA",
+            "probe_seq": "ATCGCGGTTAACCTAGTCCCTGTGC",
+            "fwd_tm": 60.0,
+            "rev_tm": 60.1,
+            "probe_tm": 69.0,
+            "gc_percent": 48.0,
+        }
+        panel = [
+            {
+                **base,
+                "target_id": "A",
+                "fluorophore": "FAM",
+                "quencher": "BHQ-1",
+            },
+            {
+                **base,
+                "target_id": "B",
+                "fluorophore": "Cy5",
+                "quencher": "BHQ-2",
+            },
+        ]
+        evaluator = MultiplexEvaluator(primer3, config)
+
+        primer3.calc_heterodimer.return_value = {"dg_kcal": -6.0}
+        standard = evaluator.check_panel(panel, instrument="CFX96")
+        self.assertEqual(standard["verdict"], "MARGINAL")
+        self.assertTrue(
+            any("-6.0" in issue for issue in standard["issues"])
+        )
+
+        primer3.calc_heterodimer.return_value = {"dg_kcal": -7.0}
+        relaxed = evaluator.check_panel(
+            panel,
+            instrument="CFX96",
+            relaxed=True,
+        )
+        self.assertEqual(relaxed["verdict"], "INCOMPATIBLE")
+        self.assertTrue(
+            any(issue.startswith("[FAIL]") for issue in relaxed["issues"])
+        )
+
     def test_channel_allocation_reserves_internal_control_and_rox(self) -> None:
         self.assertEqual(len(channel_order("CFX96", rox_as_reference=False, include_internal=True)), 4)
         self.assertEqual(len(channel_order("QuantStudio 5", rox_as_reference=True, include_internal=True)), 3)
 
-    def test_wf02_wf03_wf06_wf07_contracts(self) -> None:
+    def test_retired_wf06_wf07_are_rejected(self) -> None:
         with tempfile.TemporaryDirectory(prefix="agentd-phase3-") as state_dir:
             service = AgentDService(state_dir=state_dir)
-            outputs = {
-                "WF-02": service.run("WF-02", load("wf02-request.json"), persist=False),
-                "WF-03": service.run("WF-03", load("wf03-request.json"), persist=False),
-                "WF-06": service.run("WF-06", load("wf06-request.json"), persist=False),
-                "WF-07": service.run("WF-07", load("wf07-request.json"), persist=False),
-            }
-        for workflow, output in outputs.items():
-            validate_output(output)
-            Draft202012Validator(OUTPUT_SCHEMA).validate(output)
-            self.assertEqual(output["workflow"], workflow)
-            self.assertEqual(output["schema_version"], "3.0.0-phase3")
-            self.assertTrue(output["reports"])
-            self.assertTrue(output["workflow_trace"])
-        self.assertIsNotNone(outputs["WF-02"]["multiplex"])
-        self.assertEqual(
-            {candidate["metadata"]["target_id"] for candidate in outputs["WF-02"]["candidates"]},
-            {"fixture_A", "fixture_B"},
-        )
-        self.assertEqual(outputs["WF-03"]["internal_control"]["gene_selected"], "ACTB")
-        self.assertIsNotNone(outputs["WF-06"]["recommended_conditions"])
-        self.assertEqual(outputs["WF-07"]["diagnosis"]["problem_type"], "low_sensitivity")
+            for workflow in ("WF-06", "WF06", "WF-07", "WF07"):
+                with self.subTest(workflow=workflow):
+                    with self.assertRaises(InputValidationError) as raised:
+                        service.run(workflow, {}, persist=False)
+                    self.assertEqual(
+                        raised.exception.details["supported"],
+                        ["WF-01", "WF-02", "WF-03", "WF-04", "WF-05"],
+                    )
+
+    def test_direct_wf02_route_uses_only_v01_task_service(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="agentd-wf02-v01-") as state_dir:
+            service = AgentDService(state_dir=state_dir)
+            output = service.run(
+                "WF-02",
+                wf02_request(),
+                persist=False,
+            )
+            self.assertFalse(
+                (Path(state_dir) / "wf02-v01-batches").exists()
+            )
+        self.assertEqual(output["workflow"], "WF-02")
+        self.assertEqual(output["schema_version"], "wf02-v0.1-batch-v1")
+        self.assertEqual(output["stage"], "N05")
+        self.assertEqual(output["status"], "READY_FOR_TARGET_DESIGN")
+        self.assertNotIn("multiplex", output)
 
     def test_readiness_does_not_require_server_databases_locally(self) -> None:
         with tempfile.TemporaryDirectory(prefix="agentd-ready-") as state_dir:

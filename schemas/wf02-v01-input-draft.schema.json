@@ -1,0 +1,165 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://wens.example/schemas/wf02-v01-input-draft-v1.json",
+  "title": "WF-02 v0.1 输入确认草稿",
+  "description": "流程图 N04 保存的阻塞项、原始输入和结构化交互；确认通过后记录所创建的 N05 任务。",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "draft_id",
+    "workflow",
+    "workflow_version",
+    "policy_version",
+    "status",
+    "stage",
+    "next_action",
+    "created_at",
+    "updated_at",
+    "payload",
+    "preflight",
+    "agent_interactions",
+    "created_batch_id",
+    "events"
+  ],
+  "properties": {
+    "schema_version": {"const": "wf02-v0.1-input-draft-v1"},
+    "draft_id": {"type": "string", "format": "uuid"},
+    "workflow": {"const": "WF-02"},
+    "workflow_version": {"const": "wf02-v0.1"},
+    "policy_version": {"const": "wf02-policy-v0.1"},
+    "status": {"enum": ["WAITING_USER", "RESOLVED"]},
+    "stage": {"enum": ["N04", "N05"]},
+    "next_action": {"enum": ["WAIT_FOR_USER", "RUN_TARGET_DESIGN"]},
+    "created_at": {"type": "string", "format": "date-time"},
+    "updated_at": {"type": "string", "format": "date-time"},
+    "payload": {"type": "object"},
+    "preflight": {
+      "type": "object",
+      "required": [
+        "schema_version",
+        "workflow",
+        "stage",
+        "status",
+        "can_create_task",
+        "input_echo",
+        "user_input_snapshot",
+        "runtime_config_snapshot",
+        "rule_snapshot",
+        "issues",
+        "node_trace"
+      ],
+      "properties": {
+        "schema_version": {"const": "wf02-v0.1-intake-preflight-v1"},
+        "workflow": {"const": "WF-02"},
+        "stage": {"enum": ["N03", "N04"]},
+        "status": {"enum": ["READY_TO_CREATE", "NEEDS_CONFIRMATION"]},
+        "can_create_task": {"type": "boolean"},
+        "input_echo": {"type": "object"},
+        "user_input_snapshot": {"type": "object"},
+        "runtime_config_snapshot": {"type": "object"},
+        "rule_snapshot": {"type": "object"},
+        "issues": {"type": "array", "items": {"$ref": "#/$defs/issue"}},
+        "node_trace": {"type": "array", "minItems": 3}
+      },
+      "additionalProperties": true
+    },
+    "agent_interactions": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/persistedInteraction"}
+    },
+    "created_batch_id": {"type": ["string", "null"], "format": "uuid"},
+    "events": {"type": "array", "minItems": 1, "items": {"type": "object"}}
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"status": {"const": "WAITING_USER"}}},
+      "then": {
+        "properties": {
+          "stage": {"const": "N04"},
+          "next_action": {"const": "WAIT_FOR_USER"},
+          "created_batch_id": {"type": "null"}
+        }
+      }
+    },
+    {
+      "if": {"properties": {"status": {"const": "RESOLVED"}}},
+      "then": {
+        "properties": {
+          "stage": {"const": "N05"},
+          "next_action": {"const": "RUN_TARGET_DESIGN"},
+          "created_batch_id": {"type": "string", "format": "uuid"}
+        }
+      }
+    }
+  ],
+  "additionalProperties": false,
+  "$defs": {
+    "issue": {
+      "type": "object",
+      "required": [
+        "issue_id",
+        "code",
+        "severity",
+        "field",
+        "message",
+        "allowed_actions",
+        "evidence"
+      ],
+      "properties": {
+        "issue_id": {"type": "string", "minLength": 1},
+        "code": {"type": "string", "pattern": "^WF02_"},
+        "severity": {"const": "BLOCKER"},
+        "field": {
+          "enum": ["targets", "host_species", "include_internal_control"]
+        },
+        "message": {"type": "string", "minLength": 1},
+        "allowed_actions": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"const": "EDIT"}
+        },
+        "evidence": {"type": "object"}
+      },
+      "additionalProperties": false
+    },
+    "persistedInteraction": {
+      "type": "object",
+      "required": ["type", "schemaVersion", "data"],
+      "properties": {
+        "type": {"const": "primer_agent_interaction"},
+        "schemaVersion": {"const": "1.0"},
+        "data": {
+          "type": "object",
+          "required": [
+            "interactionId",
+            "taskId",
+            "status",
+            "stage",
+            "blocker",
+            "message",
+            "context",
+            "options",
+            "inputFields",
+            "userResponse"
+          ],
+          "properties": {
+            "interactionId": {"type": "string", "minLength": 1},
+            "taskId": {"type": "string", "format": "uuid"},
+            "status": {"enum": ["WAITING_USER", "RESOLVED"]},
+            "stage": {"const": "WF02_N04_INPUT_CONFIRMATION"},
+            "blocker": {"type": "object"},
+            "message": {"type": "string", "minLength": 1},
+            "context": {"type": "object"},
+            "options": {"type": "array", "minItems": 1},
+            "inputFields": {"type": "array", "minItems": 1},
+            "userResponse": {"type": "object"},
+            "resolvedAt": {"type": "string", "format": "date-time"}
+          },
+          "additionalProperties": true
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

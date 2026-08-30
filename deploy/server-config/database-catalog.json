@@ -23,24 +23,6 @@
       "path": "/data/blastdb/host/gallus_gallus/current/db",
       "version": "SET_ON_SERVER",
       "required": false
-    },
-    "internal:pig:ACTB:sequences": {
-      "kind": "fasta",
-      "path": "/data/sequences/internal/pig/ACTB.fasta",
-      "version": "SET_ON_SERVER",
-      "required": true
-    },
-    "internal:pig:GAPDH:sequences": {
-      "kind": "fasta",
-      "path": "/data/sequences/internal/pig/GAPDH.fasta",
-      "version": "SET_ON_SERVER",
-      "required": false
-    },
-    "internal:pig:18S rRNA:sequences": {
-      "kind": "fasta",
-      "path": "/data/sequences/internal/pig/18S_rRNA.fasta",
-      "version": "SET_ON_SERVER",
-      "required": false
     }
   }
 }

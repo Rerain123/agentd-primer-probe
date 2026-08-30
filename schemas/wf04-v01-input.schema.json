@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://wens.example/schemas/wf04-v01-input.json",
+  "title": "WF-04 v0.1 输入",
+  "description": "LLM只映射明确输入；六节点编排和最终判定由后端完成。",
+  "type": "object",
+  "additionalProperties": false,
+  "anyOf": [
+    {"required": ["input_artifact_id"]},
+    {"required": ["forward_primer", "reverse_primer"]}
+  ],
+  "properties": {
+    "input_artifact_id": {
+      "type": "string",
+      "pattern": "^himat-[0-9a-f]{32}$"
+    },
+    "forward_primer": {"$ref": "#/$defs/sequence"},
+    "reverse_primer": {"$ref": "#/$defs/sequence"},
+    "probe": {"$ref": "#/$defs/sequence"},
+    "template": {"$ref": "#/$defs/sequence"},
+    "target_id": {"type": "string", "minLength": 1},
+    "target_species": {"type": "string", "minLength": 1},
+    "host_species": {"type": "string", "minLength": 1},
+    "target_db": {"type": "string", "minLength": 1},
+    "host_db": {"type": "string", "minLength": 1},
+    "cross_db": {"type": "string", "minLength": 1},
+    "use_mgb": {"type": "boolean"},
+    "probe_type": {"type": "string", "minLength": 1},
+    "fluorophore": {"type": "string", "minLength": 1},
+    "snp_position": {"type": "integer", "minimum": 0},
+    "assay_id": {"type": "string", "minLength": 1},
+    "allow_fallback": {"type": "boolean"}
+  },
+  "$defs": {
+    "sequence": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[ACGTRYSWKMBDHVNacgtryswkmbdhvn\\s]+$"
+    }
+  }
+}

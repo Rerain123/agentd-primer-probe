@@ -34,6 +34,6 @@ agentd_compose() {
 
 agentd_image_name() {
   local image_tag
-  image_tag="$(agentd_read_env AGENTD_IMAGE_TAG 1.0.3)"
+  image_tag="$(agentd_read_env AGENTD_IMAGE_TAG 1.2.13)"
   printf 'agentd-primer-probe:%s\n' "${image_tag}"
 }

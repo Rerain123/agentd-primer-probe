@@ -218,7 +218,6 @@ def build_primer_design_output(batch: dict[str, Any]) -> dict[str, Any] | None:
     attachment_types = {
         "html": "HTML",
         "process_html": "HTML",
-        "rules_html": "HTML",
         "scientific_data": "ZIP",
         "csv": "CSV",
         "pdf": "PDF",
@@ -295,8 +294,8 @@ def build_primer_design_output(batch: dict[str, Any]) -> dict[str, Any] | None:
     issues.extend(shortfall_messages)
     if html:
         delivery_text = (
-            "请查看候选报告、科学过程详情、21条规则验证报告"
-            "和科学工具数据包。"
+            "候选报告和科学过程详情均已生成；"
+            "21条规则验证报告及其他辅助文件已收纳在 ZIP 数据包中。"
         )
     else:
         delivery_text = f"HTML 暂不可用，请打开 {primary['fileType']} 附件查看结果。"
@@ -323,6 +322,62 @@ def build_primer_design_output(batch: dict[str, Any]) -> dict[str, Any] | None:
             "primaryAttachmentId": primary["attachmentId"],
             "attachments": attachments,
             "issues": issues,
+        },
+        "type": "primer_design_output",
+    }
+
+
+def build_workflow_terminal_output(
+    report: dict[str, Any],
+    export: dict[str, Any],
+) -> dict[str, Any]:
+    """Wrap a WF-03/WF-04 terminal report in the WF-01 host contract."""
+
+    workflow = _text(report.get("workflow")) or "WORKFLOW"
+    job_id = _text(report.get("job_id"))
+    task_code = _text(export.get("task_code")) or job_id
+    execution_status = _text(
+        report.get("execution_status") or report.get("status")
+    ) or "UNKNOWN"
+    decision = _text(
+        report.get("decision")
+        or report.get("verdict")
+        or (report.get("internal_control") or {}).get("verdict")
+    ) or "NOT_AVAILABLE"
+    issues: list[str] = []
+    for key in ("errors", "warnings", "decision_reasons"):
+        value = report.get(key)
+        if not isinstance(value, list):
+            continue
+        for item in value:
+            if isinstance(item, dict):
+                code = _text(item.get("code") or item.get("reason_code"))
+                message = _text(item.get("message") or item.get("reason"))
+                selected = f"{code}: {message}" if code and message else code or message
+            else:
+                selected = _text(item)
+            if selected:
+                issues.append(selected)
+    attachment = {
+        "attachmentId": "attachment_html",
+        "fileName": export.get("filename"),
+        "fileType": "HTML",
+        "mimeType": export.get("media_type") or "text/html; charset=utf-8",
+        "fileUrl": export.get("file_url"),
+    }
+    return {
+        "data": {
+            # This is the report-delivery state. The workflow's own execution
+            # state and decision remain independent and visible in the report.
+            "status": "COMPLETED",
+            "reportTitle": f"{workflow} 终态报告",
+            "summaryText": (
+                f"任务编号 {task_code}。后端工作流已结束；执行状态 "
+                f"{execution_status}，最终状态 {decision}。完整结果见 HTML 附件。"
+            ),
+            "primaryAttachmentId": attachment["attachmentId"],
+            "attachments": [attachment],
+            "issues": list(dict.fromkeys(issues)),
         },
         "type": "primer_design_output",
     }

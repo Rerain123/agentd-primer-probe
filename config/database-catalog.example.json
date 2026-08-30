@@ -29,12 +29,6 @@
       "path": "SET_ON_SERVER",
       "version": "SET_ON_SERVER",
       "required": false
-    },
-    "internal:pig:ACTB:sequences": {
-      "kind": "fasta",
-      "path": "../testdata/variation.fasta",
-      "version": "fixture-1",
-      "required": false
     }
   }
 }

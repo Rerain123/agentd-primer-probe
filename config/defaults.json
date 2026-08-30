@@ -121,7 +121,7 @@
   },
   "multiplex": {
     "minimum_targets": 2,
-    "maximum_targets": 4,
+    "maximum_targets": 5,
     "maximum_panel_combinations": 500,
     "top_panels": 3,
     "standard_cross_dimer_dg_kcal": -6.0,
@@ -142,13 +142,21 @@
     "default_fluorophore": "Cy5",
     "default_quencher": "BHQ-2",
     "top_candidates": 3,
+    "entrez": {
+      "enabled": true,
+      "tool": "agentd-primer-probe",
+      "homolog_search_retmax": 50,
+      "minimum_sequence_length": 80,
+      "max_tries": 3,
+      "sleep_between_tries_seconds": 1.0
+    },
     "gene_priority": {
       "pig": ["ACTB", "GAPDH", "18S rRNA"],
       "cattle": ["ACTB", "GAPDH", "18S rRNA"],
       "chicken": ["ACTB", "GAPDH", "18S rRNA"]
     },
     "refseq": {
-      "pig": {"ACTB": "NM_213978", "GAPDH": "NM_001206359.1", "18S rRNA": "NR_046261"},
+      "pig": {"ACTB": "NM_001444420.1", "GAPDH": "NM_001206359.1", "18S rRNA": "NR_046261"},
       "cattle": {"ACTB": "NM_173979.3", "GAPDH": "NM_001034034.2", "18S rRNA": "NR_036642"},
       "chicken": {"ACTB": "NM_205518.1", "GAPDH": "NM_204305.1", "18S rRNA": "NR_046237"}
     }
@@ -158,7 +166,12 @@
     "require_databases_for_readiness": false
   },
   "databases": {
-    "catalog_path": null
+    "catalog_path": null,
+    "selector_aliases": {
+      "host": {
+        "pig": ["猪"]
+      }
+    }
   },
   "tools": {
     "blastn_executable": "blastn",

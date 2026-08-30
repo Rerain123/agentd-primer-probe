@@ -2,9 +2,9 @@
 
 M3 consumes the candidate occurrences produced by the pure M2 target engine.
 It validates the pre-generated finite Primer3 manifest, deduplicates only
-within one target, prepares the fixed three-dimensional score, and emits a
-provisional Top10.  Specificity is deliberately absent until M4, so M3 never
-labels its ranking or score as final.
+within one target, maps completed MAFFT conservation evidence into the
+versioned four-dimensional score, and emits a provisional Top10. Specificity
+is deliberately absent until M4, so M3 never labels its ranking as final.
 """
 
 from __future__ import annotations
@@ -19,17 +19,18 @@ from typing import Any
 from .errors import InputValidationError
 
 
-M3_ENGINE_VERSION = "wf01-v0.2-m3.4"
-SCORING_POLICY_VERSION = "wf01-v0.2-three-dimension-document-framework-v4"
+M3_ENGINE_VERSION = "wf01-v0.2-m3.5-conservation"
+SCORING_POLICY_VERSION = "wf01-v0.2-four-dimension-conservation-v5"
 SCORING_POLICY_STATUS = (
     "ACTIVE_FOR_IN_SILICO_RANKING_REQUIRES_EXPERIMENTAL_CALIBRATION"
 )
 FIXED_TOP_CANDIDATES = 10
 SCORING_SCALE = {"minimum": 0.0, "maximum": 100.0, "display_decimals": 1}
 SCORING_WEIGHTS = {
-    "thermodynamics": 0.357,
-    "specificity": 0.357,
-    "amplicon_features": 0.286,
+    "conservation": 0.30,
+    "thermodynamics": 0.25,
+    "specificity": 0.25,
+    "amplicon_features": 0.20,
 }
 THERMODYNAMICS_COMPONENT_WEIGHTS = {
     "forward_primer_tm": 0.25,
@@ -58,6 +59,10 @@ SOFT_PENALTY_DEFINITIONS = {
         "penalty_percent": 3.0,
         "condition": "非 3′ 二聚体 -9.0≤ΔG<-6.0 kcal/mol",
     },
+    "LOW_CONFIDENCE_CONSERVATION": {
+        "penalty_percent": 10.0,
+        "condition": "代表序列 N<20、使用放宽保守区或全长回退",
+    },
 }
 SOFT_PENALTIES_PERCENT = {
     code: float(definition["penalty_percent"])
@@ -68,6 +73,7 @@ CALCULATION_DECIMALS = 6
 FINAL_RANK_TIE_BREAKERS = (
     "final_score_desc",
     "total_penalty_percent_asc",
+    "conservation_score_desc",
     "thermodynamics_score_desc",
     "specificity_score_desc",
     "amplicon_features_score_desc",
@@ -137,6 +143,7 @@ def final_scoring_rank_key(candidate: dict[str, Any]) -> tuple[Any, ...]:
     return (
         descending(None if score is None else float(score)),
         math.inf if total_penalty is None else float(total_penalty),
+        descending(_dimension_score(candidate, "conservation")),
         descending(_dimension_score(candidate, "thermodynamics")),
         descending(_dimension_score(candidate, "specificity")),
         descending(_dimension_score(candidate, "amplicon_features")),
@@ -284,7 +291,76 @@ def deduplicate_target_candidates(
 
 
 class WF01V02ScoringEngine:
-    """Transparent v0.2 three-dimension score with an explicit M4 gap."""
+    """Four-dimensional score with explicit conservation/P2 evidence states."""
+
+    @staticmethod
+    def _effective_weights(names: list[str]) -> dict[str, float]:
+        total = sum(SCORING_WEIGHTS[name] for name in names)
+        if total <= 0:
+            return {}
+        return {
+            name: round(
+                SCORING_WEIGHTS[name] / total,
+                CALCULATION_DECIMALS,
+            )
+            for name in names
+        }
+
+    @staticmethod
+    def _conservation_score(
+        candidate: dict[str, Any],
+        *,
+        include_conservation: bool,
+    ) -> tuple[float | None, dict[str, Any]]:
+        evidence = copy.deepcopy(
+            (candidate.get("metadata") or {}).get(
+                "conservation_evidence"
+            )
+            or {}
+        )
+        if not include_conservation:
+            return None, {
+                "status": "NOT_APPLICABLE",
+                "reason": "DESIGN_ONLY_ROUTE_EXCLUDES_CONSERVATION_SCORING",
+                "method": evidence.get("method"),
+                "evidence": evidence,
+            }
+        if evidence.get("status") != "EVALUATED":
+            return None, {
+                "status": "NOT_EVALUATED",
+                "reason": (
+                    evidence.get("reason")
+                    or "CONSERVATION_EVIDENCE_NOT_AVAILABLE"
+                ),
+                "method": evidence.get("method"),
+                "evidence": evidence,
+            }
+        score = evidence.get("score")
+        if score is None:
+            return None, {
+                "status": "NOT_EVALUATED",
+                "reason": "CONSERVATION_SCORE_MISSING",
+                "method": evidence.get("method"),
+                "evidence": evidence,
+            }
+        normalized = float(score)
+        if not 0 <= normalized <= 1:
+            raise InputValidationError(
+                "保守性分数必须为 0–1",
+                details={"conservation_score": score},
+            )
+        return round(100.0 * normalized, CALCULATION_DECIMALS), {
+            "status": "EVALUATED",
+            "method": evidence.get("method") or "mafft_shannon",
+            "actual": {
+                "score_0_to_1": normalized,
+                "coverage_percent": evidence.get("coverage_percent"),
+                "sequence_count": evidence.get("sequence_count"),
+                "confidence": evidence.get("confidence"),
+                "region": copy.deepcopy(evidence.get("region") or {}),
+            },
+            "evidence": evidence,
+        }
 
     @staticmethod
     def _primer_tm_score(value: float) -> float:
@@ -418,13 +494,19 @@ class WF01V02ScoringEngine:
         }
 
     @staticmethod
-    def _penalties(candidate: dict[str, Any]) -> tuple[list[dict[str, Any]], float]:
+    def _penalties(
+        candidate: dict[str, Any],
+        *,
+        include_conservation: bool = True,
+    ) -> tuple[list[dict[str, Any]], float]:
         rule_statuses = {
             str(rule.get("code")): str(rule.get("status"))
             for rule in candidate.get("rules") or []
         }
         items = []
         for code, definition in SOFT_PENALTY_DEFINITIONS.items():
+            if code == "LOW_CONFIDENCE_CONSERVATION":
+                continue
             if rule_statuses.get(code) != "WARNING":
                 continue
             items.append(
@@ -438,6 +520,45 @@ class WF01V02ScoringEngine:
                     "method": "ADDITIVE",
                 }
             )
+        conservation = (
+            (candidate.get("metadata") or {}).get(
+                "conservation_evidence"
+            )
+            or {}
+        )
+        if (
+            include_conservation
+            and conservation.get("status") == "EVALUATED"
+            and conservation.get("confidence") == "LOW"
+        ):
+            definition = SOFT_PENALTY_DEFINITIONS[
+                "LOW_CONFIDENCE_CONSERVATION"
+            ]
+            items.append(
+                {
+                    "rule_code": "LOW_CONFIDENCE_CONSERVATION",
+                    "trigger_status": "WARNING",
+                    "condition": definition["condition"],
+                    "penalty_percent": float(
+                        definition["penalty_percent"]
+                    ),
+                    "method": "ADDITIVE",
+                    "evidence": {
+                        "sequence_count": conservation.get(
+                            "sequence_count"
+                        ),
+                        "region": copy.deepcopy(
+                            conservation.get("region") or {}
+                        ),
+                        "reasons": copy.deepcopy(
+                            conservation.get(
+                                "low_confidence_reasons"
+                            )
+                            or []
+                        ),
+                    },
+                }
+            )
         return items, sum(item["penalty_percent"] for item in items)
 
     def score(
@@ -445,7 +566,12 @@ class WF01V02ScoringEngine:
         candidate: dict[str, Any],
         *,
         specificity_score: float | None = None,
+        include_conservation: bool = True,
     ) -> dict[str, Any]:
+        conservation, conservation_detail = self._conservation_score(
+            candidate,
+            include_conservation=include_conservation,
+        )
         thermodynamics, thermodynamics_detail = self._thermodynamics_score(candidate)
         amplicon, amplicon_detail = self._amplicon_score(candidate)
         if specificity_score is not None and not 0 <= float(specificity_score) <= 100:
@@ -453,9 +579,17 @@ class WF01V02ScoringEngine:
                 "特异性维度分必须为 0–100",
                 details={"specificity_score": specificity_score},
             )
-        penalty_items, total_penalty = self._penalties(candidate)
+        penalty_items, total_penalty = self._penalties(
+            candidate,
+            include_conservation=include_conservation,
+        )
         applied_penalty = min(total_penalty, PENALTY_CAP_PERCENT)
         dimensions = {
+            "conservation": {
+                "weight": SCORING_WEIGHTS["conservation"],
+                "raw_score": conservation,
+                **conservation_detail,
+            },
             "thermodynamics": {
                 "weight": SCORING_WEIGHTS["thermodynamics"],
                 "raw_score": thermodynamics,
@@ -465,7 +599,7 @@ class WF01V02ScoringEngine:
                 "weight": SCORING_WEIGHTS["specificity"],
                 "raw_score": None if specificity_score is None else float(specificity_score),
                 "status": "NOT_EVALUATED" if specificity_score is None else "EVALUATED",
-                "method": "PENDING_M4" if specificity_score is None else "M4_SPECIFICITY_SCORE",
+                "method": "PENDING_P2" if specificity_score is None else "P2_SPECIFICITY_SCORE",
             },
             "amplicon_features": {
                 "weight": SCORING_WEIGHTS["amplicon_features"],
@@ -473,22 +607,38 @@ class WF01V02ScoringEngine:
                 **amplicon_detail,
             },
         }
-        evaluated = {
+        values = {
+            "conservation": conservation,
             "thermodynamics": thermodynamics,
+            "specificity": (
+                None
+                if specificity_score is None
+                else float(specificity_score)
+            ),
             "amplicon_features": amplicon,
         }
-        if all(value is not None for value in evaluated.values()):
-            evaluated_weight = (
-                SCORING_WEIGHTS["thermodynamics"] + SCORING_WEIGHTS["amplicon_features"]
+        preliminary_names = [
+            *(
+                ["conservation"]
+                if conservation is not None
+                else []
+            ),
+            "thermodynamics",
+            "amplicon_features",
+        ]
+        if thermodynamics is not None and amplicon is not None:
+            preliminary_weights = self._effective_weights(
+                preliminary_names
             )
-            preliminary_base = (
-                float(thermodynamics) * SCORING_WEIGHTS["thermodynamics"]
-                + float(amplicon) * SCORING_WEIGHTS["amplicon_features"]
-            ) / evaluated_weight
+            preliminary_base = sum(
+                float(values[name]) * preliminary_weights[name]
+                for name in preliminary_names
+            )
             preliminary_final = preliminary_base * (
                 1.0 - applied_penalty / 100.0
             )
         else:
+            preliminary_weights = {}
             preliminary_base = None
             preliminary_final = None
 
@@ -509,26 +659,48 @@ class WF01V02ScoringEngine:
                 if missing_dimensions == ["specificity"]
                 else "INCOMPLETE_DIMENSIONS"
             )
+            final_names: list[str] = []
+            effective_weights = preliminary_weights
         else:
-            base_score = (
-                float(thermodynamics) * SCORING_WEIGHTS["thermodynamics"]
-                + float(specificity_score) * SCORING_WEIGHTS["specificity"]
-                + float(amplicon) * SCORING_WEIGHTS["amplicon_features"]
+            final_names = [
+                *(
+                    ["conservation"]
+                    if conservation is not None
+                    else []
+                ),
+                "thermodynamics",
+                "specificity",
+                "amplicon_features",
+            ]
+            effective_weights = self._effective_weights(final_names)
+            base_score = sum(
+                float(values[name]) * effective_weights[name]
+                for name in final_names
             )
             final_score = base_score * (1.0 - applied_penalty / 100.0)
             score_status = "FINAL"
+        participating_names = (
+            final_names if final_names else preliminary_names
+        )
+        for name, detail in dimensions.items():
+            detail["effective_weight"] = effective_weights.get(name, 0.0)
+            detail["participates_in_score"] = name in participating_names
         return {
             "policy_version": SCORING_POLICY_VERSION,
             "policy_status": SCORING_POLICY_STATUS,
             "status": score_status,
             "scale": copy.deepcopy(SCORING_SCALE),
             "weights": copy.deepcopy(SCORING_WEIGHTS),
+            "effective_weights": effective_weights,
             "dimensions": dimensions,
-            "conservation": {
-                "status": "NOT_EVALUATED",
-                "participates_in_score": False,
-                "weight": 0.0,
-            },
+            "conservation": copy.deepcopy(dimensions["conservation"]),
+            "conservation_scoring_mode": (
+                "FOUR_DIMENSION"
+                if conservation is not None
+                else "RENORMALIZED_WITHOUT_CONSERVATION"
+                if include_conservation
+                else "DESIGN_ONLY_EXCLUDED"
+            ),
             "base_score": (
                 None
                 if base_score is None
@@ -561,8 +733,13 @@ class WF01V02ScoringEngine:
             },
             "pre_specificity_priority": {
                 "status": "ORDERING_ONLY_NOT_FINAL_SCORE",
+                "participating_dimensions": preliminary_names,
+                "effective_weights": preliminary_weights,
                 "evaluated_weight": round(
-                    SCORING_WEIGHTS["thermodynamics"] + SCORING_WEIGHTS["amplicon_features"],
+                    sum(
+                        SCORING_WEIGHTS[name]
+                        for name in preliminary_names
+                    ),
                     CALCULATION_DECIMALS,
                 ),
                 "base": (
@@ -718,7 +895,10 @@ class WF01V02M3Engine:
             "scoring_contract": {
                 "policy_version": SCORING_POLICY_VERSION,
                 "weights": copy.deepcopy(SCORING_WEIGHTS),
-                "conservation_in_score": False,
+                "conservation_in_score": True,
+                "conservation_fallback": (
+                    "RENORMALIZE_REMAINING_DIMENSIONS_WITHOUT_FAKE_SCORE"
+                ),
                 "soft_penalty_method": "ADDITIVE",
                 "final_score_status": "PENDING_M4_SPECIFICITY",
             },

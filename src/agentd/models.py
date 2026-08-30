@@ -157,6 +157,12 @@ class Candidate:
 
     def to_dict(self) -> dict:
         data = jsonable(self)
+        metadata = data.get("metadata")
+        p2_specificity = None
+        if isinstance(metadata, dict):
+            p2_specificity = metadata.pop("_p2_specificity", None)
+        if isinstance(p2_specificity, dict):
+            data["specificity"] = p2_specificity
         data["amplicon"] = {
             "sequence_5to3": self.amplicon_sequence_5to3,
             "length_bp": self.length_bp,

@@ -144,11 +144,7 @@ def result_interpretation(result: WorkflowResult) -> dict:
             recommendations.append("排除高频变异热点后重新运行WF-01")
         elif variation["high_risk_sites"]:
             recommendations.append("优先湿实验验证3′端和探针区变异株")
-    elif result.workflow == "WF-07" and result.diagnosis:
-        attribution = result.diagnosis["attribution"]
-        summary = f"诊断类型为{result.diagnosis['problem_type']}，主要归因为{attribution['cause']}，置信度{attribution['confidence']}。"
-        recommendations.extend(item["action"] for item in result.diagnosis.get("optimization", {}).get("strategies", [])[:3])
-    elif result.workflow in {"WF-02", "WF-06"} and result.multiplex:
+    elif result.workflow == "WF-02" and result.multiplex:
         summary = f"{result.workflow}多重面板判定为{result.multiplex.get('verdict')}，返回{len(result.multiplex.get('panels', []))}套面板。"
         if not result.multiplex.get("panels"):
             recommendations.append("减少靶标数量、替换候选或采用分管检测")

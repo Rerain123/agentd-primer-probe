@@ -42,8 +42,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--log", help="Structured JSON log file")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    run = subparsers.add_parser("run", help="Run Agent D WF-01 through WF-07 from a JSON request")
-    run.add_argument("--workflow", required=True, choices=[f"WF-{index:02d}" for index in range(1, 8)])
+    run = subparsers.add_parser("run", help="Run Agent D WF-01 through WF-05 from a JSON request")
+    run.add_argument("--workflow", required=True, choices=[f"WF-{index:02d}" for index in range(1, 6)])
     run.add_argument("--input", required=True, help="Request JSON path")
     run.add_argument("--output", help="Result JSON path; stdout when omitted")
     run.add_argument("--allow-fallback", action="store_true", help="Enable clearly-labeled development fallbacks")
@@ -55,7 +55,10 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers.add_parser("capabilities", help="Show workflow and server-integration capabilities")
     subparsers.add_parser("readiness", help="Evaluate deployment readiness")
 
-    serve = subparsers.add_parser("serve", help="Start optional FastAPI service")
+    serve = subparsers.add_parser(
+        "serve",
+        help="Start the JWT-protected MCP server and REST compatibility API",
+    )
     serve.add_argument("--host", default="127.0.0.1")
     serve.add_argument("--port", default=8000, type=int)
     return parser
@@ -66,9 +69,11 @@ def main(argv: list[str] | None = None) -> int:
     configure_logging(args.log)
     try:
         if args.command == "serve":
-            # Uvicorn imports ``agentd.api`` after this CLI module.  The API
-            # owns its AgentDService instance, so propagate CLI overrides via
-            # the same documented environment contract used by containers.
+            # Uvicorn imports ``agentd.mcp_server`` after this CLI module.  It
+            # mounts the compatibility API behind the same JWT middleware, so
+            # the CLI and container entry points have identical security and
+            # delivery behaviour.  Propagate service overrides through the
+            # documented environment contract before that import occurs.
             if args.config:
                 os.environ["AGENTD_CONFIG"] = str(Path(args.config).resolve())
             if args.state_dir:
@@ -76,8 +81,15 @@ def main(argv: list[str] | None = None) -> int:
             try:
                 import uvicorn  # type: ignore
             except ImportError as exc:
-                raise SystemExit("API依赖未安装，请执行: pip install -e .[api]") from exc
-            uvicorn.run("agentd.api:app", host=args.host, port=args.port, factory=False)
+                raise SystemExit(
+                    "MCP/API依赖未安装，请执行: pip install -e .[api,mcp]"
+                ) from exc
+            uvicorn.run(
+                "agentd.mcp_server:app",
+                host=args.host,
+                port=args.port,
+                factory=False,
+            )
             return 0
 
         service = AgentDService(config_path=args.config, state_dir=args.state_dir)

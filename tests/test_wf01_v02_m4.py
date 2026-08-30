@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+import hashlib
 import importlib.util
 import json
 import sys
@@ -17,12 +18,15 @@ from agentd.config import load_config
 from agentd.database import DatabaseCatalog
 from agentd.errors import ToolUnavailableError
 from agentd.remote_blast import NCBIBlastMCPProvider
+from agentd.specificity import (
+    P2_POLICY_STATUS,
+    P2BatchSearchProvider,
+    P2SpecificityBatchService,
+    SpecificityEvaluator,
+)
 from agentd.service import AgentDService
 from agentd.wf01_v02_m4 import (
-    SPECIFICITY_POLICY_STATUS,
-    WF01V02BlastSearchProvider,
     WF01V02M4Engine,
-    WF01V02SpecificityPolicy,
     WF01V02SpecificityResourceResolver,
 )
 
@@ -154,6 +158,27 @@ class _SuccessfulBlastAdapter:
         return [], "blastn"
 
 
+class _CapturingBlastAdapter:
+    def __init__(self) -> None:
+        self.database_path: Path | None = None
+        self.database_content: str | None = None
+        self.last_search_evidence: dict = {}
+
+    def status(self) -> dict:
+        return {"available": True, "method": "blastn"}
+
+    def search(self, queries, database, *, evalue, mode):
+        path = Path(database)
+        self.database_path = path
+        self.database_content = path.read_text(encoding="utf-8")
+        self.last_search_evidence = {
+            "status": "COMPLETED",
+            "database": str(path),
+            "mode": mode,
+        }
+        return [], "blastn"
+
+
 class _UnavailablePrimer3Adapter:
     available = False
 
@@ -161,9 +186,9 @@ class _UnavailablePrimer3Adapter:
         return {"available": False}
 
 
-class WF01V02BlastSearchProviderTests(unittest.TestCase):
+class P2BatchSearchProviderTests(unittest.TestCase):
     def test_fallback_raw_evidence_uses_current_resource_path(self) -> None:
-        provider = WF01V02BlastSearchProvider(
+        provider = P2BatchSearchProvider(
             {},
             blast_adapter=_SuccessfulBlastAdapter(),
             primer3_adapter=_UnavailablePrimer3Adapter(),
@@ -182,6 +207,53 @@ class WF01V02BlastSearchProviderTests(unittest.TestCase):
         self.assertEqual(evidence["mode"], "HOST_EXCLUSION")
         self.assertEqual(evidence["evalue"], 0.1)
         self.assertEqual(evidence["raw_output"], [])
+
+    def test_inline_resource_is_materialized_only_for_the_search_call(self) -> None:
+        blast = _CapturingBlastAdapter()
+        provider = P2BatchSearchProvider(
+            {},
+            blast_adapter=blast,
+            primer3_adapter=_UnavailablePrimer3Adapter(),
+        )
+        sequence = "ACGT" * 20
+        database_resource = {
+            "key": "target:target_001:input-snapshot",
+            "kind": "inline_fasta",
+            "path": None,
+            "version": "sha256:fixture",
+            "version_valid": True,
+            "exists": True,
+            "resolution_status": "RESOLVED",
+            "record_count": 1,
+            "records": [
+                {
+                    "id": "input_0001",
+                    "sequence": sequence,
+                    "checksum_sha256": hashlib.sha256(
+                        sequence.encode("ascii")
+                    ).hexdigest(),
+                }
+            ],
+        }
+
+        result = provider.search(
+            {"c0001_forward": "ACGT"},
+            database_resource,
+            mode="TARGET_HIT",
+            evalue=1000.0,
+        )
+
+        self.assertIn(sequence, blast.database_content or "")
+        self.assertIsNotNone(blast.database_path)
+        self.assertFalse(blast.database_path.exists())
+        self.assertEqual(
+            result["raw_tool_output"]["database"],
+            database_resource["key"],
+        )
+        self.assertEqual(
+            result["raw_tool_output"]["materialization"],
+            "TASK_LOCAL_TEMPORARY_FASTA",
+        )
 
 
 class NCBIBlastMCPProviderTests(unittest.TestCase):
@@ -276,7 +348,7 @@ def hit(
     coverage: float = 100.0,
     evalue: float = 1e-20,
     start: int = 100,
-    dg: float | None = -5.0,
+    dg: float | None = -10.0,
     scientific_name: str | None = None,
     strand: str = "plus",
 ) -> dict:
@@ -402,19 +474,21 @@ class FakeProvider:
 
 
 class FakeRemoteProvider:
-    configured = True
-
-    def __init__(self, *, error: bool = False) -> None:
+    def __init__(
+        self,
+        *,
+        configured: bool = True,
+        error: bool = False,
+    ) -> None:
+        self.configured = configured
         self.error = error
         self.calls: list[dict] = []
         self.last_search_evidence: dict = {}
 
-    @staticmethod
-    def status() -> dict:
+    def status(self) -> dict:
         return {
-            "tool": "NCBI_BLAST_MCP",
-            "configured": True,
-            "database": "nt",
+            "tool": "REMOTE_BACKGROUND_FIXTURE",
+            "configured": self.configured,
         }
 
     @staticmethod
@@ -433,7 +507,13 @@ class FakeRemoteProvider:
             "version_semantics": "LIVE_PUBLIC_DATABASE_NOT_A_FIXED_SNAPSHOT",
         }
 
-    def search(self, queries: dict, *, evalue: float, exclude_organisms=None) -> dict:
+    def search(
+        self,
+        queries: dict,
+        *,
+        evalue: float,
+        exclude_organisms=None,
+    ) -> dict:
         self.calls.append(
             {
                 "queries": copy.deepcopy(queries),
@@ -447,7 +527,7 @@ class FakeRemoteProvider:
         return {
             "hits": [],
             "method": "blastn",
-            "provider": "ncbi_blast_mcp",
+            "provider": "remote_fixture",
             "raw_tool_output": {"status": "COMPLETED"},
         }
 
@@ -490,6 +570,30 @@ class WF01V02M4ResourceTests(unittest.TestCase):
                 host_resource["resolution_reason"],
                 "DATABASE_VERSION_MISSING",
             )
+
+    def test_target_input_snapshot_resolves_without_catalog_database(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="agentd-empty-catalog-") as temp_dir:
+            catalog_path = Path(temp_dir) / "catalog.json"
+            catalog_path.write_text('{"resources": {}}', encoding="utf-8")
+            resolver = WF01V02SpecificityResourceResolver(
+                DatabaseCatalog(load_config(), catalog_path=catalog_path)
+            )
+            target = m4_target([candidate(0)])
+            sequence = "ACGT" * 40
+            target["template"] = {
+                "template_id": "target_001:template",
+                "record_name": "fixture",
+                "sequence": sequence,
+            }
+            target["templates"] = [copy.deepcopy(target["template"])]
+
+            resolved = resolver.resolve_target(target)
+
+        self.assertEqual(resolved["resolution_status"], "RESOLVED")
+        self.assertEqual(resolved["kind"], "inline_fasta")
+        self.assertEqual(resolved["record_count"], 1)
+        self.assertRegex(resolved["version"], r"^sha256:[0-9a-f]{64}$")
+        self.assertEqual(resolved["records"][0]["sequence"], sequence)
 
 
 class WF01V02M4SpecificityTests(unittest.TestCase):
@@ -564,7 +668,8 @@ class WF01V02M4SpecificityTests(unittest.TestCase):
         self.assertTrue(result["specificity_complete"])
         self.assertTrue(result["technical_search_complete"])
         self.assertFalse(result["search_complete"])
-        self.assertEqual(result["policy_status"], SPECIFICITY_POLICY_STATUS)
+        self.assertEqual(result["policy_status"], P2_POLICY_STATUS)
+        self.assertEqual(result["specificity_tool"], "P2")
         raw_searches = result["raw_search_outputs"]
         self.assertEqual(
             raw_searches["target"]["result"]["raw_tool_output"]["mode"],
@@ -592,6 +697,35 @@ class WF01V02M4SpecificityTests(unittest.TestCase):
         self.assertEqual(len(provider.calls), 3)
         self.assertTrue(all(call["query_count"] == 6 for call in provider.calls))
         self.assertEqual(result["candidate_counts"]["specificity_qualified"], 2)
+
+    def test_full_specificity_calls_p2_once_and_maps_its_result(self) -> None:
+        provider = FakeProvider()
+        p2_service = P2SpecificityBatchService(
+            load_config(),
+            provider=provider,
+        )
+        engine = WF01V02M4Engine(
+            DatabaseCatalog(load_config()),
+            load_config(),
+            resolver=FakeResolver(),
+            p2_service=p2_service,
+        )
+
+        with patch.object(
+            p2_service,
+            "evaluate",
+            wraps=p2_service.evaluate,
+        ) as evaluate:
+            result = engine.run_target(
+                m4_target([candidate(0), candidate(1)])
+            )
+
+        evaluate.assert_called_once()
+        self.assertEqual(result["specificity_tool"], "P2")
+        self.assertEqual(
+            result["ranking_basis"],
+            "M4_MAPPING_OF_P2_SPECIFICITY_SCORE",
+        )
 
     def test_exact_short_target_hit_is_not_rejected_by_database_size_evalue(self) -> None:
         provider = FakeProvider(target_hit_evalue=1.14e-5)
@@ -625,7 +759,39 @@ class WF01V02M4SpecificityTests(unittest.TestCase):
         self.assertFalse(result["top10"])
         self.assertNotIn("TARGET_HIT", [call["mode"] for call in provider.calls])
 
-    def test_unresolved_local_background_uses_remote_ncbi_and_restores_score(self) -> None:
+    def test_unresolved_local_background_stays_not_evaluated(self) -> None:
+        provider = FakeProvider()
+        remote = FakeRemoteProvider(configured=False)
+
+        result = self.engine(
+            provider,
+            resolver=FakeResolver(related_ready=False),
+            remote_provider=remote,
+        ).run_target(m4_target([candidate(0)]))
+
+        selected = result["all_specificity_incomplete_candidates"][0]
+        self.assertEqual(
+            selected["specificity"]["overall_status"],
+            "NOT_EVALUATED",
+        )
+        self.assertEqual(
+            selected["specificity"]["related_background_nt"]["reason"],
+            "NT_DATABASE_OR_VERSION_NOT_RESOLVED",
+        )
+        self.assertIsNone(selected["score"])
+        self.assertNotIn(
+            "RELATED_BACKGROUND_NT",
+            [call["mode"] for call in provider.calls],
+        )
+        remote_status = result["remote_background_provider_status"]
+        self.assertEqual(remote_status["status"], "NOT_CONFIGURED")
+        self.assertEqual(
+            remote_status["reason"],
+            "LOCAL_RELATED_BACKGROUND_NOT_RESOLVED",
+        )
+        self.assertFalse(remote.calls)
+
+    def test_unresolved_local_background_uses_remote_provider(self) -> None:
         local = FakeProvider()
         remote = FakeRemoteProvider()
 
@@ -641,24 +807,27 @@ class WF01V02M4SpecificityTests(unittest.TestCase):
             selected["specificity"]["related_background_nt"]["status"],
             "PASS",
         )
-        self.assertIsNotNone(selected["score"])
-        self.assertEqual(selected["rank"], 1)
         self.assertEqual(
-            result["resource_resolution"]["related_background"]["resource_key"],
+            result["resource_resolution"]["related_background"][
+                "resource_key"
+            ],
             "nt:public:remote-mcp",
         )
         self.assertEqual(
-            result["resource_resolution"]["related_background"]["version_semantics"],
-            "LIVE_PUBLIC_DATABASE_NOT_A_FIXED_SNAPSHOT",
+            result["remote_background_provider_status"]["status"],
+            "USED",
         )
         self.assertEqual(len(remote.calls), 1)
-        self.assertEqual(remote.calls[0]["exclude_organisms"], ["Synthetic test virus"])
+        self.assertEqual(
+            remote.calls[0]["exclude_organisms"],
+            ["Synthetic test virus"],
+        )
         self.assertNotIn(
             "RELATED_BACKGROUND_NT",
             [call["mode"] for call in local.calls],
         )
 
-    def test_remote_background_error_remains_not_evaluated_without_score(self) -> None:
+    def test_remote_background_error_remains_not_evaluated(self) -> None:
         result = self.engine(
             FakeProvider(),
             resolver=FakeResolver(related_ready=False),
@@ -671,21 +840,29 @@ class WF01V02M4SpecificityTests(unittest.TestCase):
             selected["specificity"]["related_background_nt"]["reason"],
             "NT_SEARCH_TOOL_ERROR",
         )
+        self.assertEqual(
+            result["remote_background_provider_status"]["status"],
+            "ERROR",
+        )
         self.assertIsNone(selected["score"])
 
-    def test_resolved_local_background_is_preferred_over_remote_service(self) -> None:
+    def test_resolved_local_background_is_preferred_over_remote(self) -> None:
         local = FakeProvider()
         remote = FakeRemoteProvider()
 
-        result = self.engine(local, remote_provider=remote).run_target(
-            m4_target([candidate(0)])
-        )
+        result = self.engine(
+            local,
+            remote_provider=remote,
+        ).run_target(m4_target([candidate(0)]))
 
         self.assertEqual(result["top10"][0]["specificity"]["overall_status"], "PASS")
         self.assertFalse(remote.calls)
-        self.assertIn(
-            "RELATED_BACKGROUND_NT",
-            [call["mode"] for call in local.calls],
+        self.assertEqual(
+            result["remote_background_provider_status"],
+            {
+                "status": "NOT_INITIALIZED",
+                "reason": "LOCAL_RELATED_BACKGROUND_USED",
+            },
         )
 
     def test_sequence_only_marks_required_specificity_not_evaluated(self) -> None:
@@ -749,8 +926,8 @@ class WF01V02M4SpecificityTests(unittest.TestCase):
         target["execution_path"] = "DESIGN_ONLY"
 
         with patch(
-            "agentd.wf01_v02_m4.WF01V02BlastSearchProvider",
-            side_effect=AssertionError("DESIGN_ONLY must not initialize BLAST"),
+            "agentd.wf01_v02_m4.P2SpecificityBatchService",
+            side_effect=AssertionError("DESIGN_ONLY must not initialize P2"),
         ):
             result = WF01V02M4Engine(
                 DatabaseCatalog(load_config()),
@@ -820,17 +997,14 @@ class WF01V02M4SpecificityTests(unittest.TestCase):
         )
         self.assertEqual(result["top10"][0]["candidate_id"], "target_001-p3-2")
 
-    def test_host_hit_without_thermodynamics_is_not_evaluated(self) -> None:
+    def test_host_hit_without_thermodynamics_is_p2_caution(self) -> None:
         result = self.engine(
             FakeProvider(host_missing_thermo=True)
         ).run_target(m4_target([candidate(0)]))
-        selected = result["all_specificity_incomplete_candidates"][0]
+        selected = result["all_qualified_candidates"][0]
         host = selected["specificity"]["host_exclusion"]["object_results"][0]
-        self.assertEqual(host["status"], "NOT_EVALUATED")
-        self.assertEqual(
-            host["reason"],
-            "HOST_HIT_THERMODYNAMICS_NOT_EVALUATED",
-        )
+        self.assertEqual(host["status"], "CAUTION")
+        self.assertEqual(selected["specificity"]["overall_status"], "CAUTION")
         self.assertEqual(len(host["hits"]), 1)
 
     def test_final_specificity_score_reranks_m3_candidates(self) -> None:
@@ -851,6 +1025,54 @@ class WF01V02M4SpecificityTests(unittest.TestCase):
         self.assertEqual(
             scoring["score_scope"],
             ["thermodynamics", "specificity", "amplicon_features"],
+        )
+
+    def test_full_specificity_uses_four_dimensions_with_mafft_evidence(self) -> None:
+        value = candidate(0)
+        value["metadata"]["conservation_evidence"] = {
+            "status": "EVALUATED",
+            "reason": "MAFFT_ALIGNMENT_AND_SHANNON_PROFILE_COMPLETE",
+            "method": "mafft_shannon",
+            "score": 0.96,
+            "coverage_percent": 100.0,
+            "sequence_count": 20,
+            "confidence": "HIGH",
+            "region": {
+                "start": 0,
+                "end": 159,
+                "length": 160,
+                "round": "STRICT",
+            },
+        }
+
+        result = self.engine(FakeProvider()).run_target(m4_target([value]))
+
+        scoring = result["top10"][0]["metadata"]["wf01_v02_scoring"]
+        self.assertEqual(scoring["conservation_scoring_mode"], "FOUR_DIMENSION")
+        self.assertEqual(
+            scoring["score_scope"],
+            [
+                "conservation",
+                "thermodynamics",
+                "specificity",
+                "amplicon_features",
+            ],
+        )
+        self.assertEqual(
+            scoring["effective_weights"],
+            {
+                "conservation": 0.3,
+                "thermodynamics": 0.25,
+                "specificity": 0.25,
+                "amplicon_features": 0.2,
+            },
+        )
+        conservation = scoring["dimensions"]["conservation"]
+        self.assertEqual(conservation["raw_score"], 96.0)
+        self.assertTrue(conservation["participates_in_score"])
+        self.assertEqual(
+            scoring["dimensions"]["specificity"]["method"],
+            "P2_SPECIFICITY_SCORE",
         )
 
     def test_target_and_host_trigger_broad_nt_background_evaluation(self) -> None:
@@ -876,7 +1098,7 @@ class WF01V02M4SpecificityTests(unittest.TestCase):
         self.assertEqual(rejected["specificity"]["target_hit"]["status"], "FAIL")
         self.assertFalse(result["top10"])
 
-    def test_policy_related_compatible_pair_is_fail(self) -> None:
+    def test_p2_related_hits_are_caution_without_m4_pair_policy(self) -> None:
         queries = {
             "forward": "GACCACTTTGTCAAGCTCAT",
             "reverse": "TCTCTTCCTCTTGTGCTCTT",
@@ -891,46 +1113,35 @@ class WF01V02M4SpecificityTests(unittest.TestCase):
                 strand="minus",
             ),
         ]
-        result = WF01V02SpecificityPolicy().related_background(
+        result = SpecificityEvaluator(
+            _SuccessfulBlastAdapter(),
+            _UnavailablePrimer3Adapter(),
+        ).evaluate_cross_species_hits(
             queries,
             hits,
-            objects=[object_("RELATED", 1, name="Related test virus")],
-            target_object=object_(
-                "TARGET",
-                1,
-                name="Synthetic test virus",
-                accession="TARGET_ACC",
-            ),
-            resource=resource("nt:default:blast", "RELATED_BACKGROUND"),
             method="blastn",
+            target_species="Synthetic test virus",
+            target_accessions={"TARGET_ACC"},
         )
-        self.assertEqual(result["status"], "FAIL")
-        self.assertTrue(result["mode_specific"]["compatible_amplicons"])
+        self.assertEqual(result.verdict, "CAUTION")
+        self.assertEqual(result.blast_hits, 2)
 
-    def test_same_strand_primer_hits_are_not_a_compatible_amplicon(self) -> None:
-        queries = {
-            "forward": "GACCACTTTGTCAAGCTCAT",
-            "reverse": "TCTCTTCCTCTTGTGCTCTT",
-        }
-        hits = [
-            hit("forward", accession="NON_TARGET", start=100, strand="plus"),
-            hit("reverse", accession="NON_TARGET", start=200, strand="plus"),
-        ]
-        result = WF01V02SpecificityPolicy().related_background(
-            queries,
-            hits,
-            objects=[object_("RELATED", 1, name="Related test virus")],
-            target_object=object_(
-                "TARGET",
-                1,
-                name="Synthetic test virus",
-                accession="TARGET_ACC",
-            ),
-            resource=resource("nt:default:blast", "RELATED_BACKGROUND"),
-            method="blastn",
+    def test_m4_source_contains_no_specificity_strategy_or_tool_adapter(self) -> None:
+        source = (ROOT / "src" / "agentd" / "wf01_v02_m4.py").read_text(
+            encoding="utf-8"
         )
-        self.assertEqual(result["status"], "CAUTION")
-        self.assertFalse(result["mode_specific"]["compatible_amplicons"])
+        for forbidden in (
+            "THRESHOLDS =",
+            "class WF01V02SpecificityPolicy",
+            "class WF01V02BlastSearchProvider",
+            "NCBIBlastMCPProvider",
+            "identity_pct",
+            "query_coverage_pct",
+            "three_prime_mismatches",
+            "dg_kcal",
+        ):
+            self.assertNotIn(forbidden, source)
+        self.assertIn("P2SpecificityBatchService", source)
 
 
 class WF01V02M4BatchIsolationTests(unittest.TestCase):

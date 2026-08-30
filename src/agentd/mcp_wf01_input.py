@@ -256,7 +256,7 @@ def normalize_wf01_mcp_payload(
             ("target_organism", "target_species", "target_object"),
         )
         if target_alias:
-            if "target_organism" not in defaults:
+            if defaults.get("target_organism") in (None, "", {}):
                 defaults["target_organism"] = _canonical_object(target_value)
             normalized.pop(target_alias, None)
         host_alias, host_value = _first_present(
@@ -264,12 +264,14 @@ def normalize_wf01_mcp_payload(
             ("hosts", "host", "host_species", "host_objects"),
         )
         if host_alias:
-            if "hosts" not in defaults:
+            if defaults.get("hosts") in (None, "", []):
                 host_values = host_value if isinstance(host_value, list) else [host_value]
                 defaults["hosts"] = [_canonical_object(item) for item in host_values]
             normalized.pop(host_alias, None)
         coverage = normalized.pop("coverage_requirement", None)
-        if coverage not in (None, "") and "coverage_requirement" not in defaults:
+        if coverage not in (None, "") and defaults.get(
+            "coverage_requirement"
+        ) in (None, ""):
             defaults["coverage_requirement"] = coverage
         if defaults:
             normalized["batch_defaults"] = defaults

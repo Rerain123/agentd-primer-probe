@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://wens.example/schemas/wf05-v01-retry.json",
+  "title": "WF-05 v0.1 不可变重试补丁",
+  "description": "后端恢复父任务输入；本对象只声明允许覆盖的字段。",
+  "type": "object",
+  "additionalProperties": false,
+  "not": {"required": ["input_artifact_id", "sequences"]},
+  "properties": {
+    "input_artifact_id": {
+      "type": "string",
+      "pattern": "^himat-[0-9a-f]{32}$"
+    },
+    "forward_primer": {"$ref": "#/$defs/sequence"},
+    "reverse_primer": {"$ref": "#/$defs/sequence"},
+    "probe": {"$ref": "#/$defs/sequence"},
+    "sequences": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2000,
+      "items": {
+        "oneOf": [
+          {"$ref": "#/$defs/sequence"},
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["sequence"],
+            "properties": {
+              "id": {"type": "string", "minLength": 1},
+              "sequence": {"$ref": "#/$defs/sequence"},
+              "description": {"type": "string"},
+              "source": {"type": "string"}
+            }
+          }
+        ]
+      }
+    },
+    "reference_sequence_id": {"type": "string", "minLength": 1},
+    "target_id": {"type": "string", "minLength": 1},
+    "target_species": {"type": "string", "minLength": 1},
+    "assay_id": {"type": "string", "minLength": 1},
+    "allow_fallback": {"type": "boolean"},
+    "reason": {"type": "string", "minLength": 1}
+  },
+  "$defs": {
+    "sequence": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 2000000,
+      "pattern": "^[ACGTRYSWKMBDHVNacgtryswkmbdhvn\\s]+$"
+    }
+  }
+}

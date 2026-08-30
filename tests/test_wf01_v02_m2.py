@@ -151,6 +151,29 @@ class FakeMafftAdapter:
         }
 
 
+class DevelopmentFallbackMafftAdapter(FakeMafftAdapter):
+    def align(self, records: list[SequenceRecord]):
+        self.calls.append(copy.deepcopy(records))
+        self.last_evidence = {
+            "tool": "MAFFT",
+            "status": "DEVELOPMENT_FALLBACK",
+            "method": "prealigned_shannon_fallback",
+            "input_records": [
+                {"id": record.id, "sequence": record.sequence}
+                for record in records
+            ],
+            "aligned_records": [
+                {"id": record.id, "sequence": record.sequence}
+                for record in records
+            ],
+        }
+        return (
+            records,
+            "prealigned_shannon_fallback",
+            ["MAFFT 不可用；仅供开发降级"],
+        )
+
+
 class WF01V02M2ParameterTests(unittest.TestCase):
     def test_ac_par_01_default_profile_matches_prd(self) -> None:
         default = PARAMETER_PROFILES["default"]
@@ -385,6 +408,25 @@ class WF01V02M2ExecutionTests(unittest.TestCase):
         self.assertEqual(result["candidate_counts"]["awaiting_specificity"], 3)
         self.assertEqual(mafft.calls, [])
         self.assertEqual(result["mafft_status"], "SKIPPED_SINGLE_SEQUENCE")
+        self.assertEqual(result["conservation"]["status"], "NOT_EVALUATED")
+        self.assertEqual(
+            result["conservation"]["reason"],
+            "SINGLE_SEQUENCE_NO_POPULATION_CONSERVATION",
+        )
+        single_candidate = result["hard_rule_pass_candidates"][0]
+        self.assertIsNone(single_candidate["conservation_score"])
+        self.assertEqual(
+            single_candidate["metadata"]["conservation_evidence"]["status"],
+            "NOT_EVALUATED",
+        )
+        self.assertEqual(
+            next(
+                rule
+                for rule in single_candidate["rules"]
+                if rule["code"] == "R16"
+            )["status"],
+            "NOT_EVALUATED",
+        )
         self.assertEqual(result["alignment"]["raw_tool_output"]["tool"], "MAFFT")
         self.assertTrue(
             all(
@@ -426,9 +468,10 @@ class WF01V02M2ExecutionTests(unittest.TestCase):
             2,
         )
         self.assertEqual(result["conservation"]["method"], "mafft_shannon")
+        self.assertEqual(result["conservation"]["status"], "EVALUATED")
         self.assertTrue(result["conservation"]["regions"])
         self.assertEqual(len(primer3.calls), 3)
-        self.assertTrue(all(len(call["template"]) == 150 for call in primer3.calls))
+        self.assertTrue(all(len(call["template"]) == 160 for call in primer3.calls))
         self.assertTrue(
             all(
                 unit["stage"] == "M2_CONSERVED_REGION"
@@ -440,6 +483,42 @@ class WF01V02M2ExecutionTests(unittest.TestCase):
         self.assertEqual(candidate["conservation_method"], "mafft_shannon")
         self.assertEqual(candidate["conservation_sequence_count"], 2)
         self.assertEqual(candidate["metadata"]["conservation_status"], "EVALUATED")
+        evidence = candidate["metadata"]["conservation_evidence"]
+        self.assertEqual(evidence["score"], 1.0)
+        self.assertEqual(evidence["coverage_percent"], 100.0)
+        self.assertEqual(evidence["confidence"], "LOW")
+        self.assertEqual(set(evidence["binding_sites"]), {"forward_primer", "reverse_primer", "probe"})
+        self.assertEqual(
+            next(rule for rule in candidate["rules"] if rule["code"] == "R16")["status"],
+            "WARNING",
+        )
+
+    def test_development_alignment_fallback_never_claims_conservation(self) -> None:
+        primer3 = FakePrimer3Adapter()
+        mafft = DevelopmentFallbackMafftAdapter()
+        engine = WF01V02TargetEngine(
+            load_config(),
+            default_parameters=DEFAULT_PARAMETERS,
+            parameter_profiles=PARAMETER_PROFILES,
+            primer3_adapter=primer3,
+            mafft_adapter=mafft,
+        )
+        target = self.target()
+        target["templates"] = [
+            {"record_name": "strain-a", "sequence": "ACGT" * 40},
+            {"record_name": "strain-b", "sequence": "ACGT" * 40},
+        ]
+
+        result = engine.run_target(target)
+
+        self.assertEqual(result["mafft_status"], "DEVELOPMENT_FALLBACK")
+        self.assertEqual(result["alignment"]["status"], "NOT_EVALUATED")
+        self.assertEqual(result["conservation"]["status"], "NOT_EVALUATED")
+        self.assertTrue(result["conservation"]["full_length_fallback"])
+        candidate = result["hard_rule_pass_candidates"][0]
+        evidence = candidate["metadata"]["conservation_evidence"]
+        self.assertEqual(evidence["status"], "NOT_EVALUATED")
+        self.assertIsNone(evidence["score"])
 
     def test_ac_exe_01_queued_batch_runs_m2_and_remains_exploring(self) -> None:
         payload = {

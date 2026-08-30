@@ -10,48 +10,217 @@ import copy
 import json
 import logging
 import os
+import time
 from collections.abc import Callable
 from pathlib import Path
 from typing import Annotated, Any, Literal, TypeVar
 from urllib.parse import urlsplit
 
-from mcp.server.fastmcp import Context, FastMCP
+from mcp.server.fastmcp import FastMCP
 from mcp.server.fastmcp.exceptions import ToolError
 from mcp.server.transport_security import TransportSecuritySettings
 from mcp.types import CallToolResult, TextContent
+from jsonschema import Draft202012Validator
 from pydantic import Field
 
 from .api import app as compatibility_api
 from .api import service
 from .auth import JWTBearerMiddleware, JWTSettings, current_jwt_subject
 from .config import PROJECT_ROOT
-from .errors import AgentDError
-from .mcp_call_guard import RecentToolCallGuard
+from .errors import AgentDError, InputValidationError
+from .mcp_scopes import (
+    build_scoped_mcp_servers,
+    localize_mcp_tool_metadata,
+    mount_scoped_mcp_servers,
+)
+from .mcp_himat_compat import HiMatDirectResultCompatibilityMiddleware
 from .wf01_agent_view import serialized_size_bytes, summarize_wf01_batch
+from .wf02_v01 import (
+    summarize_wf02_batch,
+    wf02_execution_progress,
+    wf02_resume_token,
+)
 
 
 LOGGER = logging.getLogger("agentd.mcp")
 T = TypeVar("T")
+WF01BatchReference = Annotated[
+    str,
+    Field(
+        description=(
+            "WF-01 内部 UUID，或最终报告卡片中的 WF01-YYMMDD-HHMM-XXXX 任务编号。"
+        )
+    ),
+]
 
 
 MCP_INSTRUCTIONS = """\
-你是 OligoSmith WF-01 会话编排智能体。引物候选必须来自工具，禁止自行生成或假装已经运行。
-
-1. 用户粘贴序列时立即调用 create_wf01_batch：把模板填入 sequence；用户明确说出的靶标和宿主
-   必须分别填入 target_organism、host，不得遗漏已提供的信息，也不得猜测未提供的信息。
-2. 后端确定路线：仅有合格序列为 DESIGN_ONLY；序列和靶标齐全即为 FULL_SPECIFICITY。
-   宿主可选，提供时追加宿主专库排除。Primer3、规则、去重、排序和适用的特异性检查都是后端步骤。
-3. 直接输入不显示确认弹窗。序列不足 80 nt、非法或无法解析时，简短说明工具错误；不要调用
-   交互回复工具补救。候选不足、0 候选或特异性未完整评估仍由后端生成报告。
-4. 文件上传兼容流程保持为 prepare_wf01_design_input → 用户确认 → download_himat_file →
-   create_wf01_batch；不得把直接粘贴序列送入该流程。
-5. create_wf01_batch 自动运行到报告完成；不要重复创建或续跑。工具返回 primer_design_output 时，
-   最终回复必须逐字输出 content[0].text 中的紧凑裸 JSON，禁止 Markdown、说明文字、URL 列表或前后缀。
-6. 保留 batch_id。用户要求查看报告、下载、下载地址或再次显示卡片时调用 get_wf01_batch；明确要求
-   新增 CSV/PDF 时调用 get_wf01_export。二者完成后同样原样输出卡片 JSON，禁止自行整理附件链接。
-7. 候选解释用 get_wf01_report/get_wf01_candidate，改参数用 create_wf01_version。
-   run_wf01_until_blocked 仅用于旧任务恢复或明确续跑。
+你是 OligoSmith 编排智能体。候选与结论均采用工具结果。
+终态总则：收到 primer_design_output 时，终态结果已由工具直接交付；不得生成助手文本、不得重建或解释 JSON、不得再次调用工具，并立即结束本轮。
+1. WF-01：FULL_SPECIFICITY 完整路线；缺少 target_organism 先询问。create_wf01_batch接文本，附件先download_himat_file，run_wf01_until_blocked恢复。保留 batch_id；只有用户后续明确要求才用get_wf01_report/get_wf01_export获取下载地址或create_wf01_version。
+2. WF-02：download_himat_file→downstream.wf02.target→create_wf02_batch。复用对话已有的靶标、文件映射和宿主。缺字段由 N04 返回 agent_interaction；省略 include_internal_control、省略 runtime_config。
+3. WF-02建单后由后端持久化任务执行，run_wf02_until_blocked首次最多同步等待235秒；WAIT_FOR_BACKGROUND时只回复user_message并结束本轮，不轮询、不重复输出阶段文字。create_wf02_batch请求失败不得同轮重试；用户后续明确继续时可用原参数重试并接回近期任务。明确查询时调用get_wf02_batch；交互用submit_wf02_input_response/submit_wf02_child_response。
+4. WF-03：有附件/file_id时先 download_himat_file→取顶层 input_artifact_id→run_wf03_internal_control；无附件且 host_species已知时直接调用。缺少 host_species 时只询问该字段并停止。禁止先分析或用文本模拟结果，P5 采用后端结果；补证用 retry_wf03_internal_control，查询用 get_wf03_report。
+5. WF-04：附件/file_id先 download_himat_file→取顶层 input_artifact_id→run_wf04_validation；无附件且 forward_primer、reverse_primer齐全时直接调用，缺字段只询问。按 retryable_steps 调 retry_wf04_validation，查询用 get_wf04_report。执行状态和最终判定是两个独立字段，禁止模型执行或重算。
+6. WF-05：附件download_himat_file→input_artifact_id→run_wf05_variation；否则传sequences。缺forward_primer、reverse_primer或序列集询问缺项。重试/查询用retry_wf05_variation/get_wf05_report；不自动调用其他工作流
 """
+
+_TERMINAL_OUTPUT_SCHEMA_DESCRIPTION = (
+    "终态结构由outputSchema定义并由工具直接交付；"
+    "不得生成助手文本或再次调用工具，立即结束本轮。"
+)
+
+_TERMINAL_CAPABLE_TOOL_NAMES = frozenset(
+    {
+        "create_wf01_batch",
+        "create_wf02_batch",
+        "get_wf01_batch",
+        "get_wf01_export",
+        "get_wf02_batch",
+        "get_wf02_export",
+        "get_wf03_report",
+        "get_wf04_report",
+        "get_wf05_report",
+        "retry_wf03_internal_control",
+        "retry_wf04_validation",
+        "retry_wf05_variation",
+        "revise_wf01_target_manifest",
+        "run_wf01_until_blocked",
+        "run_wf02_until_blocked",
+        "run_wf03_internal_control",
+        "run_wf04_validation",
+        "run_wf05_variation",
+        "submit_wf01_interaction_response",
+        "submit_wf02_child_response",
+        "submit_wf02_input_response",
+        "submit_wf02_internal_control_response",
+    }
+)
+
+
+def _load_primer_design_output_schema() -> dict[str, Any]:
+    schema_path = PROJECT_ROOT / "schemas" / "primer-design-output.schema.json"
+    schema = json.loads(schema_path.read_text(encoding="utf-8"))
+    Draft202012Validator.check_schema(schema)
+    return schema
+
+
+_PRIMER_DESIGN_OUTPUT_SCHEMA = _load_primer_design_output_schema()
+_PRIMER_DESIGN_OUTPUT_VALIDATOR = Draft202012Validator(
+    _PRIMER_DESIGN_OUTPUT_SCHEMA
+)
+
+
+def _terminal_capable_output_schema() -> dict[str, Any]:
+    """Describe tools that may emit either a terminal card or normal state."""
+
+    card_schema = copy.deepcopy(_PRIMER_DESIGN_OUTPUT_SCHEMA)
+    card_schema.pop("$schema", None)
+    card_schema.pop("$id", None)
+    definitions = card_schema.pop("$defs", {})
+    return {
+        "$defs": definitions,
+        "oneOf": [
+            card_schema,
+            {
+                "type": "object",
+                "not": {
+                    "required": ["type"],
+                    "properties": {
+                        "type": {"const": "primer_design_output"}
+                    },
+                },
+            },
+        ],
+    }
+
+
+def _configure_terminal_output_schemas(server: FastMCP) -> None:
+    """Advertise the terminal card discriminator through MCP ``outputSchema``."""
+
+    tool_manager = getattr(server, "_tool_manager", None)
+    if tool_manager is None or not callable(
+        getattr(tool_manager, "get_tool", None)
+    ):
+        raise RuntimeError("当前 MCP 版本未提供可用的工具注册表")
+    output_schema = _terminal_capable_output_schema()
+    Draft202012Validator.check_schema(output_schema)
+    for tool_name in _TERMINAL_CAPABLE_TOOL_NAMES:
+        tool = tool_manager.get_tool(tool_name)
+        if tool is None:
+            raise RuntimeError(f"终态工具未注册：{tool_name}")
+        tool.fn_metadata.output_schema = copy.deepcopy(output_schema)
+        tool.__dict__.pop("output_schema", None)
+
+
+_HIMAT_MARKDOWN_ACTIVE_JSON_CHARACTERS = frozenset("/[]()<>`*_&")
+
+
+def _himat_terminal_json(payload: dict[str, Any]) -> str:
+    """Serialize the protocol-internal text mirror without Markdown effects.
+
+    FastMCP builds an internal ``CallToolResult`` before the HTTP compatibility
+    layer promotes ``structuredContent`` to the direct JSON-RPC result. The
+    text block is not exposed for terminal HiMat responses, but keeping its
+    JSON round trip exact makes in-process inspection and fallback handling
+    deterministic.
+    """
+
+    validation_errors = sorted(
+        _PRIMER_DESIGN_OUTPUT_VALIDATOR.iter_errors(payload),
+        key=lambda error: tuple(str(item) for item in error.absolute_path),
+    )
+    if validation_errors:
+        first_error = validation_errors[0]
+        location = ".".join(str(item) for item in first_error.absolute_path)
+        prefix = f"{location}: " if location else ""
+        raise RuntimeError(
+            "HiMat 终态输出不符合 primer_design_output 契约："
+            f"{prefix}{first_error.message}"
+        )
+
+    serialized = json.dumps(
+        payload,
+        ensure_ascii=True,
+        allow_nan=False,
+        separators=(",", ":"),
+    )
+    output: list[str] = []
+    in_string = False
+    escaped = False
+    for character in serialized:
+        if not in_string:
+            output.append(character)
+            if character == '"':
+                in_string = True
+            continue
+        if escaped:
+            output.append(character)
+            escaped = False
+            continue
+        if character == "\\":
+            output.append(character)
+            escaped = True
+            continue
+        if character == '"':
+            output.append(character)
+            in_string = False
+            continue
+        if character in _HIMAT_MARKDOWN_ACTIVE_JSON_CHARACTERS:
+            output.append(f"\\u{ord(character):04x}")
+            continue
+        output.append(character)
+
+    encoded = "".join(output)
+    # Keep the discriminator visible for hosts that identify the card type
+    # before performing a full JSON parse.
+    encoded = encoded.replace(
+        '"type":"primer\\u005fdesign\\u005foutput"',
+        '"type":"primer_design_output"',
+    )
+    if json.loads(encoded) != payload:
+        raise RuntimeError("HiMat terminal JSON failed its round-trip invariant")
+    return encoded
 
 
 def _csv_env(name: str) -> list[str]:
@@ -81,75 +250,6 @@ mcp = FastMCP(
     stateless_http=True,
     transport_security=_transport_security(),
 )
-
-
-def _design_input_dedup_seconds() -> float:
-    raw = os.environ.get("MCP_DESIGN_INPUT_DEDUP_SECONDS", "10")
-    try:
-        return min(300.0, max(0.0, float(raw)))
-    except ValueError:
-        return 10.0
-
-
-_design_input_call_guard = RecentToolCallGuard(_design_input_dedup_seconds())
-
-
-def _mcp_turn_key(context: Context) -> str | None:
-    """Read an optional stable conversation/turn key from MCP request metadata."""
-    meta = context.request_context.meta
-    if meta is None:
-        return None
-    values = meta.model_dump(exclude_none=True)
-    for name in (
-        "turnId",
-        "turn_id",
-        "messageId",
-        "message_id",
-        "conversationId",
-        "conversation_id",
-        "threadId",
-        "thread_id",
-        "chatId",
-        "chat_id",
-    ):
-        value = values.get(name)
-        if isinstance(value, (str, int)) and str(value).strip():
-            return f"{name}:{str(value).strip()}"
-    return None
-
-
-def _design_input_caller_scope(context: Context) -> str | None:
-    subject = current_jwt_subject()
-    if subject is None:
-        return None
-    turn_key = _mcp_turn_key(context)
-    return f"{subject}|{turn_key}" if turn_key else subject
-
-
-def _duplicate_design_input_result(payload: dict[str, Any]) -> CallToolResult:
-    result = _invoke(
-        "wf01_prepare_design_input_duplicate_suppressed",
-        lambda: {
-            "status": "DUPLICATE_SUPPRESSED",
-            "duplicate_suppressed": True,
-            "tool": "prepare_wf01_design_input",
-            "next_action": "WAIT_FOR_USER",
-            "message": (
-                "同一输入确认请求的重复工具调用已被服务端抑制；首个表单仍然有效。"
-                "立即结束当前轮次，等待用户提交 primer_design_input_update。"
-            ),
-        },
-        audit_input={"payload": payload},
-    )
-    return CallToolResult(
-        content=[
-            TextContent(
-                type="text",
-                text=json.dumps(result, ensure_ascii=False, separators=(",", ":")),
-            )
-        ],
-        structuredContent=result,
-    )
 
 
 def _invoke(
@@ -188,12 +288,13 @@ def _invoke(
                 }
             )
         ) from exc
+    outbound_result = _bounded_tool_result(operation, result)
     if trace_id:
         try:
-            service.audit.complete(trace_id, operation, result)
+            service.audit.complete(trace_id, operation, outbound_result)
         except Exception:  # pragma: no cover - 审计不得改变工具结果
             LOGGER.exception("无法完成工具审计", extra={"operation": operation})
-    return _bounded_tool_result(operation, result)
+    return outbound_result
 
 
 def _tool_result_limit_bytes() -> int:
@@ -211,14 +312,72 @@ def _bounded_tool_result(operation: str, result: T) -> T | dict[str, Any]:
     if size <= limit:
         return result
     if isinstance(result, dict):
+        if result.get("workflow") == "WF-02" and result.get(
+            "response_schema_version"
+        ):
+            compact = {
+                key: copy.deepcopy(result.get(key))
+                for key in (
+                    "response_schema_version",
+                    "workflow",
+                    "batch_id",
+                    "batch_code",
+                    "report_id",
+                    "status",
+                    "stage",
+                    "next_action",
+                    "view",
+                    "section",
+                    "resume_token",
+                    "execution_unit",
+                    "execution_progress",
+                    "orchestration",
+                    "tool_control",
+                    "flowControl",
+                    "ui_message",
+                    "result_summary",
+                    "outcome",
+                )
+                if result.get(key) is not None
+            }
+            compact.update(
+                {
+                    "response_truncated": True,
+                    "original_size_bytes": size,
+                    "maximum_size_bytes": limit,
+                    "operation": operation,
+                    "detail_query": {
+                        "tool": (
+                            "get_wf02_panel"
+                            if result.get("panel_id")
+                            else (
+                                "get_wf02_report"
+                                if result.get("report_id")
+                                else "get_wf02_batch"
+                            )
+                        ),
+                        "use_pagination": True,
+                        **(
+                            {"panel_id": result.get("panel_id")}
+                            if result.get("panel_id")
+                            else {}
+                        ),
+                    },
+                }
+            )
+            if serialized_size_bytes(compact) <= limit:
+                return compact
         batch = result.get("batch")
         if not isinstance(batch, dict) and result.get("batch_id"):
             batch = result
         if isinstance(batch, dict) and batch.get("batch_id"):
-            summary = summarize_wf01_batch(
-                batch,
-                top_candidates_per_target=0,
-            )
+            if batch.get("workflow") == "WF-02":
+                summary = summarize_wf02_batch(batch)
+            else:
+                summary = summarize_wf01_batch(
+                    batch,
+                    top_candidates_per_target=0,
+                )
             summary.update(
                 {
                     "response_truncated": True,
@@ -229,6 +388,26 @@ def _bounded_tool_result(operation: str, result: T) -> T | dict[str, Any]:
             )
             if serialized_size_bytes(summary) <= limit:
                 return summary
+        source = result.get("source")
+        if isinstance(source, dict) and source.get("batch_id"):
+            report_summary = {
+                "response_schema_version": "wf02-v0.1-report-overflow-v1",
+                "workflow": "WF-02",
+                "batch_id": source.get("batch_id"),
+                "report_id": result.get("report_id"),
+                "result_summary": copy.deepcopy(result.get("result_summary") or {}),
+                "outcome": copy.deepcopy(result.get("outcome") or {}),
+                "response_truncated": True,
+                "original_size_bytes": size,
+                "maximum_size_bytes": limit,
+                "operation": operation,
+                "detail_query": {
+                    "tool": "get_wf02_report",
+                    "sections": ["summary", "panels", "failure", "trace"],
+                },
+            }
+            if serialized_size_bytes(report_summary) <= limit:
+                return report_summary
         retained = {
             key: result.get(key)
             for key in (
@@ -255,24 +434,635 @@ def _bounded_tool_result(operation: str, result: T) -> T | dict[str, Any]:
     }
 
 
+_WF02_CONTINUE_PREFIXES = ("RUN_", "CONTINUE_", "RETRY_")
+_WF02_HARD_STOP_REASONS = {"MISSING_RESUME_TOKEN", "NO_PROGRESS"}
+
+
+def _wf02_continuation_allowed(result: dict[str, Any]) -> bool:
+    ui_message = result.get("ui_message")
+    if isinstance(ui_message, dict) and ui_message.get("type") == (
+        "primer_design_output"
+    ):
+        return False
+    flow_control = result.get("flowControl")
+    if isinstance(flow_control, dict) and flow_control.get("stopCurrentTurn"):
+        return False
+    background_state = str(
+        (result.get("background_execution") or {}).get("state") or ""
+    )
+    if background_state in {"QUEUED", "RUNNING"}:
+        return False
+    status = str(result.get("status") or "")
+    if status.startswith(("WAITING_", "REVIEW_")):
+        return False
+    orchestration = result.get("orchestration")
+    if isinstance(orchestration, dict) and orchestration.get(
+        "stop_reason"
+    ) in _WF02_HARD_STOP_REASONS:
+        return False
+    next_action = str(result.get("next_action") or "")
+    return next_action.startswith(_WF02_CONTINUE_PREFIXES)
+
+
+def _wf02_tool_control(result: dict[str, Any]) -> dict[str, Any]:
+    """Expose a stop/deliver directive; model-side continuation is disabled."""
+    resume_token = str(result.get("resume_token") or "") or None
+    ui_message = result.get("ui_message")
+    terminal = (
+        isinstance(ui_message, dict)
+        and ui_message.get("type") == "primer_design_output"
+    )
+    if terminal:
+        directive = "DELIVER_TERMINAL_OUTPUT"
+    else:
+        directive = "STOP_CURRENT_TURN"
+    execution_unit = result.get("execution_unit") or {}
+    result["tool_control"] = {
+        "mode": "PERSISTENT_BACKGROUND",
+        "directive": directive,
+        "call_again": False,
+        "continue_in_same_turn": False,
+        "suppress_intermediate_text": False,
+        "next_tool": None,
+        "next_arguments": None,
+        "resume_token": resume_token,
+        "state_committed": bool(execution_unit.get("state_committed")),
+        "progress": copy.deepcopy(result.get("execution_progress") or {}),
+    }
+    return result
+
+
+def _wf02_query_control(result: dict[str, Any]) -> dict[str, Any]:
+    """Keep an explicit status query read-only and bounded to one tool call."""
+
+    controlled = _wf02_tool_control(result)
+    tool_control = controlled.get("tool_control") or {}
+    if tool_control.get("directive") != "DELIVER_TERMINAL_OUTPUT":
+        tool_control.update(
+            {
+                "directive": "STOP_CURRENT_TURN",
+                "call_again": False,
+                "continue_in_same_turn": False,
+                "suppress_intermediate_text": False,
+                "next_tool": None,
+                "next_arguments": None,
+            }
+        )
+    return controlled
+
+
+def _wf02_sync_wait_seconds() -> float:
+    try:
+        return max(
+            0.0,
+            min(float(os.environ.get("MCP_WF02_SYNC_WAIT_SECONDS", "235")), 235.0),
+        )
+    except ValueError:
+        return 235.0
+
+
+def _run_wf02_execution_window(
+    batch_id: str,
+    resume_token: str | None,
+) -> dict[str, Any]:
+    """Start durable execution and wait inside HiMat's 300-second envelope."""
+
+    current = service.run_wf02_v01_background(
+        batch_id,
+        wait_seconds=_wf02_sync_wait_seconds(),
+        expected_resume_token=resume_token,
+    )
+    return _wf02_tool_control(current)
+
+
+def _page(items: list[Any], cursor: int, limit: int) -> dict[str, Any]:
+    start = max(0, int(cursor))
+    size = max(1, min(int(limit), 50))
+    selected = copy.deepcopy(items[start : start + size])
+    next_cursor = start + len(selected)
+    return {
+        "items": selected,
+        "cursor": start,
+        "limit": size,
+        "returned": len(selected),
+        "total": len(items),
+        "next_cursor": next_cursor if next_cursor < len(items) else None,
+    }
+
+
+def _wf02_batch_view(
+    batch_id: str,
+    *,
+    view: str,
+    target_id: str | None,
+    cursor: int,
+    limit: int,
+) -> dict[str, Any]:
+    if view == "summary":
+        return service.get_wf02_v01_agent_summary(batch_id)
+    batch = service.get_wf02_v01_batch(batch_id)
+    common = {
+        "response_schema_version": "wf02-v0.1-batch-view-v1",
+        "workflow": "WF-02",
+        "batch_id": batch.get("batch_id"),
+        "batch_code": batch.get("batch_code"),
+        "status": batch.get("status"),
+        "stage": batch.get("stage"),
+        "next_action": batch.get("next_action"),
+        "resume_token": wf02_resume_token(batch),
+        "execution_progress": wf02_execution_progress(batch),
+        "view": view,
+    }
+    if view == "target":
+        targets = (batch.get("target_design") or {}).get("targets") or []
+        target = next(
+            (
+                item
+                for item in targets
+                if str(item.get("target_id")) == str(target_id or "")
+            ),
+            None,
+        )
+        if target is None:
+            raise InputValidationError(
+                "WF-02 任务中不存在该靶标",
+                details={"batch_id": batch_id, "target_id": target_id},
+            )
+        candidates = [
+            {
+                "candidate_id": item.get("candidate_id"),
+                "rank": item.get("rank"),
+                "score": item.get("score"),
+                "verdict": item.get("verdict"),
+                "evidence_level": item.get("evidence_level"),
+                "specificity_status": (item.get("specificity") or {}).get(
+                    "overall_status"
+                ),
+                "p6_status": (item.get("amplicon_structure") or {}).get("status"),
+                "warning_count": len(item.get("warnings") or []),
+            }
+            for item in target.get("candidates") or []
+        ]
+        return {
+            **common,
+            "target": {
+                key: copy.deepcopy(target.get(key))
+                for key in (
+                    "target_id",
+                    "display_name",
+                    "input_order",
+                    "status",
+                    "candidate_count",
+                    "failure",
+                    "p6_summary",
+                    "resource_retry_count",
+                )
+                if target.get(key) is not None
+            },
+            "candidates": _page(candidates, cursor, limit),
+            "wf01_lineage": _page(
+                target.get("wf01_lineage") or [], cursor, limit
+            ),
+        }
+    if view == "trace":
+        return {
+            **common,
+            "workflow_trace": _page(
+                batch.get("workflow_trace") or [], cursor, limit
+            ),
+        }
+    if view == "events":
+        return {
+            **common,
+            "events": _page(batch.get("events") or [], cursor, limit),
+        }
+    relaxation = (batch.get("multiplex") or {}).get("relaxation") or {}
+    return {
+        **common,
+        "relaxation": {
+            "status": relaxation.get("status"),
+            "active_step": relaxation.get("active_step"),
+            "maximum_partial_target_count": relaxation.get(
+                "maximum_partial_target_count"
+            ),
+            "tool_failure": copy.deepcopy(relaxation.get("tool_failure")),
+            "rounds": [
+                {
+                    key: copy.deepcopy(item.get(key))
+                    for key in (
+                        "node",
+                        "status",
+                        "total_panels",
+                        "cursor",
+                        "accepted_count",
+                        "rejected_count",
+                    )
+                }
+                for item in relaxation.get("rounds") or []
+            ],
+            "log": _page(
+                relaxation.get("relaxation_log") or [], cursor, limit
+            ),
+        },
+    }
+
+
+def _wf02_report_view(
+    report: dict[str, Any],
+    *,
+    section: str,
+    cursor: int,
+    limit: int,
+) -> dict[str, Any]:
+    source = report.get("source") or {}
+    multiplex = report.get("multiplex") or {}
+
+    def compact_failure(value: Any) -> dict[str, Any] | None:
+        if not isinstance(value, dict) or not value:
+            return None
+        return {
+            key: copy.deepcopy(value.get(key))
+            for key in (
+                "code",
+                "message",
+                "status",
+                "retryable",
+                "stage",
+                "reason_codes",
+            )
+            if value.get(key) is not None
+        }
+
+    def compact_gap(value: dict[str, Any]) -> dict[str, Any]:
+        return {
+            key: copy.deepcopy(value.get(key))
+            for key in (
+                "target_id",
+                "display_name",
+                "input_order",
+                "reason_code",
+                "reason_message",
+                "wf01_batch_id",
+            )
+            if value.get(key) is not None
+        } | {"failure": compact_failure(value.get("failure"))}
+
+    common = {
+        "response_schema_version": "wf02-v0.1-report-view-v1",
+        "workflow": "WF-02",
+        "batch_id": source.get("batch_id"),
+        "report_id": report.get("report_id"),
+        "generated_at": report.get("generated_at"),
+        "section": section,
+    }
+    if section == "summary":
+        return {
+            **common,
+            "source": copy.deepcopy(source),
+            "result_summary": copy.deepcopy(report.get("result_summary") or {}),
+            "outcome": copy.deepcopy(report.get("outcome") or {}),
+            "selection_mode": report.get("selection_mode"),
+            "top3_panel_count": len(report.get("top3_panels") or []),
+            "partial_panel_count": len(report.get("partial_panels") or []),
+            "risk_alternative_count": len(report.get("risk_alternatives") or []),
+            "internal_control_summary": copy.deepcopy(
+                report.get("internal_control_summary") or {}
+            ),
+            "multiplex": {
+                key: copy.deepcopy(multiplex.get(key))
+                for key in (
+                    "status",
+                    "panel_size",
+                    "requested_panel_size",
+                    "delivered_target_count",
+                    "delivered_member_count",
+                    "internal_control_included",
+                    "targets_order",
+                    "failed_targets",
+                    "blocked_targets",
+                    "coverage",
+                    "primary_panel_id",
+                    "delivered_panel_ids",
+                    "relaxation_applied",
+                    "channel_assignment",
+                    "heterodimer",
+                    "tm_spread_celsius",
+                    "gc_spread_percent",
+                    "issues",
+                    "verdict",
+                )
+            }
+            | {
+                "coverage_gap_count": len(
+                    multiplex.get("coverage_gaps") or []
+                )
+            },
+            "candidate_comparison": copy.deepcopy(
+                report.get("candidate_comparison") or {}
+            ),
+            "result_explanation": copy.deepcopy(
+                report.get("result_explanation") or {}
+            ),
+            "exports": copy.deepcopy(report.get("exports") or {}),
+            "available_sections": ["summary", "panels", "failure", "trace"],
+        }
+    if section == "panels":
+        full_panels = (
+            list(report.get("top3_panels") or [])
+            + list(report.get("partial_panels") or [])
+            + list(report.get("risk_alternatives") or [])
+        )
+        panels = [
+            {
+                "rank": panel.get("rank"),
+                "panel_id": panel.get("panel_id"),
+                "tier": panel.get("tier"),
+                "classification": panel.get("classification"),
+                "final_score": (panel.get("score") or {}).get(
+                    "final_score"
+                ),
+                "member_count": len(panel.get("members") or []),
+                "target_ids": [
+                    item.get("target_id")
+                    for item in panel.get("members") or []
+                ],
+                "warning_count": len(panel.get("warnings") or []),
+                "detail_query": {
+                    "tool": "get_wf02_panel",
+                    "panel_id": panel.get("panel_id"),
+                    "section": "summary",
+                },
+            }
+            for panel in full_panels
+        ]
+        return {**common, "panels": _page(panels, cursor, min(limit, 3))}
+    if section == "failure":
+        return {
+            **common,
+            "outcome": copy.deepcopy(report.get("outcome") or {}),
+            "failure_guidance": copy.deepcopy(report.get("failure_guidance") or []),
+            "independent_target_schemes": _page(
+                report.get("independent_target_schemes") or [], cursor, limit
+            ),
+            "coverage": copy.deepcopy(multiplex.get("coverage") or {}),
+            "coverage_gaps": _page(
+                [
+                    compact_gap(item)
+                    for item in multiplex.get("coverage_gaps") or []
+                    if isinstance(item, dict)
+                ],
+                cursor,
+                limit,
+            ),
+        }
+    traceability = report.get("traceability") or {}
+    tool_executions = traceability.get("tool_executions") or {}
+    compact_tool_executions = {
+        "wf01_targets": [
+            {
+                "tool": item.get("tool"),
+                "target_id": item.get("target_id"),
+                "status": item.get("status"),
+                "active_batch_id": item.get("active_batch_id"),
+                "lineage_count": len(item.get("lineage") or []),
+                "failure": compact_failure(item.get("failure")),
+            }
+            for item in tool_executions.get("wf01_targets") or []
+            if isinstance(item, dict)
+        ],
+        "p6": copy.deepcopy(tool_executions.get("p6") or {}),
+        "p5": {
+            key: copy.deepcopy((tool_executions.get("p5") or {}).get(key))
+            for key in ("status", "verdict", "attempt_count")
+        }
+        | {
+            "failure": compact_failure(
+                (tool_executions.get("p5") or {}).get("failure")
+            )
+        },
+        "p4": {
+            key: copy.deepcopy((tool_executions.get("p4") or {}).get(key))
+            for key in (
+                "status",
+                "processed_combinations",
+                "total_combinations",
+            )
+        }
+        | {
+            "tool_failure": compact_failure(
+                (tool_executions.get("p4") or {}).get("tool_failure")
+            )
+        },
+    }
+    target_lineage = [
+        {
+            key: copy.deepcopy(item.get(key))
+            for key in (
+                "tool",
+                "target_id",
+                "status",
+                "active_batch_id",
+                "lineage",
+                "input_source",
+            )
+        }
+        | {"failure": compact_failure(item.get("failure"))}
+        for item in traceability.get("target_lineage") or []
+        if isinstance(item, dict)
+    ]
+    uncompleted = traceability.get("uncompleted_reasons") or {}
+    return {
+        **common,
+        "execution_route": copy.deepcopy(
+            traceability.get("execution_route") or {}
+        ),
+        "tool_executions": compact_tool_executions,
+        "relaxation": {
+            key: copy.deepcopy((traceability.get("relaxation") or {}).get(key))
+            for key in ("status", "active_step")
+        },
+        "instrument_configuration": copy.deepcopy(
+            traceability.get("instrument_configuration") or {}
+        ),
+        "channel_assignment": copy.deepcopy(
+            traceability.get("channel_assignment") or {}
+        ),
+        "uncompleted_reasons": {
+            "outcome": copy.deepcopy(uncompleted.get("outcome") or {}),
+            "coverage_gaps": [
+                compact_gap(item)
+                for item in uncompleted.get("coverage_gaps") or []
+                if isinstance(item, dict)
+            ],
+        },
+        "workflow_trace": _page(
+            traceability.get("workflow_trace") or [], cursor, limit
+        ),
+        "events": _page(traceability.get("events") or [], cursor, limit),
+        "target_lineage": _page(
+            target_lineage, cursor, limit
+        ),
+    }
+
+
+def _wf02_panel_view(
+    detail: dict[str, Any],
+    *,
+    section: str,
+    cursor: int,
+    limit: int,
+) -> dict[str, Any]:
+    """Expose one panel without placing raw pair matrices in model context."""
+    panel = detail.get("panel") or {}
+    common = {
+        "response_schema_version": "wf02-v0.1-panel-view-v1",
+        "workflow": "WF-02",
+        "batch_id": detail.get("batch_id"),
+        "report_id": detail.get("report_id"),
+        "panel_id": panel.get("panel_id"),
+        "section": section,
+    }
+    if section == "summary":
+        return {
+            **common,
+            "panel": {
+                key: copy.deepcopy(panel.get(key))
+                for key in (
+                    "rank",
+                    "panel_id",
+                    "tier",
+                    "classification",
+                    "score",
+                    "sequence_signature_sha256",
+                    "channel_assignment",
+                    "relaxation_applied",
+                    "recommended_annealing_temp_celsius",
+                    "annealing_temperature_basis",
+                    "recommendation_policy_version",
+                    "warnings",
+                )
+            }
+            | {
+                "member_count": len(panel.get("members") or []),
+                "alternate_channel_assignment_count": len(
+                    panel.get("alternate_channel_assignments") or []
+                ),
+            },
+            "available_sections": ["summary", "members", "evidence"],
+        }
+    if section == "members":
+        members = []
+        for member in panel.get("members") or []:
+            specificity = member.get("specificity") or {}
+            structure = member.get("amplicon_structure") or {}
+            members.append(
+                {
+                    key: copy.deepcopy(member.get(key))
+                    for key in (
+                        "target_id",
+                        "role",
+                        "candidate_id",
+                        "fluorophore",
+                        "quencher",
+                        "fluorophore_source",
+                        "quencher_source",
+                        "forward_primer",
+                        "reverse_primer",
+                        "probe",
+                        "amplicon",
+                        "blast_summary",
+                        "conservation_score",
+                        "evidence_level",
+                        "warnings",
+                    )
+                }
+                | {
+                    "specificity": {
+                        key: copy.deepcopy(specificity.get(key))
+                        for key in (
+                            "status",
+                            "overall_status",
+                            "verdict",
+                            "summary",
+                            "reason_codes",
+                        )
+                        if specificity.get(key) is not None
+                    },
+                    "amplicon_structure": {
+                        key: copy.deepcopy(structure.get(key))
+                        for key in (
+                            "status",
+                            "mfe_dg",
+                            "most_stable_dg",
+                            "temperature_celsius",
+                            "confidence",
+                            "tool",
+                            "tool_version",
+                            "warnings",
+                        )
+                        if structure.get(key) is not None
+                    },
+                }
+            )
+        return {**common, "members": _page(members, cursor, min(limit, 6))}
+    p4_result = panel.get("p4_result") or {}
+    heterodimer = p4_result.get("heterodimer") or {}
+    return {
+        **common,
+        "evidence": {
+            "p4_result": {
+                key: copy.deepcopy(p4_result.get(key))
+                for key in (
+                    "status",
+                    "verdict",
+                    "spectral_check",
+                    "quencher_check",
+                    "instrument_check",
+                    "tm_spread_celsius",
+                    "gc_spread_percent",
+                    "issues",
+                    "thresholds",
+                )
+                if p4_result.get(key) is not None
+            }
+            | {
+                "heterodimer": {
+                    key: copy.deepcopy(heterodimer.get(key))
+                    for key in (
+                        "total_pairs",
+                        "evaluated_pairs",
+                        "worst_pair",
+                        "worst_dg_kcal",
+                        "worst_dg_cal_per_mol",
+                        "worst_three_prime_dg_kcal",
+                    )
+                    if heterodimer.get(key) is not None
+                }
+            },
+            "balance": copy.deepcopy(panel.get("balance") or {}),
+            "amplicon_length_check": copy.deepcopy(
+                panel.get("amplicon_length_check") or {}
+            ),
+            "warnings": copy.deepcopy(panel.get("warnings") or []),
+        },
+    }
+
+
 def _host_ui_result(
     result: T | dict[str, Any],
 ) -> T | dict[str, Any] | CallToolResult:
-    """Promote UI data while keeping model-visible content bounded.
+    """Build FastMCP's internal result with one authoritative UI object.
 
-    FastMCP normally serializes every structured ``dict`` into both
-    ``structuredContent`` and a text block in ``content``. HiMat consumes the
-    former when available, but its compatibility path reconstructs the final
-    assistant message from the latter. UI objects are therefore mirrored as
-    exact compact JSON in both channels. This prevents the model from turning
-    attachments into prose or Markdown links that the frontend cannot render.
+    The HTTP compatibility layer reads terminal ``structuredContent`` and
+    replaces the JSON-RPC ``result`` with that exact ``data/type`` object.
+    The internal text mirror exists only to satisfy the MCP result model and
+    is never used to construct the HiMat report card.
     """
     if not isinstance(result, dict):
         return result
     ui_message = (
         result
-        if result.get("type")
-        in {"primer_design_input", "agent_interaction", "primer_design_output"}
+        if result.get("type") in {"agent_interaction", "primer_design_output"}
         else result.get("ui_message")
     )
     if not isinstance(ui_message, dict):
@@ -292,11 +1082,7 @@ def _host_ui_result(
                 content=[
                     TextContent(
                         type="text",
-                        text=json.dumps(
-                            payload,
-                            ensure_ascii=False,
-                            separators=(",", ":"),
-                        ),
+                        text=_himat_terminal_json(payload),
                     )
                 ],
                 structuredContent=payload,
@@ -315,43 +1101,94 @@ def _host_ui_result(
                 ],
                 structuredContent=ui_message,
             )
-        if ui_message.get("type") == "primer_design_input":
-            return CallToolResult(
-                content=[
-                    TextContent(
-                        type="text",
-                        text=json.dumps(
-                            ui_message,
-                            ensure_ascii=False,
-                            separators=(",", ":"),
-                        ),
-                    )
-                ],
-                structuredContent=ui_message,
-            )
+    tool_control = result.get("tool_control")
+    if result.get("workflow") == "WF-02" and isinstance(tool_control, dict):
+        workflow_state = {
+            "workflow": "WF-02",
+            "batchId": result.get("batch_id"),
+            "batchCode": result.get("batch_code"),
+            "nextAction": result.get("next_action"),
+            "terminal": False,
+            "stopCurrentTurn": not bool(tool_control.get("call_again")),
+            "continueCurrentTurn": bool(tool_control.get("call_again")),
+            "suppressAssistantText": bool(
+                tool_control.get("suppress_intermediate_text")
+            ),
+            "nextTool": tool_control.get("next_tool"),
+            "nextArguments": copy.deepcopy(
+                tool_control.get("next_arguments")
+            ),
+            "retainAcrossTurns": True,
+        }
+        return CallToolResult(
+            **{"_meta": {"oligosmith": {"workflowState": workflow_state}}},
+            content=[
+                TextContent(
+                    type="text",
+                    text=json.dumps(
+                        result,
+                        ensure_ascii=False,
+                        separators=(",", ":"),
+                    ),
+                )
+            ],
+            structuredContent=result,
+        )
     return result
 
 
-def _direct_create_payload(
+def _wf01_create_payload(
     *,
     sequence: str | None,
-    target_organism: str | None,
+    input_artifact_id: str | None,
+    target_organism: str,
     host: str | None,
     task_name: str | None,
-) -> dict[str, Any] | None:
-    """Build the only model-facing payload shape for pasted-sequence designs."""
-    direct_values = (sequence, target_organism, host, task_name)
-    if not any(isinstance(value, str) and value.strip() for value in direct_values):
-        return None
+) -> dict[str, Any]:
+    """Build the only model-facing WF-01 payload for a full-route task."""
+    has_sequence = isinstance(sequence, str) and bool(sequence.strip())
+    has_artifact = isinstance(input_artifact_id, str) and bool(input_artifact_id.strip())
+    if has_sequence == has_artifact:
+        raise ToolError(
+            json.dumps(
+                {
+                    "code": "INVALID_INPUT",
+                    "message": "必须且只能提供 sequence 或 input_artifact_id 之一",
+                    "details": {
+                        "sequence_source_fields": ["sequence", "input_artifact_id"],
+                        "upload_flow": "download_himat_file → create_wf01_batch",
+                    },
+                },
+                ensure_ascii=False,
+            )
+        )
+    if not isinstance(target_organism, str) or not target_organism.strip():
+        raise ToolError(
+            json.dumps(
+                {
+                    "code": "MISSING_TARGET_ORGANISM",
+                    "message": "完整 WF-01 路线必须提供靶标物种或病原名称",
+                    "details": {
+                        "required_field": "target_organism",
+                        "design_only_fallback_allowed": False,
+                        "next_action": "ASK_USER_FOR_TARGET_ORGANISM",
+                    },
+                },
+                ensure_ascii=False,
+            )
+        )
     payload: dict[str, Any] = {}
-    if isinstance(sequence, str) and sequence.strip():
+    if has_sequence:
+        assert isinstance(sequence, str)
         stripped_sequence = sequence.strip()
         if stripped_sequence.startswith(">"):
             payload["fasta_text"] = stripped_sequence
         else:
             payload["sequence"] = stripped_sequence
-    if isinstance(target_organism, str) and target_organism.strip():
-        payload["target_organism"] = target_organism.strip()
+    else:
+        assert isinstance(input_artifact_id, str)
+        payload["input_artifact_id"] = input_artifact_id.strip()
+    payload["target_organism"] = target_organism.strip()
     if isinstance(host, str) and host.strip():
         payload["host"] = host.strip()
     if isinstance(task_name, str) and task_name.strip():
@@ -359,189 +1196,58 @@ def _direct_create_payload(
     return payload
 
 
-def _create_payload(
-    *,
-    sequence: str | None,
-    target_organism: str | None,
-    host: str | None,
-    task_name: str | None,
-    payload: dict[str, Any] | None,
-    design_input_form: dict[str, Any] | None,
-    user_field_updates: dict[str, Any] | None,
-) -> tuple[dict[str, Any], bool]:
-    """Separate the simple direct-input contract from upload compatibility."""
-    direct = _direct_create_payload(
-        sequence=sequence,
-        target_organism=target_organism,
-        host=host,
-        task_name=task_name,
-    )
-    if direct is not None:
-        if payload is not None or design_input_form is not None or user_field_updates is not None:
-            raise ToolError(
-                json.dumps(
-                    {
-                        "code": "INVALID_INPUT",
-                        "message": (
-                            "直接序列字段不能与上传兼容字段混用；"
-                            "粘贴序列时只传 sequence、target_organism、host、task_name"
-                        ),
-                        "details": {
-                            "direct_fields": [
-                                "sequence",
-                                "target_organism",
-                                "host",
-                                "task_name",
-                            ],
-                            "upload_fields": [
-                                "payload",
-                                "design_input_form",
-                                "user_field_updates",
-                            ],
-                        },
-                    },
-                    ensure_ascii=False,
-                )
-            )
-        return direct, True
-    if payload is None:
-        raise ToolError(
-            json.dumps(
-                {
-                    "code": "INVALID_INPUT",
-                    "message": "必须提供 sequence；上传文件确认后才使用 payload 兼容字段",
-                    "details": {
-                        "required_direct_field": "sequence",
-                        "minimum_length_nt": 80,
-                    },
-                },
-                ensure_ascii=False,
-            )
-        )
-    prepared = copy.deepcopy(payload)
-    upload_messages_present = (
-        design_input_form is not None or user_field_updates is not None
-    )
-    direct_template_present = any(
-        prepared.get(field) not in (None, "", [])
-        for field in (
-            "sequence",
-            "fasta_text",
-            "template_records",
-            "sequences",
-            "target_manifest",
-        )
-    )
-    direct_input = direct_template_present and not upload_messages_present
-    return prepared, direct_input
-
-
-UploadedFileName = Annotated[
-    str,
-    Field(
-        min_length=1,
-        description="用户上传附件的原始显示文件名，不得改写或使用 uploaded.fasta 占位。",
-    ),
-]
-
-
-def _payload_with_uploaded_file_names(
-    payload: dict[str, Any],
-    file_names: list[str] | None,
-) -> dict[str, Any]:
-    selected_names = file_names or []
-    normalized_names = [
-        name.strip()
-        for name in selected_names
-        if isinstance(name, str) and name.strip()
-    ]
-    has_inline_sequence = any(
-        isinstance(payload.get(field), str) and payload[field].strip()
-        for field in ("sequence", "fasta_text")
-    )
-    if len(normalized_names) != len(selected_names) or (
-        not normalized_names and not has_inline_sequence
-    ):
-        raise ToolError(
-            json.dumps(
-                {
-                    "code": "INVALID_INPUT",
-                    "message": "必须提供上传附件文件名，或直接提供 sequence/fasta_text",
-                    "details": {
-                        "fields": ["file_names", "payload.sequence", "payload.fasta_text"]
-                    },
-                },
-                ensure_ascii=False,
-            )
-        )
-    prepared = copy.deepcopy(payload)
-    if normalized_names:
-        prepared["uploaded_file_names"] = normalized_names
-    return prepared
-
-
 @mcp.tool(
     description=(
-        "仅用于现有文件上传兼容链路，构造 primer_design_input 表单。直接粘贴序列或"
-        "自然语言输入不得调用本工具，应直接调用 create_wf01_batch。"
-    )
-)
-def prepare_wf01_design_input(
-    payload: dict[str, Any],
-    context: Context,
-    file_names: Annotated[
-        list[UploadedFileName],
-        Field(
-            min_length=1,
-            description=(
-                "当前用户消息中全部上传附件的原始显示文件名；直接粘贴序列且没有附件时省略。"
-            ),
-        ),
-    ]
-    | None = None,
-) -> CallToolResult:
-    prepared_payload = _payload_with_uploaded_file_names(payload, file_names)
-    if not _design_input_call_guard.claim(
-        "prepare_wf01_design_input",
-        caller_scope=_design_input_caller_scope(context),
-        payload=prepared_payload,
-    ):
-        return _duplicate_design_input_result(prepared_payload)
-    result = _host_ui_result(
-        _invoke(
-            "wf01_prepare_design_input",
-            lambda: service.prepare_wf01_design_input(prepared_payload),
-            audit_input={"payload": prepared_payload},
-        )
-    )
-    if not isinstance(result, CallToolResult):  # pragma: no cover - fixed UI contract
-        raise RuntimeError("prepare_wf01_design_input did not produce a UI result")
-    return result
-
-
-@mcp.tool(
-    description=(
-        "下载 HiMat file_id 并返回 input_artifact_id；不返回文件正文。"
-        "把该引用传给 create_wf01_batch，调用时不播报进度。"
+        "file_id→顶层input_artifact_id；WF-01/WF-03/WF-04/WF-05直接复用，"
+        "WF-02另含downstream.wf02.target；"
+        "FASTA 正文由 AgentD 后端解析。"
     )
 )
 def download_himat_file(file_id: int) -> dict[str, Any]:
+    def execute() -> dict[str, Any]:
+        result = service.download_himat_file(file_id)
+        artifact_id = str(result.get("input_artifact_id") or "")
+        file_name = str(result.get("file_name") or f"file-{file_id}")
+        suggested_name = Path(file_name).stem.strip() or f"file-{file_id}"
+        result["downstream"] = {
+            "wf01": {
+                "tool": "create_wf01_batch",
+                "input_artifact_id": artifact_id,
+            },
+            "wf02": {
+                "tool": "create_wf02_batch",
+                "target": {
+                    "display_name": suggested_name,
+                    "input_artifact_id": artifact_id,
+                },
+            },
+        }
+        return result
+
     return _invoke(
         "download_himat_file",
-        lambda: service.download_himat_file(file_id),
+        execute,
         audit_input={"file_id": file_id},
     )
 
 
 @mcp.tool(
     description=(
-        "新引物设计的唯一入口。粘贴序列时传 sequence；后端自动选择路线：用户说明靶标时传 "
-        "target_organism，并运行 FULL_SPECIFICITY。host 为可选项，提供时追加宿主专库排除。"
-        "仅有序列时运行 DESIGN_ONLY，并自动运行到报告。"
-        "payload/design_input_form/user_field_updates 仅保留给已确认的文件上传兼容流程。"
+        "新设计唯一入口，只运行完整 WF-01；target_organism 必填。后端自动执行 M2-M6 与"
+        "P2/BLAST，禁止 DESIGN_ONLY；"
+        + _TERMINAL_OUTPUT_SCHEMA_DESCRIPTION
     )
 )
 def create_wf01_batch(
+    target_organism: Annotated[
+        str,
+        Field(
+            min_length=1,
+            description=(
+                "必填：用户明确提供的靶标物种或病原名称。缺少时先询问用户，不得猜测或降级。"
+            ),
+        ),
+    ],
     sequence: Annotated[
         str | None,
         Field(
@@ -551,9 +1257,13 @@ def create_wf01_batch(
             )
         ),
     ] = None,
-    target_organism: Annotated[
+    input_artifact_id: Annotated[
         str | None,
-        Field(description="用户明确提供的靶标物种或病原名称；未提供时省略，不得猜测。"),
+        Field(
+            description=(
+                "download_himat_file 返回的内部附件引用；与 sequence 二选一。"
+            )
+        ),
     ] = None,
     host: Annotated[
         str | None,
@@ -563,32 +1273,36 @@ def create_wf01_batch(
         str | None,
         Field(description="可选任务名或序列记录名，例如 CR_0010。"),
     ] = None,
-    payload: Annotated[
-        dict[str, Any] | None,
-        Field(description="仅用于文件上传确认后的兼容载荷；直接粘贴序列时不要传。"),
-    ] = None,
-    design_input_form: dict[str, Any] | None = None,
-    user_field_updates: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    prepared_payload, direct_input = _create_payload(
+    prepared_payload = _wf01_create_payload(
         sequence=sequence,
+        input_artifact_id=input_artifact_id,
         target_organism=target_organism,
         host=host,
         task_name=task_name,
-        payload=payload,
-        design_input_form=design_input_form,
-        user_field_updates=user_field_updates,
     )
 
     def execute() -> dict[str, Any]:
         batch = service.create_wf01_v02_batch(
             prepared_payload,
-            design_input_form,
-            user_field_updates,
             include_input_mapping=True,
-            interaction_mode=("NO_POPUPS" if direct_input else "LEGACY_UPLOAD"),
+            interaction_mode="NO_POPUPS",
+            require_full_route=True,
         )
         mapping = batch.get("mcp_input_mapping") or {}
+        execution_paths = {
+            str(item.get("execution_path") or "")
+            for item in (batch.get("target_manifest") or {}).get("targets") or []
+        }
+        if execution_paths != {"FULL_SPECIFICITY"}:
+            raise InputValidationError(
+                "新建 WF-01 任务未进入完整特异性路线，已停止执行",
+                details={
+                    "execution_paths": sorted(execution_paths),
+                    "required_execution_path": "FULL_SPECIFICITY",
+                    "design_only_fallback_allowed": False,
+                },
+            )
         if batch.get("status") == "QUEUED":
             result = service.run_wf01_v02_until_blocked(str(batch["batch_id"]))
         else:
@@ -602,9 +1316,7 @@ def create_wf01_batch(
             execute,
             audit_input={
                 "payload": prepared_payload,
-                "direct_input": direct_input,
-                "design_input_form": design_input_form,
-                "user_field_updates": user_field_updates,
+                "full_route_required": True,
             },
         )
     )
@@ -612,12 +1324,1051 @@ def create_wf01_batch(
 
 @mcp.tool(
     description=(
-        "读取当前 WF-01 摘要；已完成时重新返回最终 primer_design_output 报告卡片。"
-        "用户要求查看、下载、下载地址或再次显示卡片时调用；完成后必须把 "
-        "content[0].text 裸 JSON 原样作为唯一回复，禁止改写成 Markdown 链接。"
+        "创建同管 2–5 靶标 WF-02；上传目标采用 download_himat_file 返回的 "
+        "input_artifact_id；缺失字段由 N04 交互。请求失败不得同轮重试；"
+        "用户后续明确继续时，近期相同请求会安全接回已有任务。"
     )
 )
-def get_wf01_batch(batch_id: str) -> dict[str, Any]:
+def create_wf02_batch(
+    targets: Annotated[
+        list[str | dict[str, Any]] | None,
+        Field(
+            description=(
+                "同管检测的 2–5 个目标靶标（内标不计入重数）；"
+                "上传文件对象包含 target_id/display_name 及 "
+                "download_himat_file 返回的 input_artifact_id。"
+                "每个文件绑定一个 target，文件内记录作为同源序列。"
+            )
+        ),
+    ] = None,
+    host_species: Annotated[
+        str | None,
+        Field(description="待测样本对应的宿主物种；复用本轮及此前对话已提供的值。"),
+    ] = None,
+    include_internal_control: Annotated[
+        bool | None,
+        Field(description="是否需要内标；用户未说明时省略，由后端默认设为需要。"),
+    ] = None,
+    task_name: Annotated[
+        str | None,
+        Field(description="可选的 WF-02 任务名称。"),
+    ] = None,
+    runtime_config: Annotated[
+        dict[str, Any] | None,
+        Field(
+            description=(
+                "非核心运行配置；用户明确指定时传 instrument 或 rox_as_reference；"
+                "其余情况保持省略，由后端应用默认配置。"
+            )
+        ),
+    ] = None,
+    expected_target_count: Annotated[
+        int | None,
+        Field(
+            ge=2,
+            le=5,
+            description=(
+                "使用上传文件时必填：用户本轮明确上传或请求处理的目标文件总数；"
+                "必须包含下载失败的文件。"
+            ),
+        ),
+    ] = None,
+    failed_file_ids: Annotated[
+        list[int] | None,
+        Field(
+            description=(
+                "本轮 download_himat_file 尚未成功的 file_id；非空时禁止创建正式任务。"
+            )
+        ),
+    ] = None,
+) -> dict[str, Any]:
+    payload: dict[str, Any] = {}
+    if targets is not None:
+        payload["targets"] = copy.deepcopy(targets)
+    if host_species is not None:
+        payload["host_species"] = host_species
+    if include_internal_control is not None:
+        payload["include_internal_control"] = include_internal_control
+    if task_name is not None:
+        payload["task_name"] = task_name
+    if runtime_config is not None:
+        payload["runtime_config"] = copy.deepcopy(runtime_config)
+    if expected_target_count is not None or failed_file_ids:
+        payload["upload_intake_manifest"] = {
+            "expected_target_count": expected_target_count,
+            "failed_file_ids": copy.deepcopy(failed_file_ids or []),
+        }
+
+    def execute() -> dict[str, Any]:
+        inline_sources: list[dict[str, Any]] = []
+        artifact_target_indexes: list[int] = []
+        for index, target in enumerate(payload.get("targets") or [], start=1):
+            if not isinstance(target, dict):
+                continue
+            if target.get("input_artifact_id") not in (None, ""):
+                artifact_target_indexes.append(index)
+            received = [
+                field
+                for field in (
+                    "sequence",
+                    "sequences",
+                    "template_records",
+                    "fasta_text",
+                    "content",
+                    "fasta_path",
+                )
+                if target.get(field) not in (None, "", [], {})
+            ]
+            sequence_files = target.get("sequence_files")
+            if isinstance(sequence_files, list):
+                for item in sequence_files:
+                    if not isinstance(item, dict):
+                        continue
+                    received.extend(
+                        f"sequence_files.{field}"
+                        for field in ("fasta_text", "content")
+                        if item.get(field) not in (None, "")
+                    )
+            if received:
+                inline_sources.append(
+                    {
+                        "target_index": index,
+                        "target_id": target.get("target_id"),
+                        "source_fields": sorted(set(received)),
+                    }
+                )
+        if inline_sources:
+            raise InputValidationError(
+                "WF-02 上传附件请先调用 download_himat_file，再使用返回的 input_artifact_id 建单",
+                details={
+                    "next_tool": "download_himat_file",
+                    "accepted_source_field": "input_artifact_id",
+                    "targets": inline_sources,
+                },
+            )
+        if artifact_target_indexes and expected_target_count is None:
+            raise InputValidationError(
+                "WF-02 上传建单必须声明用户本轮上传文件总数",
+                details={
+                    "code": "WF02_UPLOAD_EXPECTED_TARGET_COUNT_REQUIRED",
+                    "required_argument": "expected_target_count",
+                    "artifact_target_indexes": artifact_target_indexes,
+                    "next_action": "RETRY_CREATE_WITH_UPLOAD_COUNT",
+                },
+            )
+        received_target_count = len(payload.get("targets") or [])
+        if expected_target_count is not None and (
+            received_target_count != expected_target_count or failed_file_ids
+        ):
+            raise InputValidationError(
+                "WF-02 上传文件尚未完整接收，不能创建正式任务",
+                details={
+                    "code": "WF02_UPLOAD_INTAKE_INCOMPLETE",
+                    "expected_target_count": expected_target_count,
+                    "received_target_count": received_target_count,
+                    "failed_file_ids": copy.deepcopy(failed_file_ids or []),
+                    "next_tool": "download_himat_file",
+                    "next_action": "RETRY_FAILED_DOWNLOADS",
+                },
+            )
+        result = service.create_wf02_v01_batch(
+            payload,
+            creation_scope=current_jwt_subject(),
+        )
+        if result.get("batch_id") and result.get("user_input_snapshot"):
+            summary = _run_wf02_execution_window(str(result["batch_id"]), None)
+            summary["creation_replayed"] = bool(result.get("creation_replayed"))
+            return summary
+        return result
+
+    return _host_ui_result(
+        _invoke(
+            "wf02_create_batch",
+            execute,
+            audit_input={"payload": payload},
+        )
+    )
+
+
+@mcp.tool(
+    description="提交 WF-02 N04 的全部交互回复；校验通过后创建任务。"
+)
+def submit_wf02_input_response(
+    draft_id: str,
+    response: dict[str, Any],
+) -> dict[str, Any]:
+    def execute() -> dict[str, Any]:
+        result = service.submit_wf02_v01_input_response(draft_id, response)
+        batch = result.get("batch")
+        if isinstance(batch, dict):
+            summary = _run_wf02_execution_window(
+                str(batch["batch_id"]),
+                None,
+            )
+            summary["interaction_submission"] = {
+                "draft_id": draft_id,
+                "submission_replayed": bool(result.get("submission_replayed")),
+            }
+            return _wf02_tool_control(summary)
+        return result
+
+    return _host_ui_result(
+        _invoke(
+            "wf02_submit_input_response",
+            execute,
+            audit_input={"draft_id": draft_id, "response": response},
+        )
+    )
+
+
+@mcp.tool(
+    description=(
+        "用户明确查询时读取一次 WF-02 后台状态；运行中只返回当前状态并停止，"
+        "完成时交付报告；" + _TERMINAL_OUTPUT_SCHEMA_DESCRIPTION
+    )
+)
+def get_wf02_batch(
+    batch_id: str,
+    view: Literal["summary", "target", "trace", "events", "relaxation"] = "summary",
+    target_id: str | None = None,
+    cursor: Annotated[int, Field(ge=0)] = 0,
+    limit: Annotated[int, Field(ge=1, le=50)] = 20,
+) -> dict[str, Any]:
+    return _host_ui_result(
+        _invoke(
+            "wf02_get_batch",
+            lambda: _wf02_query_control(
+                _wf02_batch_view(
+                    batch_id,
+                    view=view,
+                    target_id=target_id,
+                    cursor=cursor,
+                    limit=limit,
+                )
+            ),
+            audit_input={
+                "batch_id": batch_id,
+                "view": view,
+                "target_id": target_id,
+                "cursor": cursor,
+                "limit": limit,
+            },
+        )
+    )
+
+
+@mcp.tool(
+    description=(
+        "启动或恢复 WF-02 持久化后台任务；首次最多同步等待235秒，"
+        "到时仍运行则停止当前轮次且后台继续；旧令牌安全校验；"
+        + _TERMINAL_OUTPUT_SCHEMA_DESCRIPTION
+    )
+)
+def run_wf02_until_blocked(
+    batch_id: str,
+    resume_token: str | None = None,
+) -> dict[str, Any]:
+    def execute() -> dict[str, Any]:
+        return _run_wf02_execution_window(batch_id, resume_token)
+
+    return _host_ui_result(
+        _invoke(
+            "wf02_run_until_blocked",
+            execute,
+            audit_input={"batch_id": batch_id},
+        )
+    )
+
+
+@mcp.tool(
+    description=(
+        "提交某靶标的模板或 WF-01 交互回复，并恢复 WF-02 至下一交互边界；"
+        + _TERMINAL_OUTPUT_SCHEMA_DESCRIPTION
+    )
+)
+def submit_wf02_child_response(
+    batch_id: str,
+    target_id: str,
+    response: dict[str, Any],
+) -> dict[str, Any]:
+    def execute() -> dict[str, Any]:
+        current = service.wf02_v01.submit_child_response(
+            batch_id,
+            target_id,
+            response,
+            bounded=True,
+        )
+        if _wf02_continuation_allowed(current):
+            return _run_wf02_execution_window(
+                batch_id,
+                str(current.get("resume_token") or "") or None,
+            )
+        return _wf02_tool_control(current)
+
+    return _host_ui_result(
+        _invoke(
+            "wf02_submit_child_response",
+            execute,
+            audit_input={
+                "batch_id": batch_id,
+                "target_id": target_id,
+                "response": response,
+            },
+        )
+    )
+
+
+@mcp.tool(
+    description=(
+        "本工具用于恢复旧版 WF-02 N12/N13 待处理内标交互；"
+        "新任务的 P5 或通道 FAIL 由流程自动切换为无内标面板；"
+        + _TERMINAL_OUTPUT_SCHEMA_DESCRIPTION
+    )
+)
+def submit_wf02_internal_control_response(
+    batch_id: str,
+    response: dict[str, Any],
+) -> dict[str, Any]:
+    def execute() -> dict[str, Any]:
+        current = service.wf02_v01.submit_internal_control_response(
+            batch_id,
+            response,
+            bounded=True,
+        )
+        if _wf02_continuation_allowed(current):
+            return _run_wf02_execution_window(
+                batch_id,
+                str(current.get("resume_token") or "") or None,
+            )
+        return _wf02_tool_control(current)
+
+    return _host_ui_result(
+        _invoke(
+            "wf02_submit_internal_control_response",
+            execute,
+            audit_input={"batch_id": batch_id, "response": response},
+        )
+    )
+
+
+@mcp.tool(
+    description=(
+        "基于已完成的 WF-02 N32 报告创建不可变新版本；"
+        "用户输入变化和仪器/ROX 运行配置变化分开记录，不覆盖旧报告。"
+    )
+)
+def create_wf02_version(
+    batch_id: str,
+    reason: str | None = None,
+    user_input_changes: dict[str, Any] | None = None,
+    runtime_config_changes: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    options: dict[str, Any] = {}
+    if reason is not None:
+        options["reason"] = reason
+    if user_input_changes is not None:
+        options["user_input_changes"] = copy.deepcopy(user_input_changes)
+    if runtime_config_changes is not None:
+        options["runtime_config_changes"] = copy.deepcopy(
+            runtime_config_changes
+        )
+    return _invoke(
+        "wf02_create_version",
+        lambda: service.create_wf02_v01_version(batch_id, options),
+        audit_input={"batch_id": batch_id, "options": options},
+    )
+
+
+@mcp.tool(
+    description=(
+        "分页读取 WF-02 终态摘要、面板索引、失败或追踪；"
+        "完整面板使用 get_wf02_panel。"
+    )
+)
+def get_wf02_report(
+    batch_id: str,
+    section: Literal["summary", "panels", "failure", "trace"] = "summary",
+    cursor: Annotated[int, Field(ge=0)] = 0,
+    limit: Annotated[int, Field(ge=1, le=50)] = 20,
+) -> dict[str, Any]:
+    return _invoke(
+        "wf02_get_report",
+        lambda: _wf02_report_view(
+            service.get_wf02_v01_report(batch_id),
+            section=section,
+            cursor=cursor,
+            limit=limit,
+        ),
+        audit_input={
+            "batch_id": batch_id,
+            "section": section,
+            "cursor": cursor,
+            "limit": limit,
+        },
+    )
+
+
+@mcp.tool(description="分页读取 WF-02 指定面板的摘要、成员或证据。")
+def get_wf02_panel(
+    batch_id: str,
+    panel_id: str,
+    section: Literal["summary", "members", "evidence"] = "summary",
+    cursor: Annotated[int, Field(ge=0)] = 0,
+    limit: Annotated[int, Field(ge=1, le=10)] = 6,
+) -> dict[str, Any]:
+    return _invoke(
+        "wf02_get_panel",
+        lambda: _wf02_panel_view(
+            service.get_wf02_v01_panel(batch_id, panel_id),
+            section=section,
+            cursor=cursor,
+            limit=limit,
+        ),
+        audit_input={
+            "batch_id": batch_id,
+            "panel_id": panel_id,
+            "section": section,
+            "cursor": cursor,
+            "limit": limit,
+        },
+    )
+
+
+@mcp.tool(
+    description=(
+        "按明确请求生成并返回指定 WF-02 HTML/CSV/PDF 卡片；CSV/PDF 不预生成；"
+        "RustFS 启用时返回公网 URL，否则返回短期签名 URL；"
+        "标准下载仍需 Bearer JWT；" + _TERMINAL_OUTPUT_SCHEMA_DESCRIPTION
+    )
+)
+def get_wf02_export(
+    batch_id: str,
+    format_name: Literal["html", "csv", "pdf"],
+) -> dict[str, Any]:
+    def resolve() -> dict[str, Any]:
+        path = service.get_wf02_v01_export_path(batch_id, format_name)
+        metadata = service.get_wf02_v01_export_metadata(batch_id, format_name)
+        summary = service.get_wf02_v01_agent_summary(
+            batch_id,
+            attachment_formats=(format_name,),
+        )
+        return {
+            "batch_id": batch_id,
+            "format": format_name,
+            "filename": path.name,
+            "size_bytes": path.stat().st_size,
+            "download_url": metadata.get("download_url"),
+            "preview_url": metadata.get("preview_url"),
+            "authorization": (
+                "标准 REST 下载需要 Bearer JWT；返回卡片的 fileUrl 优先为 RustFS 完整 URL，"
+                "未启用 RustFS 时为短期签名只读地址"
+            ),
+            "ui_message": summary.get("ui_message"),
+        }
+
+    return _host_ui_result(
+        _invoke(
+            "wf02_get_export",
+            resolve,
+            audit_input={"batch_id": batch_id, "format_name": format_name},
+        )
+    )
+
+
+@mcp.tool(
+    description=(
+        "WF-03 新任务唯一入口；附件必须先调用 download_himat_file，并将其顶层"
+        "input_artifact_id原样传入，禁止跳过下载。无附件字段齐全时必须立即调用；"
+        "禁止在调用前分析，缺字段只能询问该字段并停止；"
+        + _TERMINAL_OUTPUT_SCHEMA_DESCRIPTION
+    )
+)
+def run_wf03_internal_control(
+    host_species: Annotated[
+        str,
+        Field(description="必填宿主物种；支持已配置的中文名称、英文别名及学名。"),
+    ],
+    input_artifact_id: Annotated[
+        str | None,
+        Field(
+            description=(
+                "附件存在时必填；必须原样使用 download_himat_file 返回的顶层"
+                "input_artifact_id，禁止传 file_id、正文或模型重建内容。"
+            )
+        ),
+    ] = None,
+    input_gene: Annotated[
+        str | None,
+        Field(
+            description=(
+                "可选附件输入标签；只复制用户明确给出的标签。省略时后端按单个 "
+                "preferred_genes 或安全文件名确定，不读取文件内容让模型推断。"
+            )
+        ),
+    ] = None,
+    existing_targets: Annotated[
+        list[dict[str, Any]] | None,
+        Field(
+            description=(
+                "可选已有靶标方案，用于P5内部交叉二聚体检查；每项提供target_id、"
+                "fwd_seq、rev_seq及可选probe_seq/fluorophore，也接受WF候选的嵌套寡核苷酸对象。"
+            )
+        ),
+    ] = None,
+    preferred_genes: Annotated[
+        list[str | dict[str, Any]] | None,
+        Field(
+            description=(
+                "仅在用户明确指定时传入的管家基因顺序；对象可同时包含gene和refseq_accession。"
+                "未提供时由P5按ACTB、GAPDH、18S rRNA确定性选择。"
+            )
+        ),
+    ] = None,
+    gene_accessions: Annotated[
+        dict[str, str] | None,
+        Field(description="可选自定义基因到RefSeq编号的映射；不得由模型猜测。"),
+    ] = None,
+    gene_sequences: Annotated[
+        dict[str, list[Any] | dict[str, Any]] | None,
+        Field(description="可选用户提供的版本化同源序列集合；每个基因至少5条。"),
+    ] = None,
+    host_db: Annotated[
+        str | None,
+        Field(description="可选已配置宿主BLAST数据库标识或路径；未提供时由后端目录解析。"),
+    ] = None,
+    cross_db: Annotated[
+        str | None,
+        Field(description="可选已配置近缘种/共感染病原BLAST数据库标识或路径。"),
+    ] = None,
+    assay_id: Annotated[
+        str | None,
+        Field(description="可选任务标识；省略时由后端按宿主生成。"),
+    ] = None,
+) -> dict[str, Any]:
+    payload: dict[str, Any] = {"host_species": host_species}
+    optional_values = {
+        "input_artifact_id": input_artifact_id,
+        "input_gene": input_gene,
+        "existing_targets": existing_targets,
+        "preferred_genes": preferred_genes,
+        "gene_accessions": gene_accessions,
+        "gene_sequences": gene_sequences,
+        "host_db": host_db,
+        "cross_db": cross_db,
+        "assay_id": assay_id,
+    }
+    for key, value in optional_values.items():
+        if value is not None:
+            payload[key] = copy.deepcopy(value)
+
+    def execute() -> dict[str, Any]:
+        result = service.run_wf03_internal_control(payload)
+        return service.get_wf03_delivery(str(result["job_id"]))
+
+    return _host_ui_result(
+        _invoke(
+            "wf03_run_internal_control",
+            execute,
+            audit_input={"payload": payload},
+        )
+    )
+
+
+@mcp.tool(
+    description=(
+        "WF-03不可变重入；后端恢复父输入、应用白名单补丁并返回primer_design_output；"
+        + _TERMINAL_OUTPUT_SCHEMA_DESCRIPTION
+    )
+)
+def retry_wf03_internal_control(
+    job_id: Annotated[str, Field(description="需要重入的失败WF-03 job_id。")],
+    preferred_genes: Annotated[
+        list[str | dict[str, Any]] | None,
+        Field(description="用户补充的管家基因顺序，可含gene和refseq_accession。"),
+    ] = None,
+    gene_accessions: Annotated[
+        dict[str, str] | None,
+        Field(description="用户补充的基因到RefSeq编号映射。"),
+    ] = None,
+    gene_sequences: Annotated[
+        dict[str, list[Any] | dict[str, Any]] | None,
+        Field(description="用户补充的版本化同源序列集合。"),
+    ] = None,
+    existing_targets: Annotated[
+        list[dict[str, Any]] | None,
+        Field(description="用户修正后的已有靶标寡核苷酸；未修改时省略。"),
+    ] = None,
+    host_db: Annotated[
+        str | None,
+        Field(description="补充或修正的宿主BLAST数据库标识或路径。"),
+    ] = None,
+    cross_db: Annotated[
+        str | None,
+        Field(description="补充或修正的交叉物种BLAST数据库标识或路径。"),
+    ] = None,
+    reason: Annotated[
+        str | None,
+        Field(description="可选重入原因；只记录审计，不参与科学判定。"),
+    ] = None,
+) -> dict[str, Any]:
+    response: dict[str, Any] = {}
+    optional_values = {
+        "preferred_genes": preferred_genes,
+        "gene_accessions": gene_accessions,
+        "gene_sequences": gene_sequences,
+        "existing_targets": existing_targets,
+        "host_db": host_db,
+        "cross_db": cross_db,
+        "reason": reason,
+    }
+    for key, value in optional_values.items():
+        if value is not None:
+            response[key] = copy.deepcopy(value)
+
+    def execute() -> dict[str, Any]:
+        result = service.retry_wf03_internal_control(job_id, response)
+        return service.get_wf03_delivery(str(result["job_id"]))
+
+    return _host_ui_result(
+        _invoke(
+            "wf03_retry_internal_control",
+            execute,
+            audit_input={"job_id": job_id, "response": response},
+        )
+    )
+
+
+@mcp.tool(
+    description=(
+        "读取WF-03持久化终态并返回primer_design_output；禁止模型重算；"
+        + _TERMINAL_OUTPUT_SCHEMA_DESCRIPTION
+    )
+)
+def get_wf03_report(job_id: str) -> dict[str, Any]:
+    return _host_ui_result(
+        _invoke(
+            "wf03_get_report",
+            lambda: service.get_wf03_delivery(job_id),
+            audit_input={"job_id": job_id},
+        )
+    )
+
+
+@mcp.tool(
+    description=(
+        "WF-04新任务唯一入口；附件先download_himat_file并将其顶层"
+        "input_artifact_id原样传入。禁止调用前分析；节点由后端执行并返回"
+        "primer_design_output；" + _TERMINAL_OUTPUT_SCHEMA_DESCRIPTION
+    )
+)
+def run_wf04_validation(
+    forward_primer: Annotated[
+        str | None,
+        Field(min_length=1, description="无附件时必填的正向输入序列。"),
+    ] = None,
+    reverse_primer: Annotated[
+        str | None,
+        Field(min_length=1, description="无附件时必填的反向输入序列。"),
+    ] = None,
+    input_artifact_id: Annotated[
+        str | None,
+        Field(
+            description=(
+                "附件存在时必填；必须原样使用download_himat_file返回的顶层"
+                "input_artifact_id。正文只由后端解析。"
+            )
+        ),
+    ] = None,
+    probe: Annotated[
+        str | None,
+        Field(description="可选的第三输入序列。"),
+    ] = None,
+    template: Annotated[
+        str | None,
+        Field(description="可选的上下文序列。"),
+    ] = None,
+    target_id: Annotated[
+        str | None,
+        Field(description="可选任务对象标识。"),
+    ] = None,
+    target_species: Annotated[
+        str | None,
+        Field(description="可选分支上下文。"),
+    ] = None,
+    host_species: Annotated[
+        str | None,
+        Field(description="可选排除分支上下文。"),
+    ] = None,
+    target_db: Annotated[
+        str | None,
+        Field(description="步骤 2 数据源标识或路径。"),
+    ] = None,
+    host_db: Annotated[
+        str | None,
+        Field(description="步骤 3 数据源标识或路径。"),
+    ] = None,
+    cross_db: Annotated[
+        str | None,
+        Field(description="步骤 4 数据源标识或路径。"),
+    ] = None,
+    use_mgb: Annotated[
+        bool,
+        Field(description="是否启用步骤 5 的条件分支。"),
+    ] = False,
+    probe_type: Annotated[
+        str | None,
+        Field(description="可选步骤 5 分支类型。"),
+    ] = None,
+    fluorophore: Annotated[
+        str | None,
+        Field(description="可选步骤 5 参数。"),
+    ] = None,
+    snp_position: Annotated[
+        int | None,
+        Field(ge=0, description="可选步骤 5 位置参数。"),
+    ] = None,
+    assay_id: Annotated[
+        str | None,
+        Field(description="可选任务结果标识。"),
+    ] = None,
+) -> dict[str, Any]:
+    payload: dict[str, Any] = {"use_mgb": use_mgb}
+    optional_values = {
+        "forward_primer": forward_primer,
+        "reverse_primer": reverse_primer,
+        "input_artifact_id": input_artifact_id,
+        "probe": probe,
+        "template": template,
+        "target_id": target_id,
+        "target_species": target_species,
+        "host_species": host_species,
+        "target_db": target_db,
+        "host_db": host_db,
+        "cross_db": cross_db,
+        "probe_type": probe_type,
+        "fluorophore": fluorophore,
+        "snp_position": snp_position,
+        "assay_id": assay_id,
+    }
+    for key, value in optional_values.items():
+        if value is not None:
+            payload[key] = value
+
+    def execute() -> dict[str, Any]:
+        result = service.run_wf04_validation(payload)
+        return service.get_wf04_delivery(str(result["job_id"]))
+
+    return _host_ui_result(
+        _invoke(
+            "wf04_run_validation",
+            execute,
+            audit_input={"payload": payload},
+        )
+    )
+
+
+@mcp.tool(
+    description=(
+        "按retryable_steps创建WF-04不可变子任务并返回primer_design_output；"
+        + _TERMINAL_OUTPUT_SCHEMA_DESCRIPTION
+    )
+)
+def retry_wf04_validation(
+    job_id: Annotated[str, Field(description="需要重试的 WF-04 job_id。")],
+    retry_steps: Annotated[
+        list[
+            Literal[
+                "WF04_STEP1_P1",
+                "WF04_STEP2_P2_A",
+                "WF04_STEP3_P2_B",
+                "WF04_STEP5_COMPATIBILITY",
+            ]
+        ]
+        | None,
+        Field(description="可选；默认使用上次报告的 retryable_steps。"),
+    ] = None,
+    target_db: Annotated[
+        str | None,
+        Field(description="可选步骤 2 替换数据源。"),
+    ] = None,
+    host_db: Annotated[
+        str | None,
+        Field(description="可选步骤 3 替换数据源。"),
+    ] = None,
+    cross_db: Annotated[
+        str | None,
+        Field(description="可选步骤 4 替换数据源。"),
+    ] = None,
+    target_species: Annotated[
+        str | None,
+        Field(description="可选分支上下文补丁。"),
+    ] = None,
+    host_species: Annotated[
+        str | None,
+        Field(description="可选排除分支上下文补丁。"),
+    ] = None,
+    template: Annotated[
+        str | None,
+        Field(description="可选上游上下文补丁。"),
+    ] = None,
+    reason: Annotated[
+        str | None,
+        Field(description="可选重试原因。"),
+    ] = None,
+) -> dict[str, Any]:
+    response: dict[str, Any] = {}
+    optional_values = {
+        "retry_steps": retry_steps,
+        "target_db": target_db,
+        "host_db": host_db,
+        "cross_db": cross_db,
+        "target_species": target_species,
+        "host_species": host_species,
+        "template": template,
+        "reason": reason,
+    }
+    for key, value in optional_values.items():
+        if value is not None:
+            response[key] = copy.deepcopy(value)
+
+    def execute() -> dict[str, Any]:
+        result = service.retry_wf04_validation(job_id, response)
+        return service.get_wf04_delivery(str(result["job_id"]))
+
+    return _host_ui_result(
+        _invoke(
+            "wf04_retry_validation",
+            execute,
+            audit_input={"job_id": job_id, "response": response},
+        )
+    )
+
+
+@mcp.tool(
+    description=(
+        "读取WF-04持久化终态并返回primer_design_output；禁止模型重算；"
+        + _TERMINAL_OUTPUT_SCHEMA_DESCRIPTION
+    )
+)
+def get_wf04_report(job_id: str) -> dict[str, Any]:
+    return _host_ui_result(
+        _invoke(
+            "wf04_get_report",
+            lambda: service.get_wf04_delivery(job_id),
+            audit_input={"job_id": job_id},
+        )
+    )
+
+
+@mcp.tool(
+    description=(
+        "WF-05新任务唯一入口；序列集附件必须先download_himat_file并将其顶层"
+        "input_artifact_id原样传入，或直接传sequences。后端独立执行全部节点并返回"
+        "primer_design_output；禁止模型重算或自动调用其他工作流；"
+        + _TERMINAL_OUTPUT_SCHEMA_DESCRIPTION
+    )
+)
+def run_wf05_variation(
+    forward_primer: Annotated[
+        str,
+        Field(min_length=1, description="必填的正向输入序列。"),
+    ],
+    reverse_primer: Annotated[
+        str,
+        Field(min_length=1, description="必填的反向输入序列。"),
+    ],
+    input_artifact_id: Annotated[
+        str | None,
+        Field(description="下载工具生成的序列集内部文件引用。"),
+    ] = None,
+    sequences: Annotated[
+        list[str | dict[str, Any]] | None,
+        Field(description="无附件时直接提交的代表性序列集合。"),
+    ] = None,
+    probe: Annotated[
+        str | None,
+        Field(description="可选的第三输入序列。"),
+    ] = None,
+    reference_sequence_id: Annotated[
+        str | None,
+        Field(description="可选的参考序列记录标识；省略时使用首条记录。"),
+    ] = None,
+    target_id: Annotated[
+        str | None,
+        Field(description="可选目标标识。"),
+    ] = None,
+    target_species: Annotated[
+        str | None,
+        Field(description="可选目标上下文。"),
+    ] = None,
+    assay_id: Annotated[
+        str | None,
+        Field(description="可选任务结果标识。"),
+    ] = None,
+    allow_fallback: Annotated[
+        bool | None,
+        Field(description="是否允许明确标记的开发降级模式。"),
+    ] = None,
+) -> dict[str, Any]:
+    has_artifact = bool(str(input_artifact_id or "").strip())
+    has_sequences = isinstance(sequences, list) and bool(sequences)
+    if has_artifact == has_sequences:
+        raise InputValidationError(
+            "WF-05必须且只能提供input_artifact_id或sequences之一"
+        )
+    payload: dict[str, Any] = {
+        "forward_primer": forward_primer,
+        "reverse_primer": reverse_primer,
+    }
+    optional_values = {
+        "input_artifact_id": input_artifact_id,
+        "sequences": sequences,
+        "probe": probe,
+        "reference_sequence_id": reference_sequence_id,
+        "target_id": target_id,
+        "target_species": target_species,
+        "assay_id": assay_id,
+        "allow_fallback": allow_fallback,
+    }
+    for key, value in optional_values.items():
+        if value is not None:
+            payload[key] = copy.deepcopy(value)
+
+    def execute() -> dict[str, Any]:
+        result = service.run_wf05_variation(payload)
+        return service.get_wf05_delivery(str(result["job_id"]))
+
+    return _host_ui_result(
+        _invoke(
+            "wf05_run_variation",
+            execute,
+            audit_input={
+                "input_artifact_id": input_artifact_id,
+                "sequence_count": len(sequences or []),
+                "target_id": target_id,
+                "reference_sequence_id": reference_sequence_id,
+            },
+        )
+    )
+
+
+@mcp.tool(
+    description=(
+        "以既有WF-05任务为父任务应用白名单输入变更并创建不可变新任务；"
+        "禁止覆盖父结果或自动调用其他工作流；"
+        + _TERMINAL_OUTPUT_SCHEMA_DESCRIPTION
+    )
+)
+def retry_wf05_variation(
+    job_id: Annotated[str, Field(description="需要重试的WF-05 job_id。")],
+    input_artifact_id: Annotated[
+        str | None,
+        Field(description="新的序列集内部文件引用。"),
+    ] = None,
+    sequences: Annotated[
+        list[str | dict[str, Any]] | None,
+        Field(description="新的代表性序列集合。"),
+    ] = None,
+    forward_primer: Annotated[
+        str | None,
+        Field(description="可选更新的正向输入序列。"),
+    ] = None,
+    reverse_primer: Annotated[
+        str | None,
+        Field(description="可选更新的反向输入序列。"),
+    ] = None,
+    probe: Annotated[
+        str | None,
+        Field(description="可选更新的第三输入序列。"),
+    ] = None,
+    reference_sequence_id: Annotated[
+        str | None,
+        Field(description="可选更新的参考序列记录标识。"),
+    ] = None,
+    target_id: Annotated[
+        str | None,
+        Field(description="可选更新的目标标识。"),
+    ] = None,
+    target_species: Annotated[
+        str | None,
+        Field(description="可选更新的目标上下文。"),
+    ] = None,
+    assay_id: Annotated[
+        str | None,
+        Field(description="可选更新的任务结果标识。"),
+    ] = None,
+    allow_fallback: Annotated[
+        bool | None,
+        Field(description="是否允许明确标记的开发降级模式。"),
+    ] = None,
+    reason: Annotated[
+        str | None,
+        Field(description="本次重试原因。"),
+    ] = None,
+) -> dict[str, Any]:
+    if input_artifact_id is not None and sequences is not None:
+        raise InputValidationError(
+            "WF-05重试不能同时提供input_artifact_id和sequences"
+        )
+    response: dict[str, Any] = {}
+    optional_values = {
+        "input_artifact_id": input_artifact_id,
+        "sequences": sequences,
+        "forward_primer": forward_primer,
+        "reverse_primer": reverse_primer,
+        "probe": probe,
+        "reference_sequence_id": reference_sequence_id,
+        "target_id": target_id,
+        "target_species": target_species,
+        "assay_id": assay_id,
+        "allow_fallback": allow_fallback,
+        "reason": reason,
+    }
+    for key, value in optional_values.items():
+        if value is not None:
+            response[key] = copy.deepcopy(value)
+
+    def execute() -> dict[str, Any]:
+        result = service.retry_wf05_variation(job_id, response)
+        return service.get_wf05_delivery(str(result["job_id"]))
+
+    return _host_ui_result(
+        _invoke(
+            "wf05_retry_variation",
+            execute,
+            audit_input={
+                "job_id": job_id,
+                "updated_fields": sorted(response),
+                "sequence_count": len(sequences or []),
+            },
+        )
+    )
+
+
+@mcp.tool(
+    description=(
+        "读取WF-05持久化终态并返回primer_design_output；禁止模型重算；"
+        + _TERMINAL_OUTPUT_SCHEMA_DESCRIPTION
+    )
+)
+def get_wf05_report(job_id: str) -> dict[str, Any]:
+    return _host_ui_result(
+        _invoke(
+            "wf05_get_report",
+            lambda: service.get_wf05_delivery(job_id),
+            audit_input={"job_id": job_id},
+        )
+    )
+
+
+@mcp.tool(
+    description=(
+        "读取当前 WF-01 摘要；已完成时重新返回最终 primer_design_output 报告卡片。"
+        "用户要求查看、下载、下载地址或再次显示卡片时调用；"
+        + _TERMINAL_OUTPUT_SCHEMA_DESCRIPTION
+    )
+)
+def get_wf01_batch(batch_id: WF01BatchReference) -> dict[str, Any]:
     return _host_ui_result(
         _invoke(
             "wf01_get_batch",
@@ -635,7 +2386,7 @@ def get_wf01_batch(batch_id: str) -> dict[str, Any]:
     )
 )
 def revise_wf01_target_manifest(
-    batch_id: str,
+    batch_id: WF01BatchReference,
     payload: dict[str, Any],
 ) -> dict[str, Any]:
     return _host_ui_result(
@@ -653,12 +2404,12 @@ def revise_wf01_target_manifest(
 @mcp.tool(
     description=(
         "提交当前全部 WAITING_USER 的完整 role=user agent_interaction_response，并按 "
-        "next_action 继续。agent_interaction 仅用于旧任务；完成时用 content[0].text "
-        "说明实际路线，最终报告由 structuredContent 弹窗展示。"
+        "next_action 继续。agent_interaction 仅用于旧任务；"
+        + _TERMINAL_OUTPUT_SCHEMA_DESCRIPTION
     )
 )
 def submit_wf01_interaction_response(
-    batch_id: str,
+    batch_id: WF01BatchReference,
     response: dict[str, Any],
     resume_automatically: bool = True,
 ) -> dict[str, Any]:
@@ -700,12 +2451,12 @@ def submit_wf01_interaction_response(
     description=(
         "仅用于问题修正、超时中断或旧任务恢复；新任务由 create_wf01_batch 自动运行。"
         "从当前持久化阶段继续，直到用户交互或 M6 报告生成完成。每个恢复轮次最多调用一次；"
-        "WAIT_FOR_STAGE_COMPLETION 时不重试。完成时用 content[0].text 说明实际路线，"
-        "最终报告由 structuredContent 弹窗展示。"
+        "WAIT_FOR_STAGE_COMPLETION 时不重试；"
+        + _TERMINAL_OUTPUT_SCHEMA_DESCRIPTION
     )
 )
 def run_wf01_until_blocked(
-    batch_id: str,
+    batch_id: WF01BatchReference,
     stage_options: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     return _host_ui_result(
@@ -725,7 +2476,7 @@ def run_wf01_until_blocked(
 
 @mcp.tool(description="基于 WF-01 批次创建不可变的 M7 重新设计版本。")
 def create_wf01_version(
-    batch_id: str,
+    batch_id: WF01BatchReference,
     options: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     return _invoke(
@@ -743,7 +2494,7 @@ def create_wf01_version(
     )
 )
 def get_wf01_report(
-    batch_id: str,
+    batch_id: WF01BatchReference,
     target_id: str | None = None,
     candidate_scope: Literal[
         "top10", "deliverable", "qualified", "excluded", "all"
@@ -779,7 +2530,7 @@ def get_wf01_report(
     )
 )
 def get_wf01_candidate(
-    batch_id: str,
+    batch_id: WF01BatchReference,
     target_id: str,
     candidate_id: str,
     include_rule_details: bool = True,
@@ -803,19 +2554,17 @@ def get_wf01_candidate(
 
 @mcp.tool(
     description=(
-        "返回 M6 候选报告、科学过程详情报告、21条规则验证报告、"
-        "科学工具数据包、CSV 或 PDF 的附件信息。"
-        "三份 HTML 报告和科学工具数据包随 M6 自动生成；"
-        "CSV、PDF 在用户明确请求后按需生成。生成后重新返回完整 primer_design_output；"
-        "必须原样输出 content[0].text 裸 JSON，禁止自行列出 URL。"
+        "返回 M6 主报告、过程详情、数据 ZIP、CSV 或 PDF。"
+        "M6 默认生成两份 HTML 和一份 ZIP，21条规则报告仅在 ZIP 内。"
+        "CSV/PDF 明确请求时按需生成并返回 primer_design_output；"
+        + _TERMINAL_OUTPUT_SCHEMA_DESCRIPTION
     )
 )
 def get_wf01_export(
-    batch_id: str,
+    batch_id: WF01BatchReference,
     format_name: Literal[
         "html",
         "process_html",
-        "rules_html",
         "scientific_data",
         "csv",
         "pdf",
@@ -876,6 +2625,10 @@ def get_wf01_export(
         # the report card contains the newly generated CSV/PDF attachment and
         # can be rendered through the same contract as initial completion.
         summary = service.get_wf01_v02_agent_summary(batch_id)
+        result["batch_id"] = summary.get("batch_id") or batch_id
+        result["batch_code"] = summary.get("batch_code") or result.get(
+            "batch_code"
+        )
         result["ui_message"] = summary.get("ui_message")
         return result
 
@@ -886,28 +2639,6 @@ def get_wf01_export(
             audit_input={"batch_id": batch_id, "format_name": format_name},
         )
     )
-
-
-@mcp.resource(
-    "oligosmith://contracts/primer-design-input",
-    name="OligoSmith 引物设计输入契约",
-    description="供前端渲染的 role=assistant WF-01 表单 JSON 结构约束",
-    mime_type="application/schema+json",
-)
-def primer_design_input_contract_resource() -> str:
-    schema_path = PROJECT_ROOT / "schemas" / "primer-design-input.schema.json"
-    return schema_path.read_text(encoding="utf-8")
-
-
-@mcp.resource(
-    "oligosmith://contracts/primer-design-input-update",
-    name="OligoSmith 引物设计用户更新契约",
-    description="表单提交后最小 role=user 字段更新的 JSON 结构约束",
-    mime_type="application/schema+json",
-)
-def primer_design_input_update_contract_resource() -> str:
-    schema_path = PROJECT_ROOT / "schemas" / "primer-design-input-update.schema.json"
-    return schema_path.read_text(encoding="utf-8")
 
 
 @mcp.resource(
@@ -970,8 +2701,20 @@ def wf01_report_resource(batch_id: str) -> str:
 
 # 先注册 MCP 路由，再把兼容 API 挂载到根路径，从而保留健康检查、就绪检查和报告下载，
 # 同时避免重复添加 MCP 路径前缀。
+_configure_terminal_output_schemas(mcp)
+localize_mcp_tool_metadata(mcp)
 transport_app = mcp.streamable_http_app()
+scoped_mcp_servers = build_scoped_mcp_servers(
+    mcp,
+    transport_security_factory=_transport_security,
+    repeated_terminal_description=_TERMINAL_OUTPUT_SCHEMA_DESCRIPTION,
+)
+scoped_mcp_apps = mount_scoped_mcp_servers(
+    transport_app,
+    scoped_mcp_servers,
+)
 transport_app.mount("/", compatibility_api)
+transport_app = HiMatDirectResultCompatibilityMiddleware(transport_app)
 auth_settings = JWTSettings.from_env()
 app = JWTBearerMiddleware(
     transport_app,

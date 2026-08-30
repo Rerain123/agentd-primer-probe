@@ -14,6 +14,9 @@ Agent D 持久化记录可观察的执行事实，用于排查前端、编排器
 
 完整 FASTA/序列不写入日志，只记录长度、SHA-256 和 FASTA 记录数量。JWT、Authorization、
 密码、密钥和 token 会被替换为 `[REDACTED]`。普通长文本也会截断并附带哈希。
+每条 `TOOL_COMPLETED` 事件同时保存 `output_source` 和脱敏后的 `output`：终态或交互工具
+优先记录实际交付给客户端的 UI 业务对象，普通工具记录经过响应大小控制后的返回结果。
+因此完成报告可直接在日志的 `output` 中核对严格的 `{data,type}`，无需从状态摘要反推。
 
 ## 查询方式
 

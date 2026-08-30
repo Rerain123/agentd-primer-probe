@@ -1,9 +1,9 @@
 # RustFS 附件发布
 
-Agent D 的科学任务状态和 canonical report 继续保存在 `agentd-jobs` Docker
-volume 中。M6 生成 Top10 HTML、科学过程详情 HTML 和科学工具数据 ZIP 后，
-服务会同步上传四份默认附件到 RustFS，解决 HiMat 后端不能读取 Agent D 容器内部文件的问题。
-后续按需生成的 PDF、CSV 使用相同发布流程。
+Agent D 的任务状态和 canonical report 继续保存在 `agentd-jobs` Docker volume 中。
+WF-01 默认只发布两份 HTML 和一份 ZIP，21 条规则验证报告保存在 ZIP 内；按需导出沿用既有发布流程。WF-02 在终态报告阶段只上传 HTML，
+CSV/PDF 在用户明确请求对应格式后按需生成并上传，
+解决 HiMat 后端不能读取 Agent D 容器内部文件的问题。
 
 ## 地址映射
 
@@ -17,6 +17,16 @@ volume 中。M6 生成 Top10 HTML、科学过程详情 HTML 和科学工具数�
 `fileUrl` 是可直接下载的完整 URL。显示用的 `fileName` 保留中文；URL 中的中文及其他
 非 ASCII 字符按 UTF-8 百分号编码。对应文件在返回之前已经存在于 HiMat 与 Agent D
 都能访问的 RustFS 存储桶中，而不是只存在 Agent D 容器里。
+
+WF-02 使用稳定且不会跨批次冲突的对象名：
+
+```text
+data/wf02-<batch_id>-multiplex-report.html
+data/wf02-<batch_id>-multiplex-report.csv
+data/wf02-<batch_id>-multiplex-report.pdf
+```
+
+附件卡片继续显示友好的 `wf02-multiplex-report.*` 文件名，但 `fileUrl` 指向以上对象。
 
 ## 部署变量
 
@@ -51,8 +61,10 @@ S3 API endpoint 相同，也可以配置为反向代理或 CDN 地址。密钥�
 3. 执行 `HEAD Object`，比对文件大小和 SHA-256 用户元数据。
 4. 校验通过后才把附件写入 `primer_design_output`。
 
-RustFS 启用时，任一默认附件上传或校验失败都会使 M6 失败，不会再返回虚假的
-“已完成附件”。本地文件会保留，便于排障和重试。
+RustFS 启用时，默认 HTML 上传或校验失败会使对应报告阶段保持可重试，不会返回无法获取的
+“已完成附件”。按需 CSV/PDF 上传失败只影响该次导出请求，已完成流程状态不回退。本地文件会保留，
+便于排障和重试。旧版本已完成的 WF-02 批次在首次查询时只补传或刷新 HTML；其他格式在明确请求时处理，
+不重新执行流程。
 
 ## 验证
 
@@ -63,6 +75,10 @@ bucket 读写权限和清理权限。生成报告后可在 RustFS 控制台检�
 ```text
 wens/data/YYYY-MM-DD_HH-mm-ss_引物探针设计报告.html
 wens/data/YYYY-MM-DD_HH-mm-ss_科学过程详情报告.html
-wens/data/YYYY-MM-DD_HH-mm-ss_21条规则验证报告.html
 wens/data/YYYY-MM-DD_HH-mm-ss_科学工具原始数据.zip
+wens/data/wf02-<batch_id>-multiplex-report.html
+wens/data/wf02-<batch_id>-multiplex-report.csv
+wens/data/wf02-<batch_id>-multiplex-report.pdf
 ```
+
+`21条规则验证报告.html` 是上述 WF-01 ZIP 的内部成员，不再以独立 RustFS 对象返回。

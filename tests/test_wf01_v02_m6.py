@@ -258,6 +258,7 @@ def target(
         return {
             "target_id": target_id,
             "ordinal": 2,
+            "execution_path": "FULL_SPECIFICITY",
             "status": "FAILED",
             "template": {
                 "record_name": "empty_target",
@@ -337,6 +338,7 @@ def target(
     return {
         "target_id": target_id,
         "ordinal": 1,
+        "execution_path": "FULL_SPECIFICITY",
         "status": "PARTIAL",
         "template": {
             "record_name": "fixture_target",
@@ -504,6 +506,154 @@ def batch(*, two_targets: bool = False) -> dict:
     }
 
 
+def batch_with_mafft_conservation() -> dict:
+    payload = batch()
+    selected_target = payload["targets"][0]
+    templates = [
+        {
+            "record_name": f"strain-{index:02d}",
+            "sequence": "ACGT" * 40,
+            "length_nt": 160,
+            "role": "REFERENCE" if index == 1 else "ALIGNMENT_MEMBER",
+            "checksum_sha256": f"{index:064x}",
+        }
+        for index in range(1, 21)
+    ]
+    source_records = [
+        {
+            "id": item["record_name"],
+            "description": "",
+            "source": "fixture.fasta",
+            "length_nt": 160,
+            "checksum_sha256": item["checksum_sha256"],
+            "role": item["role"],
+        }
+        for item in templates
+    ]
+    selected_target["templates"] = copy.deepcopy(templates)
+    selected_target["template"] = copy.deepcopy(templates[0])
+    selected_target["template"]["source_file"] = "fixture.fasta"
+    selected_target["template_count"] = 20
+    selected_target["alignment_required"] = True
+    selected_target["m2_execution"]["alignment"] = {
+        "status": "EVALUATED",
+        "sequence_count": 20,
+        "reference_id": "strain-01",
+        "source_records": source_records,
+        "method": "mafft_shannon",
+        "alignment_width": 160,
+        "warnings": [],
+    }
+    selected_target["m2_execution"]["conservation"] = {
+        "status": "EVALUATED",
+        "reason": "MAFFT_SHANNON_COMPLETED",
+        "method": "mafft_shannon",
+        "sequence_count": 20,
+        "reference_id": "strain-01",
+        "representative_sequence_target": 20,
+        "representative_sequence_count_sufficient": True,
+        "progressive_rounds": [],
+        "selected_rounds": [1],
+        "full_length_fallback": False,
+        "profile_summary": {
+            "mean_conservation_score": 0.99,
+            "variant_position_count": 1,
+        },
+        "regions": [
+            {
+                "start": 0,
+                "end": 159,
+                "length": 160,
+                "label": "standard",
+                "selection_status": "SELECTED_CONSERVED_REGION",
+                "selection_round": 1,
+                "selection_threshold": 0.95,
+                "conservation_score": 0.99,
+                "confidence": "HIGH",
+                "full_length_fallback": False,
+            }
+        ],
+    }
+
+    evidence = {
+        "status": "EVALUATED",
+        "reason": "MAFFT_SHANNON_BINDING_SITES_EVALUATED",
+        "method": "mafft_shannon",
+        "sequence_count": 20,
+        "reference_id": "strain-01",
+        "score": 0.98,
+        "coverage_percent": 95.0,
+        "exact_match_sequence_count": 19,
+        "confidence": "HIGH",
+        "low_confidence_reasons": [],
+        "region": {
+            "start": 0,
+            "end": 159,
+            "length": 160,
+            "label": "standard",
+            "selection_status": "SELECTED_CONSERVED_REGION",
+            "selection_threshold": 0.95,
+            "conservation_score": 0.99,
+            "confidence": "HIGH",
+        },
+        "binding_sites": {
+            role: {
+                "conservation_score": 0.98,
+                "exact_match_sequence_count": 19,
+                "exact_match_percent": 95.0,
+                "variant_positions": [],
+            }
+            for role in ("forward_primer", "reverse_primer", "probe")
+        },
+        "variant_positions": [],
+    }
+
+    def attach(value: object) -> None:
+        if isinstance(value, dict):
+            if value.get("candidate_id"):
+                metadata = value.setdefault("metadata", {})
+                metadata["conservation_status"] = "EVALUATED"
+                metadata["conservation_evidence"] = copy.deepcopy(evidence)
+                value["conservation_score"] = 0.98
+                value["conservation_method"] = "mafft_shannon"
+                value["conservation_sequence_count"] = 20
+                scoring = metadata.setdefault("wf01_v02_scoring", {})
+                scoring["weights"] = {
+                    "conservation": 0.30,
+                    "thermodynamics": 0.25,
+                    "specificity": 0.25,
+                    "amplicon_features": 0.20,
+                }
+                scoring["effective_weights"] = copy.deepcopy(scoring["weights"])
+                scoring.setdefault("dimensions", {})["conservation"] = {
+                    "weight": 0.30,
+                    "effective_weight": 0.30,
+                    "raw_score": 98.0,
+                    "status": "EVALUATED",
+                    "method": "mafft_shannon",
+                    "participates_in_score": True,
+                }
+                for name in (
+                    "thermodynamics",
+                    "specificity",
+                    "amplicon_features",
+                ):
+                    scoring["dimensions"].setdefault(name, {})[
+                        "participates_in_score"
+                    ] = True
+            for child in value.values():
+                attach(child)
+        elif isinstance(value, list):
+            for child in value:
+                attach(child)
+
+    attach(selected_target)
+    payload["preflight"]["normalised_input"]["sequence_mode"] = (
+        "STRAIN_PANEL_SINGLE_TARGET"
+    )
+    return payload
+
+
 def canonical_from_xlsx(data: bytes) -> dict:
     with zipfile.ZipFile(io.BytesIO(data)) as archive:
         workbook = ET.fromstring(archive.read("xl/workbook.xml"))
@@ -547,12 +697,15 @@ class WF01V02M6CanonicalReportTests(unittest.TestCase):
         self.assertEqual(r21_actual["missing_fields"], [])
         self.assertEqual(
             r21_actual["conservation_scoring"]["status"],
-            "DEFERRED",
+            "NOT_EVALUATED",
         )
-        self.assertFalse(
+        self.assertTrue(
             r21_actual["conservation_scoring"][
                 "included_in_r21_pass_condition"
             ]
+        )
+        self.assertFalse(
+            r21_actual["conservation_scoring"]["participates_in_score"]
         )
         self.assertIn(
             selected["thermodynamic_metadata"]["status"],
@@ -701,13 +854,50 @@ class WF01V02M6CanonicalReportTests(unittest.TestCase):
         self.assertEqual(
             scope["internal_control"]["status"], "NOT_APPLICABLE"
         )
-        self.assertEqual(
-            scope["conservation"]["status"], "NOT_EVALUATED"
-        )
+        self.assertNotIn("conservation", scope)
         self.assertEqual(
             scope["amplicon_secondary_structure"]["status"],
             "NOT_EVALUATED",
         )
+
+    def test_mafft_conservation_trace_and_candidate_evidence_are_reported(self) -> None:
+        report = WF01V02CanonicalReportAssembler().assemble(
+            batch_with_mafft_conservation()
+        )
+
+        self.assertEqual(report["completeness"]["status"], "COMPLETE")
+        target_report = report["targets"][0]
+        self.assertEqual(
+            target_report["conservation_evidence"]["status"],
+            "EVALUATED",
+        )
+        self.assertEqual(
+            target_report["search_records"]["alignment"]["method"],
+            "mafft_shannon",
+        )
+        self.assertEqual(
+            len(
+                target_report["search_records"]["alignment"][
+                    "source_records"
+                ]
+            ),
+            20,
+        )
+        selected = target_report["all_primer3_candidates"][0]
+        self.assertEqual(selected["conservation"]["status"], "EVALUATED")
+        self.assertEqual(selected["conservation"]["score"], 0.98)
+        self.assertEqual(selected["conservation"]["coverage_percent"], 95.0)
+        rule_map = {item["code"]: item for item in selected["rules"]}
+        self.assertEqual(rule_map["R16"]["status"], "PASS")
+        self.assertTrue(
+            rule_map["R21"]["actual"]["conservation_scoring"][
+                "participates_in_score"
+            ]
+        )
+
+        html_text = render_html(report).decode("utf-8")
+        self.assertIn("四维基础分与软规则扣分", html_text)
+        self.assertIn("98.0%；N=20；三位点全匹配 95.0%；高置信", html_text)
 
     @unittest.skipUnless(
         importlib.util.find_spec("jsonschema") is not None,
@@ -725,6 +915,12 @@ class WF01V02M6CanonicalReportTests(unittest.TestCase):
             ).read_text(encoding="utf-8")
         )
         jsonschema.validate(report, schema)
+        jsonschema.validate(
+            WF01V02CanonicalReportAssembler().assemble(
+                batch_with_mafft_conservation()
+            ),
+            schema,
+        )
 
 
 @unittest.skipUnless(
@@ -737,7 +933,7 @@ class WF01V02M6ExportTests(unittest.TestCase):
         content = render_process_detail_html(report).decode("utf-8")
 
         self.assertIn("实验过程与科学工具", content)
-        self.assertIn("Primer3 候选生成过程", content)
+        self.assertIn("MAFFT 保守区与 Primer3 候选生成过程", content)
         self.assertIn("逐项检测结果", content)
         self.assertIn("特异性检测汇总", content)
         self.assertNotIn("<pre>", content)
@@ -853,6 +1049,87 @@ class WF01V02M6ExportTests(unittest.TestCase):
 
         delivery_content = render_html(report).decode("utf-8")
         self.assertNotIn('class="failed-data"', delivery_content)
+
+    def test_process_report_explains_target_hit_failure_by_oligo(self) -> None:
+        report = WF01V02CanonicalReportAssembler().assemble(batch())
+        candidate_report = report["targets"][0]["all_primer3_candidates"][0]
+        target_hit = candidate_report["specificity"]["target_hit"]
+        target_hit.update(
+            {
+                "status": "FAIL",
+                "reason": "AT_LEAST_ONE_OLIGO_LACKS_REQUIRED_TARGET_HIT",
+                "thresholds": {
+                    "pass_identity_pct": 100.0,
+                    "pass_coverage_pct": 100.0,
+                    "pass_three_prime_mismatches": 0,
+                },
+                "mode_specific": {
+                    "per_query_status": {
+                        "forward": "PASS",
+                        "reverse": "FAIL",
+                        "probe": "FAIL",
+                    }
+                },
+            }
+        )
+        candidate_report["specificity"]["overall_status"] = "FAIL"
+
+        content = render_process_detail_html(report).decode("utf-8")
+
+        self.assertIn(
+            "反向引物和 TaqMan 探针均未检出满足判定阈值的靶标命中",
+            content,
+        )
+        self.assertIn(
+            "要求相似度 100%、查询覆盖率 100%、3′端错配 0",
+            content,
+        )
+        self.assertIn("代表性命中：Synthetic test virus", content)
+        self.assertNotIn("具体原因已记录在内部审计数据中", content)
+
+    def test_process_report_explains_zero_target_hits_by_oligo(self) -> None:
+        report = WF01V02CanonicalReportAssembler().assemble(batch())
+        candidate_report = report["targets"][0]["all_primer3_candidates"][0]
+        target_hit = candidate_report["specificity"]["target_hit"]
+        target_hit.update(
+            {
+                "status": "FAIL",
+                "reason": "AT_LEAST_ONE_OLIGO_LACKS_REQUIRED_TARGET_HIT",
+                "objects": [
+                    {
+                        "scientific_name": "Lawsonia intracellularis",
+                    }
+                ],
+                "hits": [],
+                "thresholds": {
+                    "pass_identity_pct": 100.0,
+                    "pass_coverage_pct": 100.0,
+                    "pass_three_prime_mismatches": 0,
+                },
+                "mode_specific": {
+                    "per_query_status": {
+                        "forward": "FAIL",
+                        "reverse": "FAIL",
+                        "probe": "FAIL",
+                    }
+                },
+            }
+        )
+        candidate_report["specificity"]["overall_status"] = "FAIL"
+
+        content = render_process_detail_html(report).decode("utf-8")
+
+        self.assertIn("靶标覆盖检查（Lawsonia intracellularis）", content)
+        self.assertIn(
+            "正向引物、反向引物和 TaqMan 探针均未检出满足判定阈值的靶标命中",
+            content,
+        )
+        self.assertIn(
+            "要求相似度 100%、查询覆盖率 100%、3′端错配 0",
+            content,
+        )
+        self.assertNotIn("代表性命中：", content)
+        self.assertNotIn("具体原因已记录在内部审计数据中", content)
 
     def test_process_report_only_shows_relaxed_search_when_previous_round_fails(self) -> None:
         report = WF01V02CanonicalReportAssembler().assemble(batch())
@@ -1051,7 +1328,7 @@ class WF01V02M6ExportTests(unittest.TestCase):
             completed = service.execute_wf01_v02_m6(value["batch_id"])
             self.assertEqual(
                 set(completed["m6_execution"]["exports"]),
-                {"html", "process_html", "rules_html", "scientific_data"},
+                {"html", "process_html", "scientific_data"},
             )
             self.assertEqual(
                 [
@@ -1060,7 +1337,7 @@ class WF01V02M6ExportTests(unittest.TestCase):
                         "attachments"
                     ]
                 ],
-                ["HTML", "HTML", "HTML", "ZIP"],
+                ["HTML", "HTML", "ZIP"],
             )
             archive_path = service.get_wf01_v02_export_path(
                 value["batch_id"], "scientific_data"
@@ -1077,8 +1354,8 @@ class WF01V02M6ExportTests(unittest.TestCase):
             with zipfile.ZipFile(archive_path) as archive:
                 names = archive.namelist()
                 self.assertIn("使用说明.txt", names)
-                self.assertIn("科学过程详情报告.html", names)
                 self.assertIn("21条规则验证报告.html", names)
+                self.assertNotIn("科学过程详情报告.html", names)
                 self.assertIn("01_科学工具与数据清单.csv", names)
                 self.assertIn("04_全部候选原始结果.csv", names)
                 self.assertFalse(any(name.lower().endswith(".json") for name in names))
@@ -1097,7 +1374,7 @@ class WF01V02M6ExportTests(unittest.TestCase):
 
             completed = service.execute_wf01_v02_m6(value["batch_id"])
 
-            self.assertEqual(len(publisher.uploads), 4)
+            self.assertEqual(len(publisher.uploads), 3)
             upload = next(
                 item
                 for item in publisher.uploads
@@ -1153,7 +1430,7 @@ class WF01V02M6ExportTests(unittest.TestCase):
             self.assertEqual(m6["export_status"], "COMPLETE")
             self.assertEqual(
                 set(m6["exports"]),
-                {"html", "process_html", "rules_html", "scientific_data"},
+                {"html", "process_html", "scientific_data"},
             )
             self.assertEqual(m6["export_failures"], {})
             self.assertEqual(
@@ -1165,7 +1442,7 @@ class WF01V02M6ExportTests(unittest.TestCase):
                     item["fileType"]
                     for item in completed["ui_message"]["data"]["attachments"]
                 ],
-                ["HTML", "HTML", "HTML", "ZIP"],
+                ["HTML", "HTML", "ZIP"],
             )
             self.assertTrue(service.get_wf01_v02_report(value["batch_id"]))
 
@@ -1233,7 +1510,6 @@ class WF01V02M6ExportTests(unittest.TestCase):
             {
                 "html",
                 "process_html",
-                "rules_html",
                 "scientific_data",
                 "csv",
                 "pdf",
@@ -1267,14 +1543,14 @@ class WF01V02M6ExportTests(unittest.TestCase):
         self.assertIn("特异性评分", html_text)
         self.assertIn("扩增子特征评分", html_text)
         self.assertIn("BLAST 查询覆盖率", html_text)
-        self.assertIn("三维基础分与软规则扣分", html_text)
+        self.assertIn("三维归一化基础分与软规则扣分", html_text)
         self.assertIn("加权基础分", html_text)
         self.assertIn("最终综合评分", html_text)
         self.assertIn("权重 35.7%", html_text)
         self.assertIn("权重 28.6%", html_text)
         self.assertIn("保守性", html_text)
         self.assertIn("保守性评分", html_text)
-        self.assertIn("本版本暂缓", html_text)
+        self.assertIn("未评估，不生成假分数", html_text)
         self.assertNotIn("退火温度", html_text)
         self.assertIn("原始模板序列", html_text)
         self.assertIn(
@@ -1319,7 +1595,8 @@ class WF01V02M6ExportTests(unittest.TestCase):
         self.assertNotIn("fixture-2026.07", html_text)
         self.assertIn("Synthetic test virus", html_text)
         self.assertIn("检测结果", html_text)
-        self.assertIn("13 项已执行核心检测全部通过", html_text)
+        self.assertIn("13 项通过，1 项尚未完成", html_text)
+        self.assertIn("MAFFT 靶序列保守性", html_text)
         self.assertIn("已通过的检测", html_text)
         self.assertIn("引物熔解温度及两条引物温差", html_text)
         self.assertIn("靶标命中、背景序列及可选宿主排除特异性", html_text)
@@ -1409,12 +1686,67 @@ class WF01V02M6ExportTests(unittest.TestCase):
         self.assertIn("引物对设计评分", html_text)
         self.assertIn("二维设计评分与软规则扣分", html_text)
         self.assertIn("最终设计评分", html_text)
-        self.assertIn("特异性未评估，不参与设计评分", html_text)
+        self.assertIn("特异性和保守性不参与设计评分", html_text)
         self.assertIn("特异性 · 本路线不参与", html_text)
         self.assertIn("热力学</span><strong>权重 55.5%", html_text)
         self.assertIn("扩增子特征</span><strong>权重 44.5%", html_text)
         self.assertIn("仅适用于本次仅序列设计路线", html_text)
         self.assertIn("88.2/100", html_text)
+
+    def test_delivery_report_uses_saved_priority_when_public_score_is_missing(
+        self,
+    ) -> None:
+        report = WF01V02CanonicalReportAssembler().assemble(batch())
+        target_report = report["targets"][0]
+        base_candidate = target_report["top10"][0]
+        candidates = []
+        for ordinal in range(1, 11):
+            value = copy.deepcopy(base_candidate)
+            value["candidate_id"] = f"saved-priority-{ordinal:02d}"
+            value["score"] = None
+            value["verdict"] = "SPECIFICITY_NOT_EVALUATED"
+            scoring = value["scoring_detail"]
+            scoring.update(
+                {
+                    "status": "PENDING_SPECIFICITY",
+                    "score_type": None,
+                    "score_label": None,
+                    "execution_path": None,
+                    "effective_weights": {},
+                    "base_score": None,
+                    "final_score": None,
+                    "reported_score": None,
+                    "pre_specificity_priority": {
+                        "status": "ORDERING_ONLY_NOT_FINAL_SCORE",
+                        "evaluated_weight": 0.643,
+                        "base": 96.0 - ordinal,
+                        "after_penalties": 95.0 - ordinal,
+                    },
+                }
+            )
+            for detail in (scoring.get("dimensions") or {}).values():
+                detail.pop("effective_weight", None)
+                detail.pop("participates_in_score", None)
+            candidates.append(value)
+        target_report["top10"] = candidates
+
+        html_text = render_html(report).decode("utf-8")
+        summary_table = html_text.split(
+            '<div class="candidate-summary-table">', 1
+        )[1].split("</table>", 1)[0]
+
+        self.assertIn("<th>预排序分</th>", summary_table)
+        self.assertEqual(summary_table.count('class="summary-score"'), 10)
+        self.assertEqual(summary_table.count("/100"), 10)
+        self.assertNotIn('class="summary-score">未评估', summary_table)
+        self.assertIn('class="summary-score">94.0/100', summary_table)
+        self.assertIn("按预排序分排序", html_text)
+        self.assertIn("引物对预排序分", html_text)
+        self.assertIn("Step 5 前预排序分与软规则扣分", html_text)
+        self.assertIn("当前预排序分", html_text)
+        self.assertIn("特异性 · Step 5 尚未完成", html_text)
+        self.assertNotIn("特异性 · 本路线不参与", html_text)
+        self.assertIsNone(candidates[0]["score"])
 
     def test_delivery_html_lists_top10_oligos_and_scores_before_details(self) -> None:
         report = WF01V02CanonicalReportAssembler().assemble(batch())
@@ -1563,7 +1895,7 @@ class WF01V02M6ExportTests(unittest.TestCase):
             )
             self.assertEqual(
                 set(completed["m6_execution"]["exports"]),
-                {"html", "process_html", "rules_html", "scientific_data"},
+                {"html", "process_html", "scientific_data"},
             )
             ui_message = completed["ui_message"]
             self.assertEqual(list(ui_message), ["data", "type"])
@@ -1574,7 +1906,7 @@ class WF01V02M6ExportTests(unittest.TestCase):
             )
             self.assertEqual(
                 [item["fileType"] for item in ui_message["data"]["attachments"]],
-                ["HTML", "HTML", "HTML", "ZIP"],
+                ["HTML", "HTML", "ZIP"],
             )
             self.assertNotIn(
                 "CSV",
@@ -1628,7 +1960,6 @@ class WF01V02M6ExportTests(unittest.TestCase):
                 {
                     "html",
                     "process_html",
-                    "rules_html",
                     "scientific_data",
                     "csv",
                 },
@@ -1668,7 +1999,7 @@ class WF01V02M6ApiTests(unittest.TestCase):
                             "attachments"
                         ]
                     ],
-                    ["HTML", "HTML", "HTML", "ZIP"],
+                    ["HTML", "HTML", "ZIP"],
                 )
                 view = client.get(
                     f"/v1/wf01/tasks/{value['batch_id']}/report",
@@ -1693,6 +2024,16 @@ class WF01V02M6ApiTests(unittest.TestCase):
                     )
                     self.assertEqual(download.status_code, 200)
                     self.assertGreater(len(download.content), 100)
+                bundled_rules = client.get(
+                    f"/v1/wf01/tasks/{value['batch_id']}/exports/rules_html"
+                )
+                self.assertEqual(bundled_rules.status_code, 404)
+                self.assertEqual(
+                    bundled_rules.json()["detail"]["details"][
+                        "replacement_format"
+                    ],
+                    "scientific_data",
+                )
                 preview = client.get(
                     f"/v1/wf01/tasks/{value['batch_id']}/exports/html/preview"
                 )
@@ -1722,7 +2063,6 @@ class WF01V02M6ApiTests(unittest.TestCase):
                     [
                         "html",
                         "process_html",
-                        "rules_html",
                         "scientific_data",
                         "csv",
                         "pdf",

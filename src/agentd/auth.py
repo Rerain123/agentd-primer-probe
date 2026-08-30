@@ -13,6 +13,8 @@ from jwt import InvalidTokenError
 from starlette.responses import JSONResponse
 from starlette.types import ASGIApp, Receive, Scope, Send
 
+from .attachment_urls import verify_wf02_attachment_request
+
 
 _current_jwt_claims: ContextVar[dict[str, Any] | None] = ContextVar(
     "agentd_current_jwt_claims",
@@ -137,6 +139,14 @@ class JWTBearerMiddleware:
         if (
             self.settings.public_wf01_artifacts
             and self._is_public_wf01_artifact(scope, path)
+        ):
+            await self.app(scope, receive, send)
+            return
+        if verify_wf02_attachment_request(
+            path,
+            scope.get("query_string") or b"",
+            secret=self.settings.secret,
+            method=str(scope.get("method") or ""),
         ):
             await self.app(scope, receive, send)
             return

@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://wens.example/schemas/wf04-v01-report.json",
+  "title": "WF-04 v0.1 精简报告",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "workflow", "workflow_version", "job_id", "parent_job_id",
+    "execution_status", "decision", "decision_reasons", "next_action",
+    "assay_id", "evidence_level", "steps", "retry",
+    "validation_summary", "warnings", "errors", "candidate", "report_tool"
+  ],
+  "properties": {
+    "workflow": {"const": "WF-04"},
+    "workflow_version": {"const": "wf04-v0.1-rules-2026-08-25"},
+    "job_id": {"type": "string", "minLength": 1},
+    "parent_job_id": {"type": ["string", "null"]},
+    "execution_status": {"enum": ["SUCCEEDED", "PARTIAL", "FAILED"]},
+    "decision": {"enum": ["PASS", "PASS_WITH_WARNINGS", "FAIL", "INCONCLUSIVE"]},
+    "decision_reasons": {"type": "array", "items": {"type": "string"}},
+    "next_action": {"enum": ["END", "RETRY"]},
+    "assay_id": {"type": "string", "minLength": 1},
+    "evidence_level": {
+      "enum": ["in_silico_only", "blast_verified", "experimentally_validated"]
+    },
+    "steps": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 7,
+      "items": {
+        "type": "object",
+        "required": ["step", "status", "retryable"],
+        "properties": {
+          "step": {"type": "string"},
+          "status": {"type": "string"},
+          "retryable": {"type": "boolean"},
+          "reused": {"type": "boolean"}
+        }
+      }
+    },
+    "retry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["allowed", "retryable_steps", "tool"],
+      "properties": {
+        "allowed": {"type": "boolean"},
+        "retryable_steps": {
+          "type": "array",
+          "items": {"type": "string"}
+        },
+        "tool": {"type": ["string", "null"]}
+      }
+    },
+    "validation_summary": {"type": "object"},
+    "warnings": {"type": "array", "items": {"type": "string"}},
+    "errors": {"type": "array", "items": {"type": "object"}},
+    "candidate": {"type": ["object", "null"]},
+    "report_tool": {"const": "get_wf04_report"}
+  }
+}

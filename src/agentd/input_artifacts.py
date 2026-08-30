@@ -15,13 +15,31 @@ from urllib.request import Request, urlopen
 from uuid import uuid4
 
 from .errors import InputValidationError, PersistenceError, ToolUnavailableError
+from .sequence import read_fasta
 
 
 DEFAULT_HIMAT_DOWNLOAD_BASE_URL = (
-    "https://himat.ne.scqcyz.cn/api/files/download"
+    "https://himat.ws.scqcyz.cn/api/files/download"
 )
 DEFAULT_MAX_FILE_BYTES = 1024 * 1024 * 1024
 ARTIFACT_ID_PATTERN = re.compile(r"himat-[0-9a-f]{32}")
+WF05_PUBLIC_INPUT_FIELDS = frozenset(
+    {
+        "allow_fallback",
+        "assay_id",
+        "forward_primer",
+        "input_artifact_id",
+        "probe",
+        "reference_sequence_id",
+        "reverse_primer",
+        "sequences",
+        "target_id",
+        "target_species",
+    }
+)
+WF05_SEQUENCE_ITEM_FIELDS = frozenset(
+    {"description", "id", "sequence", "source"}
+)
 
 
 class HiMatInputArtifactStore:
@@ -303,6 +321,365 @@ class HiMatInputArtifactStore:
             hydrated.update(selected)
             resolved_files.append(hydrated)
         materialized["sequence_files"] = resolved_files
+        return materialized
+
+    def materialize_wf03_payload(self, payload: dict[str, Any]) -> dict[str, Any]:
+        """Map one opaque upload to WF-03's path-based P5 input.
+
+        The model passes only ``input_artifact_id`` and an optional explicit
+        ``input_gene`` label.  The filesystem path is resolved here and is
+        never returned by the MCP download tool.
+        """
+        if not isinstance(payload, dict):
+            raise InputValidationError("payload 必须为对象")
+        materialized = copy.deepcopy(payload)
+        artifact_id = materialized.pop("input_artifact_id", None)
+        input_gene = materialized.pop("input_gene", None)
+        if artifact_id is None:
+            if input_gene not in (None, ""):
+                raise InputValidationError(
+                    "input_gene 只能与 input_artifact_id 一起提供",
+                    details={"required_field": "input_artifact_id"},
+                )
+            return materialized
+
+        path, manifest = self.resolve(str(artifact_id))
+        selected_gene = str(input_gene or "").strip()
+        preferred = materialized.get("preferred_genes")
+        if not selected_gene and isinstance(preferred, list) and len(preferred) == 1:
+            preferred_item = preferred[0]
+            if isinstance(preferred_item, str):
+                selected_gene = preferred_item.strip()
+            elif isinstance(preferred_item, dict):
+                selected_gene = str(
+                    preferred_item.get("gene")
+                    or preferred_item.get("name")
+                    or preferred_item.get("symbol")
+                    or ""
+                ).strip()
+        if not selected_gene:
+            selected_gene = Path(str(manifest.get("file_name") or "")).stem.strip()
+        if not selected_gene:
+            selected_gene = "uploaded_input"
+
+        gene_paths = materialized.get("gene_fasta_paths")
+        if gene_paths is None:
+            gene_paths = {}
+        if not isinstance(gene_paths, dict):
+            raise InputValidationError("gene_fasta_paths 必须为对象")
+        if selected_gene in gene_paths:
+            raise InputValidationError(
+                "上传附件与 gene_fasta_paths 使用了相同的输入标签",
+                details={"input_gene": selected_gene},
+            )
+        gene_sequences = materialized.get("gene_sequences")
+        if isinstance(gene_sequences, dict) and selected_gene in gene_sequences:
+            raise InputValidationError(
+                "上传附件与 gene_sequences 使用了相同的输入标签",
+                details={"input_gene": selected_gene},
+            )
+        materialized["gene_fasta_paths"] = {
+            **copy.deepcopy(gene_paths),
+            selected_gene: str(path),
+        }
+
+        if preferred is None:
+            materialized["preferred_genes"] = [selected_gene]
+        elif isinstance(preferred, list):
+            preferred_names = []
+            for item in preferred:
+                if isinstance(item, str):
+                    preferred_names.append(item.strip())
+                elif isinstance(item, dict):
+                    preferred_names.append(
+                        str(
+                            item.get("gene")
+                            or item.get("name")
+                            or item.get("symbol")
+                            or ""
+                        ).strip()
+                    )
+            if selected_gene not in preferred_names:
+                materialized["preferred_genes"] = [
+                    selected_gene,
+                    *copy.deepcopy(preferred),
+                ]
+
+        materialized["_wf03_input_artifact"] = {
+            "input_artifact_id": str(artifact_id),
+            "source_file_id": manifest.get("source_file_id"),
+            "file_name": manifest.get("file_name"),
+            "sha256": manifest.get("sha256"),
+            "input_gene": selected_gene,
+        }
+        return materialized
+
+    @staticmethod
+    def _wf04_record_field(record: Any) -> str | None:
+        label = " ".join(
+            str(value or "")
+            for value in (getattr(record, "id", ""), getattr(record, "description", ""))
+        ).lower()
+        tokens = {
+            token
+            for token in re.split(r"[^a-z0-9]+", label)
+            if token
+        }
+        aliases = {
+            "forward_primer": {"forward", "forwardprimer", "fwd", "left"},
+            "reverse_primer": {"reverse", "reverseprimer", "rev", "right"},
+            "probe": {"probe"},
+            "template": {"template", "context", "reference"},
+        }
+        for field, accepted in aliases.items():
+            if tokens & accepted:
+                return field
+        return None
+
+    def materialize_wf04_payload(self, payload: dict[str, Any]) -> dict[str, Any]:
+        """Map a WF-01-style opaque upload to deterministic WF-04 fields.
+
+        Named FASTA records use ``forward``, ``reverse``, ``probe`` and
+        ``template`` aliases.  A fully file-driven unnamed input may use the
+        same positional order.  When both required inline values are already
+        present, one unnamed record is treated as the optional template.
+        """
+
+        if not isinstance(payload, dict):
+            raise InputValidationError("payload 必须为对象")
+        materialized = copy.deepcopy(payload)
+        artifact_id = materialized.pop("input_artifact_id", None)
+        if artifact_id is None:
+            return materialized
+
+        path, manifest = self.resolve(str(artifact_id))
+        records = read_fasta(path)
+        mapped: dict[str, str] = {}
+        unnamed: list[Any] = []
+        for record in records:
+            field = self._wf04_record_field(record)
+            if field is None:
+                unnamed.append(record)
+                continue
+            if field in mapped:
+                raise InputValidationError(
+                    "WF-04附件包含重复输入字段",
+                    details={"field": field, "input_artifact_id": artifact_id},
+                )
+            mapped[field] = str(record.sequence)
+
+        if not mapped:
+            missing_core = [
+                field
+                for field in ("forward_primer", "reverse_primer")
+                if not str(materialized.get(field) or "").strip()
+            ]
+            if len(missing_core) == 2 and 2 <= len(records) <= 4:
+                positional = (
+                    "forward_primer",
+                    "reverse_primer",
+                    "probe",
+                    "template",
+                )
+                mapped = {
+                    field: str(record.sequence)
+                    for field, record in zip(positional, records)
+                }
+                unnamed = []
+            elif len(missing_core) == 1 and len(records) == 1:
+                mapped[missing_core[0]] = str(records[0].sequence)
+                unnamed = []
+            elif not missing_core and len(records) == 1:
+                mapped["template"] = str(records[0].sequence)
+                unnamed = []
+
+        if unnamed:
+            missing_core = [
+                field
+                for field in ("forward_primer", "reverse_primer")
+                if not str(materialized.get(field) or mapped.get(field) or "").strip()
+            ]
+            if missing_core and len(unnamed) == len(missing_core):
+                for field, record in zip(missing_core, unnamed):
+                    mapped[field] = str(record.sequence)
+                unnamed = []
+
+        if unnamed:
+            if (
+                len(unnamed) == 1
+                and "template" not in mapped
+                and not str(materialized.get("template") or "").strip()
+                and all(
+                    str(materialized.get(field) or mapped.get(field) or "").strip()
+                    for field in ("forward_primer", "reverse_primer")
+                )
+            ):
+                mapped["template"] = str(unnamed[0].sequence)
+            else:
+                raise InputValidationError(
+                    "WF-04附件记录名称无法确定性映射",
+                    details={
+                        "input_artifact_id": artifact_id,
+                        "accepted_record_names": [
+                            "forward",
+                            "reverse",
+                            "probe",
+                            "template",
+                        ],
+                        "unmapped_records": [
+                            str(getattr(record, "id", "")) for record in unnamed
+                        ],
+                    },
+                )
+
+        for field, value in mapped.items():
+            existing = str(materialized.get(field) or "").strip()
+            if existing and re.sub(r"\s+", "", existing).upper() != value.upper():
+                raise InputValidationError(
+                    "WF-04附件字段与内联字段冲突",
+                    details={"field": field, "input_artifact_id": artifact_id},
+                )
+            materialized[field] = value
+
+        materialized["_wf04_input_artifact"] = {
+            "input_artifact_id": str(artifact_id),
+            "source_file_id": manifest.get("source_file_id"),
+            "file_name": manifest.get("file_name"),
+            "sha256": manifest.get("sha256"),
+            "record_count": len(records),
+            "mapped_fields": sorted(mapped),
+        }
+        return materialized
+
+    def materialize_wf05_payload(self, payload: dict[str, Any]) -> dict[str, Any]:
+        """Resolve one opaque sequence-set upload for the WF-05 runtime.
+
+        The public boundary resolves only the internal path and safe manifest
+        metadata. Parsing and interpretation remain inside the WF-05 snapshot.
+        """
+
+        if not isinstance(payload, dict):
+            raise InputValidationError("payload 必须为对象")
+        materialized = copy.deepcopy(payload)
+        unsupported = sorted(
+            str(field)
+            for field in materialized
+            if field not in WF05_PUBLIC_INPUT_FIELDS
+        )
+        if unsupported:
+            raise InputValidationError(
+                "WF-05输入包含未声明字段",
+                details={
+                    "unsupported_fields": unsupported,
+                    "accepted_fields": sorted(WF05_PUBLIC_INPUT_FIELDS),
+                },
+            )
+        text_fields = (
+            "assay_id",
+            "forward_primer",
+            "input_artifact_id",
+            "probe",
+            "reference_sequence_id",
+            "reverse_primer",
+            "target_id",
+            "target_species",
+        )
+        invalid_text_fields = [
+            field
+            for field in text_fields
+            if field in materialized
+            and (
+                not isinstance(materialized[field], str)
+                or not materialized[field].strip()
+            )
+        ]
+        if invalid_text_fields:
+            raise InputValidationError(
+                "WF-05文本字段必须为非空字符串",
+                details={"invalid_fields": invalid_text_fields},
+            )
+        if "allow_fallback" in materialized and not isinstance(
+            materialized["allow_fallback"],
+            bool,
+        ):
+            raise InputValidationError(
+                "WF-05 allow_fallback必须为布尔值",
+                details={"field": "allow_fallback"},
+            )
+        if "sequences" in materialized:
+            sequences = materialized["sequences"]
+            if not isinstance(sequences, list) or len(sequences) < 2:
+                raise InputValidationError(
+                    "WF-05 sequences必须是至少含2项的数组",
+                    details={"field": "sequences"},
+                )
+            for index, item in enumerate(sequences):
+                if isinstance(item, str):
+                    if not item.strip():
+                        raise InputValidationError(
+                            "WF-05 sequences文本项不能为空",
+                            details={"index": index},
+                        )
+                    continue
+                if not isinstance(item, dict):
+                    raise InputValidationError(
+                        "WF-05 sequences项必须为字符串或对象",
+                        details={"index": index},
+                    )
+                item_unsupported = sorted(set(item) - WF05_SEQUENCE_ITEM_FIELDS)
+                if item_unsupported:
+                    raise InputValidationError(
+                        "WF-05 sequences对象包含未声明字段",
+                        details={
+                            "index": index,
+                            "unsupported_fields": item_unsupported,
+                        },
+                    )
+                if not isinstance(item.get("sequence"), str) or not str(
+                    item["sequence"]
+                ).strip():
+                    raise InputValidationError(
+                        "WF-05 sequences对象需要非空sequence字段",
+                        details={"index": index},
+                    )
+                for optional_field in ("id", "description", "source"):
+                    if optional_field not in item:
+                        continue
+                    if not isinstance(item[optional_field], str) or (
+                        optional_field == "id"
+                        and not item[optional_field].strip()
+                    ):
+                        raise InputValidationError(
+                            "WF-05 sequences对象文本字段类型无效",
+                            details={
+                                "index": index,
+                                "field": optional_field,
+                            },
+                        )
+        artifact_id = materialized.pop("input_artifact_id", None)
+        if artifact_id is None:
+            return materialized
+        conflicts = [
+            field
+            for field in ("sequences",)
+            if materialized.get(field) not in (None, [], "")
+        ]
+        if conflicts:
+            raise InputValidationError(
+                "WF-05文件引用不能与其他序列集输入同时提供",
+                details={
+                    "input_artifact_id": artifact_id,
+                    "conflicting_fields": conflicts,
+                },
+            )
+        path, manifest = self.resolve(str(artifact_id))
+        materialized["fasta_path"] = str(path)
+        materialized["_wf05_input_artifact"] = {
+            "input_artifact_id": str(artifact_id),
+            "source_file_id": manifest.get("source_file_id"),
+            "file_name": manifest.get("file_name"),
+            "sha256": manifest.get("sha256"),
+        }
         return materialized
 
     def attach_path(self, payload: dict[str, Any]) -> dict[str, Any]:

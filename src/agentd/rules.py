@@ -14,6 +14,7 @@ from .models import Candidate, EvidenceLevel, RuleResult, RuleStatus
 
 
 HARD_RULES = {"R-01", "R-02", "R-03", "R-04", "R-05", "R-06", "R-07", "R-08", "R-09", "R-10"}
+BLOCKING_RULES = HARD_RULES | {"R-19"}
 SOFT_RULES = {"R-01b", "R-03b", "R-11", "R-12", "R-13", "R-SUPPLEMENT"}
 
 
@@ -193,14 +194,71 @@ class RuleEngine:
         missing_meta = [name for name in required_meta if candidate.metadata.get(name) in (None, "")]
         rules.append(_result("R-18", "metadata", RuleStatus.FAIL if missing_meta else RuleStatus.PASS, {"missing": missing_meta}, "软件/版本/算法/盐浓度/寡核苷酸浓度完整", "P1 metadata"))
 
-        if candidate.specificity is None:
-            rules.append(_not_evaluated("R-19", "metadata", "靶标与背景特异性完成；显式提供宿主时追加宿主排除", "P2", "P2未执行"))
-        elif candidate.evidence_level == EvidenceLevel.BLAST_VERIFIED:
-            rules.append(_result("R-19", "metadata", RuleStatus.PASS, candidate.specificity.rating, "BLAST验证完成", "P2/C6"))
+        p2_specificity = candidate.metadata.get("_p2_specificity")
+        if isinstance(p2_specificity, dict):
+            specificity_status = str(
+                p2_specificity.get("overall_status") or "NOT_EVALUATED"
+            ).upper()
+            specificity_actual: Any = {
+                "status": specificity_status,
+                "reason": p2_specificity.get("reason"),
+            }
+        elif candidate.specificity is not None:
+            rating = str(candidate.specificity.rating).upper()
+            specificity_status = {
+                "PASS": "PASS",
+                "PASS_WITH_WARNINGS": "CAUTION",
+                "FAIL": "FAIL",
+                "NOT_EVALUATED": "NOT_EVALUATED",
+            }.get(rating, "NOT_EVALUATED")
+            specificity_actual = rating
         else:
-            rules.append(_result("R-19", "metadata", RuleStatus.NOT_EVALUATED, candidate.specificity.rating, "须由BLAST+验证", "P2/C6", "当前仅开发降级检查"))
+            specificity_status = "NOT_EVALUATED"
+            specificity_actual = None
+
+        if specificity_status == "FAIL":
+            r19_status = RuleStatus.FAIL
+            r19_message = "P2返回失败结论"
+        elif (
+            specificity_status == "PASS"
+            and candidate.evidence_level == EvidenceLevel.BLAST_VERIFIED
+        ):
+            r19_status = RuleStatus.PASS
+            r19_message = None
+        elif (
+            specificity_status == "CAUTION"
+            and candidate.evidence_level == EvidenceLevel.BLAST_VERIFIED
+        ):
+            r19_status = RuleStatus.WARNING
+            r19_message = "P2返回需复核结论"
+        else:
+            r19_status = RuleStatus.NOT_EVALUATED
+            r19_message = "P2必需模式未完整执行"
+        rules.append(
+            _result(
+                "R-19",
+                "metadata",
+                r19_status,
+                specificity_actual,
+                "P2必需模式完成并保留正式执行证据",
+                "P2/C6",
+                r19_message,
+            )
+        )
 
         rules.append(_result("R-20", "metadata", RuleStatus.PASS, candidate.evidence_level.value, "证据等级+实验验证声明", "C7"))
+        if isinstance(p2_specificity, dict):
+            specificity_complete = specificity_status in {
+                "PASS",
+                "CAUTION",
+                "FAIL",
+            }
+        else:
+            specificity_complete = bool(
+                candidate.specificity is not None
+                and candidate.specificity.method != "not_run"
+                and specificity_status != "NOT_EVALUATED"
+            )
         completeness = {
             "forward": bool(candidate.forward_primer.sequence_5to3),
             "reverse": bool(candidate.reverse_primer.sequence_5to3),
@@ -208,7 +266,7 @@ class RuleEngine:
             "amplicon": bool(candidate.amplicon_sequence_5to3),
             "tm": all(item.tm_celsius is not None for item in primers + ([probe] if probe else [])),
             "dg": bool(measured_hairpins and measured_dimers),
-            "specificity": candidate.specificity is not None,
+            "specificity": specificity_complete,
             "conservation": candidate.conservation_score is not None,
         }
         r21_status = RuleStatus.PASS if all(completeness.values()) else RuleStatus.NOT_EVALUATED
@@ -217,7 +275,7 @@ class RuleEngine:
 
     @staticmethod
     def apply_verdict(candidate: Candidate) -> Candidate:
-        hard_fail = any(rule.code in HARD_RULES and rule.status == RuleStatus.FAIL for rule in candidate.rules)
+        hard_fail = any(rule.code in BLOCKING_RULES and rule.status == RuleStatus.FAIL for rule in candidate.rules)
         missing_hard = any(rule.code in HARD_RULES and rule.status == RuleStatus.NOT_EVALUATED for rule in candidate.rules)
         rule_warnings = [rule.code for rule in candidate.rules if rule.status in {RuleStatus.WARNING, RuleStatus.NOT_EVALUATED}]
         candidate.warnings = sorted(set(candidate.warnings + rule_warnings))

@@ -1,0 +1,15 @@
+interface:
+  display_name: "OligoSmith WF-04"
+  short_description: "运行、重试和查询 OligoSmith WF-04 独立工作流"
+  default_prompt: "使用 $oligosmith-wf04 执行或继续一个 WF-04 任务。"
+
+dependencies:
+  tools:
+    - type: "mcp"
+      value: "oligosmith-wf04"
+      description: "OligoSmith WF-04 scoped MCP server"
+      transport: "streamable_http"
+      url: "https://oligosmith.ne.scqcyz.cn/mcp/wf04/"
+
+policy:
+  allow_implicit_invocation: true

@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://wens.example/schemas/wf04-v01-retry.json",
+  "title": "WF-04 v0.1 不可变重试补丁",
+  "description": "后端恢复父任务输入；本对象只声明待重跑节点和允许覆盖的字段。",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "retry_steps": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "enum": [
+          "WF04_STEP1_P1",
+          "WF04_STEP2_P2_A",
+          "WF04_STEP3_P2_B",
+          "WF04_STEP5_COMPATIBILITY"
+        ]
+      }
+    },
+    "target_db": {"type": "string", "minLength": 1},
+    "host_db": {"type": "string", "minLength": 1},
+    "cross_db": {"type": "string", "minLength": 1},
+    "target_species": {"type": "string", "minLength": 1},
+    "host_species": {"type": "string", "minLength": 1},
+    "template": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[ACGTRYSWKMBDHVNacgtryswkmbdhvn\\s]+$"
+    },
+    "allow_fallback": {"type": "boolean"},
+    "reason": {"type": "string"}
+  }
+}

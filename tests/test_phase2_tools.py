@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import sys
 import unittest
 from pathlib import Path
@@ -44,11 +43,29 @@ class PhaseTwoToolTests(unittest.TestCase):
             self.assertIn(result["status"], {"PASS", "CAUTION", "WARNING"})
             self.assertEqual(result["parameter_set"], "SantaLucia2004_DNA")
             self.assertEqual(len(result["mfe_structure"]), 100)
+            full = adapter.assess_full("ACGT" * 25)
+            self.assertIn(full["status"], {"PASS", "CAUTION", "WARNING"})
+            self.assertEqual(full["parameter_set"], "SantaLucia2004_DNA")
+            self.assertLessEqual(len(full["subopt_structures"]), 10)
+            self.assertIn("most_stable_dg", full)
+            self.assertEqual(full["temperature_celsius"], 60.0)
+            self.assertEqual(full["salt_na_mm"], 50.0)
         else:
             self.assertEqual(adapter.not_evaluated("missing")["status"], "not_evaluated")
 
     def test_degenerate_enumeration_and_tm_spread(self) -> None:
-        payload = json.loads((ROOT / "examples" / "wf04-request.json").read_text(encoding="utf-8"))
+        payload = {
+            "forward_primer": "GCGAGGAAGATGTACGGATA",
+            "reverse_primer": "GCTACAGGCTCCCTTCTAA",
+            "probe": "ATCGCGGTTAACCTAGTCCCTGTGC",
+            "template": (
+                "TGGGCGAACTTGGTCACCCCGAAGTATCTGATGAGATGATCACCGAGAGCCGGGGC"
+                "GAGGAAGATGTACGGATACTTTCCGCACAGGGACTAGGTTAACCGCGATTTCTTATCC"
+                "TGCGATAGCCGGCCGTGTAAACCTTTCTTAGGCATGGCAGAAAATGCAATCATATAACG"
+                "GGGTTAGAAGGGAGCCTGTAGCATGCTGCCCGATTTCCCGTGTACCCCTGTCGCTGCGA"
+                "AGTATATCCAGAGGTGCCGGTGCTAGCC"
+            ),
+        }
         template = payload["template"]
         candidate = self.primer3.validate_pair(
             payload["forward_primer"],
@@ -90,4 +107,3 @@ class PhaseTwoToolTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

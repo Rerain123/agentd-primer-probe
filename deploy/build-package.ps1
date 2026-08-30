@@ -46,10 +46,26 @@ try {
         }
     }
 
-    $sourceRoots = @("config", "deploy", "docs", "examples", "schemas", "skills", "src\agentd")
+    $sourceRoots = @(
+        "config",
+        "deploy",
+        "docs",
+        "examples",
+        "schemas",
+        "skills",
+        "src\agentd",
+        "src\agentd_workflow_snapshots"
+    )
+    $optionalSourceRoots = @("examples")
     $projectPrefix = $projectRoot.TrimEnd([IO.Path]::DirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar
     foreach ($sourceRoot in $sourceRoots) {
         $absoluteSourceRoot = Join-Path $projectRoot $sourceRoot
+        if (-not (Test-Path -LiteralPath $absoluteSourceRoot -PathType Container)) {
+            if ($optionalSourceRoots -contains $sourceRoot) {
+                continue
+            }
+            throw "Required package directory is missing: $sourceRoot"
+        }
         Get-ChildItem -LiteralPath $absoluteSourceRoot -File -Recurse -Force | ForEach-Object {
             $relativePath = $_.FullName.Substring($projectPrefix.Length)
             $normalized = $relativePath.Replace([char]92, [char]47)
@@ -77,9 +93,6 @@ try {
     $utf8WithoutBom = New-Object System.Text.UTF8Encoding($false)
     [IO.File]::WriteAllLines((Join-Path $stageRoot "PACKAGE-MANIFEST.sha256"), $manifestLines, $utf8WithoutBom)
 
-    # Compress-Archive on Windows may retain backslashes in entry names.  The
-    # package is unpacked on Linux servers, so create ZIP entries explicitly
-    # with the portable forward-slash separator required by the ZIP format.
     Add-Type -AssemblyName System.IO.Compression
     Add-Type -AssemblyName System.IO.Compression.FileSystem
     $archive = [System.IO.Compression.ZipFile]::Open(

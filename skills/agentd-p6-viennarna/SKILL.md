@@ -5,12 +5,12 @@ description: "通过 Agent D P6 ViennaRNA 评估 qPCR 扩增子二级结构。�
 
 # Agent D P6 ViennaRNA 结构评估
 
-把 P6 作为 WF-01、WF-03、WF-04、WF-06 或 WF-07 中的可选结构风险评估。P6 在固定的 PCR 导向条件下评估 DNA 扩增子；不得仅因 ViennaRNA 缺失而阻断工作流。
+把 P6 作为 WF-01、WF-03 或 WF-04 中的可选结构风险评估。P6 在固定的 PCR 导向条件下评估 DNA 扩增子；不得仅因 ViennaRNA 缺失而阻断工作流。
 
 ## 执行
 
 1. 检查 `P6_ViennaRNA` 工具状态，并确认 DNA 参数可用。
-2. 运行能够生成或验证扩增子的工作流；使用 WF-04/WF-07 评估已有检测体系时提供 `template`。
+2. 运行能够生成或验证扩增子的工作流；使用 WF-04 评估已有检测体系时提供 `template`。
 3. 读取每个候选或内标候选上的 `amplicon_structure`。
 4. 保留计算条件、MFE ΔG、结构状态及警告。
 5. P6 不可用或缺少扩增子时返回 `not_evaluated`，并把工作流结果保留为部分证据；不得伪造 ΔG。

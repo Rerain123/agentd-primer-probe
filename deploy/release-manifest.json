@@ -1,7 +1,7 @@
 {
   "name": "agentd-primer-probe-server",
   "description": "OligoSmith 引物与探针设计、验证、优化和报告生成 MCP 服务",
-  "version": "1.0.3",
+  "version": "1.2.13",
   "phase": 3,
   "schema_version": "3.0.0-phase3",
   "package_type": "docker-compose-source-bundle",
@@ -14,12 +14,39 @@
   },
   "default_binding": "127.0.0.1:8020",
   "mcp_transport": "streamableHttp",
+  "himat_terminal_result": "JSON-RPC result is the exact primer_design_output data/type object without the CallToolResult wrapper",
   "mcp_endpoint": "/mcp",
-  "authentication": "Bearer JWT for MCP and workflow mutations; read-only WF-01 deliverables are public by deployment default",
-  "persistent_state": "agentd-jobs Docker volume for jobs and HiMat input artifacts plus optional RustFS S3 publication for user attachments",
+  "mcp_scoped_endpoints": {
+    "wf01": "/mcp/wf01/",
+    "wf02": "/mcp/wf02/",
+    "wf03": "/mcp/wf03/",
+    "wf04": "/mcp/wf04/",
+    "wf05": "/mcp/wf05/"
+  },
+  "workflow_skills": [
+    "oligosmith-wf01",
+    "oligosmith-wf02",
+    "oligosmith-wf03",
+    "oligosmith-wf04",
+    "oligosmith-wf05"
+  ],
+  "wf05_tool_policy": {
+    "mode": "existing-tools-only",
+    "expert_contract_sha256": "65eaa4af1bc95a93ac13dba1e963b7491613e97ecee885c6b1247549e67a081c",
+    "exact_snapshot_sha256": {
+      "C0": "31e806460a1e1620cff00fca309bcf6a23a20ef73068c7441e720aa94fbe5d8e",
+      "C5": "a983bc4676ebf3311ec0b47195ced1e3d41f2606c0d564b8716ad3ed51c7656b",
+      "C7": "4d1a31a978e809ffdca2dd7b31de087328dd5ed4b06aee043ef462b3ab5a9c44",
+      "P1": "33a4ffa62c9e793ba967b7a75306e275efdc02719ac48d86ed4c8b5ba221067c"
+    },
+    "not_evaluated": ["C21"]
+  },
+  "authentication": "Bearer JWT for MCP, REST mutations, and canonical WF-02 report APIs; WF-02 attachment cards use configured RustFS public URLs with signed local fallback; read-only WF-01 deliverables are public by deployment default",
+  "persistent_state": "agentd-jobs Docker volume for jobs, WF-02 background recovery state, WF-02 calculation cache, and HiMat input artifacts plus RustFS S3 publication for user attachments when enabled",
   "external_data": [
     "versioned BLAST nucleotide database prefixes",
-    "versioned target and internal-control FASTA files",
+    "NCBI Entrez live nucleotide access for P5 default housekeeping genes",
+    "optional versioned target and internal-control override FASTA files",
     "HiMat uploaded-file download endpoint",
     "RustFS S3 endpoint and least-privilege credentials when attachment publication is enabled"
   ],

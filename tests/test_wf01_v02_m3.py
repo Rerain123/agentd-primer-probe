@@ -433,17 +433,81 @@ class WF01V02M3ScoringTests(unittest.TestCase):
                     expected,
                 )
 
-    def test_ac_sco_02_uses_only_357_357_286_and_waits_for_specificity(self) -> None:
+    def test_missing_mafft_evidence_is_not_faked_and_weights_are_renormalized(self) -> None:
         candidate = candidate_occurrence(0)
+        # A legacy scalar without traceable MAFFT evidence must never count.
         candidate["conservation_score"] = 0.0
         scoring = WF01V02ScoringEngine().score(candidate)
         self.assertEqual(scoring["weights"], SCORING_WEIGHTS)
         self.assertFalse(scoring["conservation"]["participates_in_score"])
-        self.assertEqual(scoring["conservation"]["weight"], 0.0)
+        self.assertEqual(scoring["conservation"]["weight"], 0.3)
+        self.assertEqual(scoring["conservation"]["effective_weight"], 0.0)
+        self.assertEqual(
+            scoring["conservation_scoring_mode"],
+            "RENORMALIZED_WITHOUT_CONSERVATION",
+        )
         self.assertEqual(scoring["status"], "PENDING_SPECIFICITY")
         self.assertIsNone(scoring["base_score"])
         self.assertIsNone(scoring["final_score"])
         self.assertIsNotNone(scoring["pre_specificity_priority"]["after_penalties"])
+
+    def test_traceable_mafft_evidence_enters_four_dimension_score(self) -> None:
+        candidate = candidate_occurrence(0)
+        candidate["metadata"]["conservation_evidence"] = {
+            "status": "EVALUATED",
+            "reason": "MAFFT_SHANNON_BINDING_SITES_EVALUATED",
+            "method": "mafft_shannon",
+            "sequence_count": 20,
+            "score": 0.96,
+            "coverage_percent": 95.0,
+            "confidence": "HIGH",
+            "region": {"selection_round": 1},
+        }
+
+        scoring = WF01V02ScoringEngine().score(
+            candidate,
+            specificity_score=100.0,
+        )
+
+        self.assertEqual(scoring["status"], "FINAL")
+        self.assertEqual(scoring["conservation_scoring_mode"], "FOUR_DIMENSION")
+        self.assertEqual(scoring["effective_weights"], SCORING_WEIGHTS)
+        self.assertEqual(scoring["dimensions"]["conservation"]["raw_score"], 96.0)
+        self.assertTrue(
+            scoring["dimensions"]["conservation"]["participates_in_score"]
+        )
+        self.assertEqual(scoring["base_score"], 98.8)
+        self.assertEqual(scoring["final_score"], 98.8)
+
+    def test_low_confidence_conservation_has_explicit_penalty(self) -> None:
+        candidate = candidate_occurrence(0)
+        candidate["metadata"]["conservation_evidence"] = {
+            "status": "EVALUATED",
+            "reason": "MAFFT_SHANNON_BINDING_SITES_EVALUATED",
+            "method": "mafft_shannon",
+            "sequence_count": 8,
+            "score": 0.96,
+            "coverage_percent": 87.5,
+            "confidence": "LOW",
+            "low_confidence_reasons": [
+                "REPRESENTATIVE_SEQUENCE_COUNT_BELOW_20"
+            ],
+            "region": {"selection_round": 1},
+        }
+
+        scoring = WF01V02ScoringEngine().score(
+            candidate,
+            specificity_score=100.0,
+        )
+
+        penalty = next(
+            item
+            for item in scoring["penalties"]
+            if item["rule_code"] == "LOW_CONFIDENCE_CONSERVATION"
+        )
+        self.assertEqual(penalty["penalty_percent"], 10.0)
+        self.assertEqual(scoring["applied_penalty_percent"], 10.0)
+        self.assertEqual(scoring["final_score"], 88.92)
 
     def test_scoring_contract_is_versioned_complete_and_auditable(self) -> None:
         scoring = WF01V02ScoringEngine().score(

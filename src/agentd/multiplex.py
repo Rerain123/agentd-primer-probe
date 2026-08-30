@@ -182,14 +182,14 @@ class MultiplexEvaluator:
                 worst_pair = (left_id, right_id)
             if worst_three_prime is None or float(end_dg) < worst_three_prime:
                 worst_three_prime = float(end_dg)
-            if float(end_dg) < float(settings["three_prime_dimer_dg_kcal"]):
+            if float(end_dg) <= float(settings["three_prime_dimer_dg_kcal"]):
                 three_prime_risks.append({"pair": [left_id, right_id], "dg_kcal": round(float(end_dg), 3)})
         dimer_limit = float(settings["relaxed_cross_dimer_dg_kcal"] if relaxed else settings["standard_cross_dimer_dg_kcal"])
         if evaluated_pairs == 0:
             issues.append("[CAUTION] P1不可用，交叉二聚体未评估")
-        elif worst_dg is not None and worst_dg < float(settings["relaxed_cross_dimer_dg_kcal"]):
+        elif worst_dg is not None and worst_dg <= float(settings["relaxed_cross_dimer_dg_kcal"]):
             issues.append(f"[FAIL] 最差交叉二聚体ΔG={worst_dg:.1f} kcal/mol")
-        elif worst_dg is not None and worst_dg < dimer_limit:
+        elif worst_dg is not None and worst_dg <= dimer_limit:
             issues.append(f"[CAUTION] 最差交叉二聚体ΔG={worst_dg:.1f} kcal/mol")
         if three_prime_risks:
             issues.append(f"[CAUTION] 发现{len(three_prime_risks)}个3′端局部二聚体风险")

@@ -2,7 +2,7 @@
 
 ## 1. 安装包边界
 
-`agentd-primer-probe-server-1.0.3.zip` 是 Docker Compose 源码安装包，包含应用、MCP 服务、容器定义、服务器配置模板和运维脚本，不包含大型 BLAST 数据库、生产序列或离线 Docker 镜像。
+`agentd-primer-probe-server-1.2.13.zip` 是 Docker Compose 源码安装包，包含应用、MCP 服务、容器定义、服务器配置模板和运维脚本，不包含大型数据库、生产数据或离线 Docker 镜像。
 
 首次联网构建需要服务器能够访问 Docker Hub、Debian 软件源和 PyPI。完全离线的服务器应先在同架构联网 Linux 主机上构建并导出镜像。
 
@@ -20,9 +20,9 @@
 将 ZIP 和同名 `.sha256` 文件放在同一目录：
 
 ```bash
-sha256sum -c agentd-primer-probe-server-1.0.3.zip.sha256
-unzip agentd-primer-probe-server-1.0.3.zip
-cd agentd-primer-probe-server-1.0.3
+sha256sum -c agentd-primer-probe-server-1.2.13.zip.sha256
+unzip agentd-primer-probe-server-1.2.13.zip
+cd agentd-primer-probe-server-1.2.13
 sha256sum -c PACKAGE-MANIFEST.sha256
 chmod +x deploy/scripts/*.sh
 ```
@@ -38,8 +38,9 @@ BLAST_SEARCH_TIMEOUT_SECONDS=360
 BLAST_SEARCH_MAX_SEQS=100
 ```
 
-1.0.3 的 Compose 已包含 Linux `host-gateway` 映射。该服务只在本地
-`cross/nt` 背景库不可用时接管背景特异性检查；靶标专库与已提供宿主的宿主专库仍使用本地版本化数据库。
+当前 Compose 已包含 Linux `host-gateway` 映射。该服务只在本地
+`cross/nt` 背景资源不可用时接管对应检查。目标资源没有本地专用条目时，P2 会从任务的不可变输入
+快照生成临时 FASTA；已提供宿主时，对应资源仍使用本地版本化条目。
 
 ## 3. 配置服务器路径
 
@@ -57,6 +58,8 @@ vi deploy/.env
 - `AGENTD_SEQUENCE_DATA_DIR`：宿主机 FASTA 数据根目录；
 - `AGENTD_REQUIRE_DATABASES`：生产科学验收应设为 `true`；仅验证交互和流程链路时可暂设
   `false`，安装器会允许缺库启动，但相应结果只能是 `NOT_EVALUATED`；
+- `NCBI_ENTREZ_EMAIL`：P5 调用 NCBI E-utilities 时使用的联系邮箱；
+- `NCBI_ENTREZ_API_KEY`：可选的 NCBI API Key；
 - CPU、内存和镜像标签。
 
 容器以 UID `10001` 的非 root 用户运行。挂载目录应允许目录遍历和文件读取，推荐目录权限 `755`、数据文件权限 `644`，不要把数据库写权限授予容器。
@@ -102,7 +105,7 @@ python3 deploy/scripts/validate_catalog.py \
   --catalog deploy/server-config/database-catalog.json
 ```
 
-加入 `--include-optional` 可同时检查可选资源。内标 FASTA 至少需要 5 条同物种同源序列。
+加入 `--include-optional` 可同时检查可选资源。P5 默认通过 NCBI Entrez 获取管家基因序列，因此目录校验不再要求独立 ACTB FASTA。管理员配置可选的 `internal:<species>:<gene>:sequences` 覆盖时，其中至少应包含 5 条同物种同源序列。
 
 ## 5. 联网安装
 
@@ -142,8 +145,8 @@ bash deploy/scripts/export_offline_image.sh
 把生成的 `*.tar.gz`、`.sha256`、源码安装包和数据库复制到离线服务器，然后：
 
 ```bash
-sha256sum -c agentd-primer-probe-1.0.3-linux-image.tar.gz.sha256
-gzip -dc agentd-primer-probe-1.0.3-linux-image.tar.gz | docker load
+sha256sum -c agentd-primer-probe-1.2.13-linux-image.tar.gz.sha256
+gzip -dc agentd-primer-probe-1.2.13-linux-image.tar.gz | docker load
 bash deploy/scripts/install.sh --no-build
 ```
 

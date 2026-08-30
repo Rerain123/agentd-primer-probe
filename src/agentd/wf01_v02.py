@@ -130,6 +130,10 @@ OUT_OF_SCOPE_REQUESTS = {
     "amplicon_secondary_structure": "AMPLICON_SECONDARY_STRUCTURE",
 }
 ACCESSION_PATTERN = re.compile(r"^[A-Za-z]{1,8}_?\d+(?:\.\d+)?$")
+WF01_BATCH_CODE_PATTERN = re.compile(
+    r"^WF01-[0-9]{6}-[0-9]{4}-([A-F0-9]{4})$",
+    re.IGNORECASE,
+)
 PRIMER3_BLOCKING_ISSUE_CODES = frozenset(
     {
         "MISSING_SEQUENCE",
@@ -161,6 +165,63 @@ class WF01V02BatchStore:
         except (TypeError, ValueError) as exc:
             raise InputValidationError("非法批次任务ID", details={"batch_id": batch_id}) from exc
 
+    def resolve_id(self, batch_reference: str) -> str:
+        """Resolve an internal UUID or a user-facing WF-01 task code."""
+        reference = str(batch_reference or "").strip()
+        try:
+            return str(UUID(reference))
+        except (TypeError, ValueError, AttributeError):
+            pass
+
+        match = WF01_BATCH_CODE_PATTERN.fullmatch(reference)
+        if match is None:
+            raise InputValidationError(
+                "非法批次任务ID或任务编号",
+                details={
+                    "batch_reference": batch_reference,
+                    "accepted_formats": ["UUID", "WF01-YYMMDD-HHMM-XXXX"],
+                },
+            )
+
+        suffix = match.group(1).lower()
+        matches: list[str] = []
+        try:
+            for path in self.root.glob(f"{suffix}*.json"):
+                value = json.loads(path.read_text(encoding="utf-8"))
+                resolved_id = str(value.get("batch_id") or path.stem)
+                self._validate_id(resolved_id)
+                stored_code = str(
+                    value.get("batch_code")
+                    or wf01_batch_code(
+                        resolved_id,
+                        value.get("created_at"),
+                        workflow=str(value.get("workflow") or "WF-01"),
+                    )
+                )
+                if stored_code.upper() == reference.upper():
+                    matches.append(str(UUID(resolved_id)))
+        except (OSError, json.JSONDecodeError) as exc:
+            raise PersistenceError(
+                "WF-01 任务编号解析失败",
+                details={"batch_reference": reference, "error": str(exc)},
+            ) from exc
+
+        unique_matches = sorted(set(matches))
+        if not unique_matches:
+            raise InputValidationError(
+                "批次任务不存在",
+                details={"batch_reference": reference},
+            )
+        if len(unique_matches) > 1:
+            raise InputValidationError(
+                "任务编号对应多个批次，必须使用内部批次ID",
+                details={
+                    "batch_reference": reference,
+                    "matching_batch_count": len(unique_matches),
+                },
+            )
+        return unique_matches[0]
+
     def save(self, batch: dict[str, Any]) -> Path:
         batch_id = str(batch.get("batch_id", ""))
         self._validate_id(batch_id)
@@ -183,10 +244,17 @@ class WF01V02BatchStore:
             raise PersistenceError("WF-01 v0.2 批次持久化失败", details={"error": str(exc)}) from exc
 
     def get(self, batch_id: str) -> dict[str, Any]:
-        self._validate_id(batch_id)
+        batch_reference = batch_id
+        batch_id = self.resolve_id(batch_reference)
         path = self.root / f"{batch_id}.json"
         if not path.exists():
-            raise InputValidationError("批次任务不存在", details={"batch_id": batch_id})
+            raise InputValidationError(
+                "批次任务不存在",
+                details={
+                    "batch_reference": batch_reference,
+                    "batch_id": batch_id,
+                },
+            )
         try:
             batch = json.loads(path.read_text(encoding="utf-8"))
             batch.setdefault(
@@ -234,8 +302,8 @@ class WF01V02BatchStore:
         return highest + 1
 
     def _artifact_directory(self, batch_id: str) -> Path:
-        self._validate_id(batch_id)
-        return self.root / "artifacts" / batch_id
+        resolved_id = self.resolve_id(batch_id)
+        return self.root / "artifacts" / resolved_id
 
     def save_scientific_artifact(
         self,
@@ -335,7 +403,7 @@ class WF01V02BatchStore:
             ) from exc
 
     def list_scientific_artifacts(self, batch_id: str) -> dict[str, Any]:
-        self._validate_id(batch_id)
+        batch_id = self.resolve_id(batch_id)
         index_path = (
             self._artifact_directory(batch_id)
             / "scientific-artifacts"
@@ -360,7 +428,7 @@ class WF01V02BatchStore:
         batch_id: str,
         artifact_id: str,
     ) -> Path:
-        self._validate_id(batch_id)
+        batch_id = self.resolve_id(batch_id)
         if not re.fullmatch(r"[a-z0-9][a-z0-9._-]{0,127}", artifact_id):
             raise InputValidationError(
                 "科学原始数据 artifact_id 无效",
@@ -1607,11 +1675,15 @@ class WF01V02BatchService:
         payload: dict[str, Any],
         *,
         interaction_mode: str = "LEGACY",
+        require_full_route: bool = False,
     ) -> dict[str, Any]:
-        return WF01V02Preflight(
+        result = WF01V02Preflight(
             payload,
             interaction_mode=interaction_mode,
         ).run()
+        if require_full_route:
+            self._assert_full_route_context(result)
+        return result
 
     @staticmethod
     def _target_counts(targets: list[dict[str, Any]]) -> dict[str, int]:
@@ -1866,11 +1938,35 @@ class WF01V02BatchService:
                 },
             )
 
+    @staticmethod
+    def _assert_full_route_context(preflight: dict[str, Any]) -> None:
+        """Reject a public create before a DESIGN_ONLY batch is persisted."""
+        targets = preflight.get("targets") or []
+        invalid_targets = [
+            {
+                "target_id": target.get("target_id"),
+                "manifest_status": target.get("manifest_status"),
+                "execution_path": target.get("execution_path"),
+            }
+            for target in targets
+            if target.get("specificity_input_complete") is not True
+        ]
+        if not targets or invalid_targets:
+            raise InputValidationError(
+                "新建 WF-01 任务缺少完整路线必填上下文，未创建批次",
+                details={
+                    "required_execution_path": "FULL_SPECIFICITY",
+                    "design_only_fallback_allowed": False,
+                    "invalid_targets": invalid_targets,
+                },
+            )
+
     def create_batch(
         self,
         payload: dict[str, Any],
         *,
         interaction_mode: str = "LEGACY",
+        require_full_route: bool = False,
     ) -> dict[str, Any]:
         if interaction_mode not in {"LEGACY", "LEGACY_UPLOAD", "NO_POPUPS"}:
             raise InputValidationError(
@@ -1880,6 +1976,7 @@ class WF01V02BatchService:
         preflight = self.preflight(
             payload,
             interaction_mode=interaction_mode,
+            require_full_route=require_full_route,
         )
         if interaction_mode == "NO_POPUPS" and not preflight["can_auto_run"]:
             blocking_issues = [
@@ -1926,6 +2023,8 @@ class WF01V02BatchService:
             "report_id": None,
             "search_complete": False,
         }
+        if require_full_route:
+            batch["required_execution_path"] = "FULL_SPECIFICITY"
         if interaction_mode != "NO_POPUPS":
             for issue in preflight["issues"]:
                 if issue.get("severity") not in {"BLOCKER", "CONFIRMATION"}:
@@ -1949,6 +2048,7 @@ class WF01V02BatchService:
     def get_interactions(self, batch_id: str) -> dict[str, Any]:
         """Return the UI interactions persisted for a WF-01 batch."""
         batch = self.store.get(batch_id)
+        batch_id = str(batch["batch_id"])
         return {
             "batch_id": batch_id,
             "agent_interactions": copy.deepcopy(
@@ -1983,6 +2083,7 @@ class WF01V02BatchService:
             raise InputValidationError("remove_target_ids 必须是非空且不重复的靶标 ID")
 
         batch = self.store.get(batch_id)
+        batch_id = str(batch["batch_id"])
         if batch.get("m2_outcome") is not None or batch.get("status") not in {
             "QUEUED",
             "PENDING_CONFIRMATION",
@@ -2070,6 +2171,8 @@ class WF01V02BatchService:
                 },
             }
         )
+        if batch.get("required_execution_path") == "FULL_SPECIFICITY":
+            self._assert_full_route_context(preflight)
         submitted_at = utc_now()
         batch["preflight"] = preflight
         batch["target_manifest"] = copy.deepcopy(preflight["target_manifest"])
@@ -2107,6 +2210,7 @@ class WF01V02BatchService:
     def confirm_target_manifest(self, batch_id: str) -> dict[str, Any]:
         """Start a ready manifest or return its unresolved per-target form."""
         batch = self.store.get(batch_id)
+        batch_id = str(batch["batch_id"])
         if batch.get("m2_outcome") is not None or batch.get("status") not in {
             "QUEUED",
             "PENDING_CONFIRMATION",
@@ -2217,6 +2321,7 @@ class WF01V02BatchService:
             submitted_by_id[interaction_id] = item
 
         batch = self.store.get(batch_id)
+        batch_id = str(batch["batch_id"])
         persisted = batch.get("agent_interactions") or []
         persisted_by_id = {
             str((item.get("data") or {}).get("interactionId")): item
@@ -2636,6 +2741,7 @@ class WF01V02BatchService:
             raise InputValidationError("M7 reason 必须为非空文本")
 
         source = self.store.get(source_batch_id)
+        source_batch_id = str(source["batch_id"])
         if source.get("workflow") != "WF-01" or source.get("prd_version") != PRD_VERSION:
             raise InputValidationError(
                 "只能基于 WF-01 PRD v0.2 批次创建 M7 版本",
@@ -2687,6 +2793,8 @@ class WF01V02BatchService:
             WF01V02Preflight(preflight_payload).run(),
             source_targets,
         )
+        if source.get("required_execution_path") == "FULL_SPECIFICITY":
+            self._assert_full_route_context(preflight)
         fresh_by_id = {
             str(target["target_id"]): target
             for target in preflight.get("targets") or []
@@ -2799,6 +2907,8 @@ class WF01V02BatchService:
                 "created_at": utc_now(),
             },
         }
+        if source.get("required_execution_path") == "FULL_SPECIFICITY":
+            batch["required_execution_path"] = "FULL_SPECIFICITY"
         for target_id in rerun_target_ids:
             self._append_event(
                 batch,
@@ -3190,8 +3300,6 @@ class WF01V02BatchService:
 
     def execute_m4(self, batch_id: str, options: dict[str, Any] | None = None) -> dict[str, Any]:
         """Run the three-mode specificity evidence chain and final M4 ranking."""
-        from .wf01_v02_m4 import WF01V02M4Engine
-
         options = options or {}
         if not isinstance(options, dict):
             raise InputValidationError("M4 运行选项必须为对象")
@@ -3236,6 +3344,8 @@ class WF01V02BatchService:
 
         # Construct adapters before persisting RUNNING. Configuration or
         # executable-discovery failures must not leave a stage marked in-flight.
+        from .wf01_v02_m4 import WF01V02M4Engine
+
         engine = WF01V02M4Engine(
             self.catalog,
             self.config,
@@ -3747,7 +3857,6 @@ class WF01V02BatchService:
             required_exports = {
                 "html",
                 "process_html",
-                "rules_html",
                 "scientific_data",
             }
             missing_required = sorted(required_exports - set(export_metadata))
@@ -3951,6 +4060,7 @@ class WF01V02BatchService:
                 details={"format": format_name, "supported": sorted(supported)},
             )
         batch = self.store.get(batch_id)
+        batch_id = str(batch["batch_id"])
         m6 = batch.get("m6_execution") or {}
         if batch.get("m6_outcome") != "COMPLETED" or not m6:
             raise InputValidationError(
@@ -3993,6 +4103,15 @@ class WF01V02BatchService:
             raise InputValidationError(
                 "该批次的 HTML 主报告不可用",
                 details={"batch_id": batch_id},
+            )
+        if selected == "rules_html":
+            raise InputValidationError(
+                "21条规则验证报告已收纳在 ZIP 数据包中，不再提供新的独立导出",
+                details={
+                    "batch_id": batch_id,
+                    "requested_format": selected,
+                    "replacement_format": "scientific_data",
+                },
             )
 
         if selected == "scientific_data":
@@ -4084,6 +4203,7 @@ class WF01V02BatchService:
         """Return persisted publication metadata for one generated export."""
         selected = str(format_name).lower()
         batch = self.store.get(batch_id)
+        batch_id = str(batch["batch_id"])
         metadata = (
             ((batch.get("m6_execution") or {}).get("exports") or {}).get(
                 selected

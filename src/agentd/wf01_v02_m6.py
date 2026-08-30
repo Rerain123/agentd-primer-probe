@@ -25,17 +25,17 @@ from xml.etree import ElementTree as ET
 
 from .errors import ToolUnavailableError
 from .identifiers import wf01_batch_code
+from .wf01_v02_m3 import SCORING_WEIGHTS
 
 
-M6_ENGINE_VERSION = "wf01-v0.2-m6.6"
-CANONICAL_REPORT_SCHEMA_VERSION = "wf01-prd-v0.2-canonical-report-v1"
-EXPORT_CONTRACT_VERSION = "wf01-prd-v0.2-export-v3"
+M6_ENGINE_VERSION = "wf01-v0.2-m6.8-delivery-bundle"
+CANONICAL_REPORT_SCHEMA_VERSION = "wf01-prd-v0.2-canonical-report-v2"
+EXPORT_CONTRACT_VERSION = "wf01-prd-v0.2-export-v5"
 RULE_CODES = tuple(f"R{index:02d}" for index in range(1, 22))
 SCOPE_RULES = {
     "R13": ("NOT_APPLICABLE", "MGB", "WF-01 v0.2 本期不做 MGB"),
     "R14": ("NOT_APPLICABLE", "多重设计", "WF-01 v0.2 每个靶标独立设计，不做多重"),
     "R15": ("NOT_APPLICABLE", "内标", "WF-01 v0.2 本期不做内标"),
-    "R16": ("NOT_EVALUATED", "保守性", "WF-01 v0.2 本期不评价保守性"),
     "R17": ("NOT_APPLICABLE", "多重产物长度差", "WF-01 v0.2 本期不做多重"),
 }
 DISCLAIMER = {
@@ -276,11 +276,8 @@ def _candidate_scoring(candidate: dict[str, Any]) -> dict[str, Any]:
     if not scoring:
         scoring = {
             "status": "NOT_EVALUATED",
-            "weights": {
-                "thermodynamics": 0.357,
-                "specificity": 0.357,
-                "amplicon_features": 0.286,
-            },
+            "weights": copy.deepcopy(SCORING_WEIGHTS),
+            "effective_weights": {},
             "dimensions": {},
             "base_score": None,
             "penalties": [],
@@ -331,6 +328,68 @@ def _exclusion_reasons(candidate: dict[str, Any]) -> list[dict[str, Any]]:
     return reasons
 
 
+def _candidate_conservation(candidate: dict[str, Any]) -> dict[str, Any]:
+    saved = candidate.get("conservation")
+    if isinstance(saved, dict) and saved.get("status") in {
+        "EVALUATED",
+        "NOT_EVALUATED",
+    }:
+        return copy.deepcopy(saved)
+    evidence = copy.deepcopy(
+        (candidate.get("metadata") or {}).get("conservation_evidence")
+        or {}
+    )
+    if evidence.get("status") == "EVALUATED":
+        return {
+            "status": "EVALUATED",
+            "reason": (
+                evidence.get("reason")
+                or "MAFFT_SHANNON_BINDING_SITES_EVALUATED"
+            ),
+            "method": evidence.get("method") or "mafft_shannon",
+            "sequence_count": evidence.get("sequence_count"),
+            "reference_id": evidence.get("reference_id"),
+            "score": evidence.get("score"),
+            "coverage_percent": evidence.get("coverage_percent"),
+            "exact_match_sequence_count": evidence.get(
+                "exact_match_sequence_count"
+            ),
+            "confidence": evidence.get("confidence"),
+            "low_confidence_reasons": copy.deepcopy(
+                evidence.get("low_confidence_reasons") or []
+            ),
+            "region": copy.deepcopy(evidence.get("region") or {}),
+            "binding_sites": copy.deepcopy(
+                evidence.get("binding_sites") or {}
+            ),
+            "variant_positions": copy.deepcopy(
+                evidence.get("variant_positions") or []
+            ),
+        }
+    return {
+        "status": "NOT_EVALUATED",
+        "reason": (
+            evidence.get("reason")
+            or "CONSERVATION_EVIDENCE_NOT_SAVED"
+        ),
+        "method": evidence.get("method"),
+        "sequence_count": (
+            evidence.get("sequence_count")
+            or candidate.get("conservation_sequence_count")
+            or 1
+        ),
+        "reference_id": evidence.get("reference_id"),
+        "score": None,
+        "coverage_percent": None,
+        "confidence": "NOT_EVALUATED",
+        "region": copy.deepcopy(evidence.get("region") or {}),
+        "binding_sites": copy.deepcopy(
+            evidence.get("binding_sites") or {}
+        ),
+        "variant_positions": [],
+    }
+
+
 def _normalise_rules(candidate: dict[str, Any]) -> list[dict[str, Any]]:
     existing: dict[str, dict[str, Any]] = {}
     for item in candidate.get("rules") or []:
@@ -361,6 +420,36 @@ def _normalise_rules(candidate: dict[str, Any]) -> list[dict[str, Any]]:
             actual=None,
             threshold=threshold,
             source="PRD v0.2 scope",
+            message=message,
+        )
+    if "R16" not in existing:
+        conservation = _candidate_conservation(candidate)
+        if conservation["status"] == "EVALUATED":
+            status = (
+                "PASS"
+                if conservation.get("score") is not None
+                and float(conservation["score"]) >= 0.95
+                and conservation.get("confidence") == "HIGH"
+                else "WARNING"
+            )
+            message = (
+                "候选结合位点达到高置信度保守性要求"
+                if status == "PASS"
+                else "保守性已评估，但代表序列、阈值轮次或覆盖率需要复核"
+            )
+        else:
+            status = "NOT_EVALUATED"
+            message = str(conservation.get("reason") or "保守性未评估")
+        existing["R16"] = _rule(
+            "R16",
+            category="conservation",
+            status=status,
+            actual=copy.deepcopy(conservation),
+            threshold=(
+                "优先 conservation≥0.95、连续区≥150 bp 且代表序列 N≥20；"
+                "放宽或全长回退为 WARNING"
+            ),
+            source="C5/MAFFT + WF01 conservation analysis",
             message=message,
         )
     if "R18" not in existing:
@@ -440,11 +529,7 @@ def _candidate_for_report(
         "method": None,
         "result": None,
     }
-    value["conservation"] = {
-        "status": "NOT_EVALUATED",
-        "reason": "OUT_OF_SCOPE_WF01_V0_2",
-        "result": None,
-    }
+    value["conservation"] = _candidate_conservation(value)
     value["exclusion_reasons"] = _exclusion_reasons(value)
     value["rules"] = _normalise_rules(value)
 
@@ -504,6 +589,10 @@ def _candidate_for_report(
             _r21_specificity_documented(specificity, membership)
         ),
         "scoring_detail": isinstance(value.get("scoring_detail"), dict),
+        "conservation_evidence": (
+            (value.get("conservation") or {}).get("status")
+            in {"EVALUATED", "NOT_EVALUATED"}
+        ),
         "rules_R01_R20": {
             str(item.get("code")) for item in value.get("rules") or []
         }
@@ -519,18 +608,30 @@ def _candidate_for_report(
                 "required_fields": required_fields,
                 "missing_fields": missing,
                 "conservation_scoring": {
-                    "status": "DEFERRED",
-                    "included_in_r21_pass_condition": False,
-                    "reason": "DEFERRED_BY_CURRENT_RELEASE_SCOPE",
+                    "status": (
+                        value["conservation"]["status"]
+                    ),
+                    "included_in_r21_pass_condition": True,
+                    "participates_in_score": bool(
+                        (
+                            (
+                                value.get("scoring_detail") or {}
+                            ).get("dimensions", {}).get(
+                                "conservation", {}
+                            )
+                        ).get("participates_in_score")
+                    ),
+                    "score": value["conservation"].get("score"),
+                    "reason": value["conservation"].get("reason"),
                 },
             },
             threshold=(
                 "引物、探针和扩增产物序列、Tm、关键 ΔG、扩增子长度及 "
-                "BLAST 摘要齐全；保守性评分本版本暂缓"
+                "BLAST 摘要与明确的保守性证据状态齐全"
             ),
             source="M6 canonical report validator",
             message=(
-                "候选报告必需数据齐全；保守性评分本版本暂缓"
+                "候选报告必需数据及保守性证据状态齐全"
                 if not missing
                 else "候选报告缺少必需数据"
             ),
@@ -592,6 +693,10 @@ def _candidate_sources(target: dict[str, Any]) -> list[tuple[str, list[dict[str,
 def _assemble_candidates(target: dict[str, Any]) -> dict[str, Any]:
     records: dict[str, dict[str, Any]] = {}
     memberships: dict[str, set[str]] = {}
+    m4 = target.get("m4_execution") or {}
+    execution_path = str(
+        target.get("execution_path") or m4.get("execution_path") or ""
+    ).strip().upper() or None
     for collection, candidates in _candidate_sources(target):
         for candidate in candidates:
             if not isinstance(candidate, dict):
@@ -637,6 +742,7 @@ def _assemble_candidates(target: dict[str, Any]) -> dict[str, Any]:
                     "qualified": key in qualified_keys,
                     "deliverable": "DELIVERABLE" in categories,
                     "excluded": excluded,
+                    "execution_path": execution_path,
                     "exclusion_categories": sorted(
                         set(categories) & excluded_collections
                     ),
@@ -670,7 +776,6 @@ def _assemble_candidates(target: dict[str, Any]) -> dict[str, Any]:
                 output.append(copy.deepcopy(by_key[key]))
         return output
 
-    m4 = target.get("m4_execution") or {}
     occurrences = []
     m2 = target.get("m2_execution") or {}
     for collection in (
@@ -792,6 +897,32 @@ def _target_report(batch: dict[str, Any], target: dict[str, Any]) -> dict[str, A
     m3 = target.get("m3_execution") or {}
     m4 = target.get("m4_execution") or {}
     m5 = target.get("m5_execution") or {}
+    normalised_input = (
+        (batch.get("preflight") or {}).get("normalised_input") or {}
+    )
+    alignment = copy.deepcopy(m2.get("alignment") or {})
+    if alignment.get("status") not in {
+        "EVALUATED",
+        "NOT_EVALUATED",
+        "NOT_APPLICABLE",
+    }:
+        alignment = {
+            "status": "NOT_EVALUATED",
+            "reason": "M2_ALIGNMENT_RECORD_NOT_SAVED",
+            "method": None,
+            "sequence_count": target.get("template_count") or 1,
+            "source_records": [],
+        }
+    conservation = copy.deepcopy(m2.get("conservation") or {})
+    if conservation.get("status") not in {"EVALUATED", "NOT_EVALUATED"}:
+        conservation = {
+            "status": "NOT_EVALUATED",
+            "reason": "M2_CONSERVATION_RECORD_NOT_SAVED",
+            "method": None,
+            "sequence_count": target.get("template_count") or 1,
+            "reference_id": None,
+            "regions": [],
+        }
     all_candidates = candidates["all_primer3_candidates"]
     rule_summary = {
         code: {
@@ -815,8 +946,18 @@ def _target_report(batch: dict[str, Any], target: dict[str, Any]) -> dict[str, A
     return {
         "target_id": target.get("target_id"),
         "ordinal": target.get("ordinal"),
+        "execution_path": str(
+            target.get("execution_path") or m4.get("execution_path") or ""
+        ).strip().upper() or None,
         "input": {
             "template": copy.deepcopy(target.get("template")),
+            "templates": copy.deepcopy(
+                target.get("templates")
+                or ([target.get("template")] if target.get("template") else [])
+            ),
+            "template_count": target.get("template_count") or 1,
+            "alignment_required": bool(target.get("alignment_required")),
+            "sequence_mode": normalised_input.get("sequence_mode"),
             "parameters": copy.deepcopy(target.get("parameters")),
             "issues": copy.deepcopy(target.get("issues") or []),
             "target_object": copy.deepcopy(target.get("target_object")),
@@ -867,7 +1008,10 @@ def _target_report(batch: dict[str, Any], target: dict[str, Any]) -> dict[str, A
         ),
         **candidates,
         "rule_summary": rule_summary,
+        "conservation_evidence": conservation,
         "search_records": {
+            "alignment": alignment,
+            "conservation": copy.deepcopy(conservation),
             "parameter_runs": copy.deepcopy(m2.get("parameter_runs") or []),
             "exploration_manifest": copy.deepcopy(
                 m2.get("exploration_manifest")
@@ -913,10 +1057,6 @@ def _target_report(batch: dict[str, Any], target: dict[str, Any]) -> dict[str, A
             },
             "internal_control": {
                 "status": "NOT_APPLICABLE",
-                "reason": "OUT_OF_SCOPE_WF01_V0_2",
-            },
-            "conservation": {
-                "status": "NOT_EVALUATED",
                 "reason": "OUT_OF_SCOPE_WF01_V0_2",
             },
             "amplicon_secondary_structure": {
@@ -975,6 +1115,7 @@ def validate_canonical_report(report: dict[str, Any]) -> dict[str, Any]:
             "all_primer3_candidates",
             "primer3_candidate_occurrences",
             "search_records",
+            "conservation_evidence",
             "specificity_evidence",
             "out_of_scope",
         ):
@@ -983,6 +1124,45 @@ def validate_canonical_report(report: dict[str, Any]) -> dict[str, Any]:
                     "MISSING_TARGET_SECTION",
                     f"{base}.{section}",
                     "缺少靶标报告必需章节",
+                )
+        target_conservation = target.get("conservation_evidence") or {}
+        target_conservation_status = target_conservation.get("status")
+        target_alignment = (
+            (target.get("search_records") or {}).get("alignment") or {}
+        )
+        if target_conservation_status not in {"EVALUATED", "NOT_EVALUATED"}:
+            issue(
+                "INVALID_TARGET_CONSERVATION_STATE",
+                f"{base}.conservation_evidence",
+                "靶标保守性必须显式标记 EVALUATED 或 NOT_EVALUATED",
+            )
+        elif target_conservation_status == "EVALUATED":
+            sequence_count = target_conservation.get("sequence_count")
+            source_records = target_alignment.get("source_records") or []
+            if (
+                target_alignment.get("status") != "EVALUATED"
+                or target_alignment.get("method") != "mafft_shannon"
+                or not isinstance(sequence_count, int)
+                or sequence_count < 2
+                or len(source_records) != sequence_count
+                or not target_conservation.get("regions")
+            ):
+                issue(
+                    "MAFFT_CONSERVATION_TRACE_INCOMPLETE",
+                    f"{base}.conservation_evidence",
+                    "已评估保守性必须可追溯到真实 MAFFT、多序列来源和保守区记录",
+                )
+        else:
+            if any(
+                isinstance(region.get("conservation_score"), (int, float))
+                and not isinstance(region.get("conservation_score"), bool)
+                for region in target_conservation.get("regions") or []
+                if isinstance(region, dict)
+            ):
+                issue(
+                    "UNEVALUATED_TARGET_CONSERVATION_HAS_SCORE",
+                    f"{base}.conservation_evidence.regions",
+                    "靶标保守性未评估时不得保存保守分数",
                 )
         for candidate_position, candidate in enumerate(
             target.get("all_primer3_candidates") or []
@@ -1004,7 +1184,6 @@ def validate_canonical_report(report: dict[str, Any]) -> dict[str, Any]:
                 "R13": "NOT_APPLICABLE",
                 "R14": "NOT_APPLICABLE",
                 "R15": "NOT_APPLICABLE",
-                "R16": "NOT_EVALUATED",
                 "R17": "NOT_APPLICABLE",
             }.items():
                 if (rule_map.get(code) or {}).get("status") != expected_status:
@@ -1013,6 +1192,40 @@ def validate_canonical_report(report: dict[str, Any]) -> dict[str, Any]:
                         f"{candidate_path}.rules.{code}",
                         f"{code} 必须为 {expected_status}",
                     )
+            r16_status = (rule_map.get("R16") or {}).get("status")
+            if r16_status not in {"PASS", "WARNING", "NOT_EVALUATED"}:
+                issue(
+                    "INVALID_CONSERVATION_RULE_STATE",
+                    f"{candidate_path}.rules.R16",
+                    "R16 必须反映实际保守性证据：PASS、WARNING 或 NOT_EVALUATED",
+                )
+            conservation_evidence = candidate.get("conservation") or {}
+            conservation_status = conservation_evidence.get("status")
+            conservation_score = conservation_evidence.get("score")
+            if conservation_status not in {"EVALUATED", "NOT_EVALUATED"}:
+                issue(
+                    "INVALID_CONSERVATION_EVIDENCE_STATE",
+                    f"{candidate_path}.conservation",
+                    "保守性证据必须显式标记 EVALUATED 或 NOT_EVALUATED",
+                )
+            elif conservation_status == "EVALUATED" and (
+                isinstance(conservation_score, bool)
+                or not isinstance(conservation_score, (int, float))
+            ):
+                issue(
+                    "CONSERVATION_SCORE_MISSING",
+                    f"{candidate_path}.conservation.score",
+                    "完成 MAFFT 保守性评估时必须保存候选结合位点分数",
+                )
+            elif (
+                conservation_status == "NOT_EVALUATED"
+                and conservation_score is not None
+            ):
+                issue(
+                    "UNEVALUATED_CONSERVATION_HAS_SCORE",
+                    f"{candidate_path}.conservation.score",
+                    "未评估保守性时不得生成或保留分数",
+                )
             if (rule_map.get("R21") or {}).get("status") != "PASS":
                 issue(
                     "CANDIDATE_REPORT_INCOMPLETE",
@@ -1036,7 +1249,7 @@ def validate_canonical_report(report: dict[str, Any]) -> dict[str, Any]:
                 f"out_of_scope.{name}",
                 "本期外能力必须标记 NOT_APPLICABLE",
             )
-    for name in ("conservation", "amplicon_secondary_structure"):
+    for name in ("amplicon_secondary_structure",):
         if (scope.get(name) or {}).get("status") != "NOT_EVALUATED":
             issue(
                 "INVALID_NOT_EVALUATED_STATE",
@@ -1110,7 +1323,6 @@ class WF01V02CanonicalReportAssembler:
                 "user_download_formats": [
                     "html",
                     "process_html",
-                    "rules_html",
                     "scientific_data",
                     "csv",
                     "pdf",
@@ -1118,9 +1330,11 @@ class WF01V02CanonicalReportAssembler:
                 "default_generated_formats": [
                     "html",
                     "process_html",
-                    "rules_html",
                     "scientific_data",
                 ],
+                "bundled_report_formats": {
+                    "scientific_data": ["rules_html"],
+                },
                 "on_demand_formats": ["csv", "pdf"],
                 "user_json_download": False,
             },
@@ -1205,10 +1419,6 @@ class WF01V02CanonicalReportAssembler:
                 },
                 "internal_control": {
                     "status": "NOT_APPLICABLE",
-                    "reason": "OUT_OF_SCOPE_WF01_V0_2",
-                },
-                "conservation": {
-                    "status": "NOT_EVALUATED",
                     "reason": "OUT_OF_SCOPE_WF01_V0_2",
                 },
                 "amplicon_secondary_structure": {
@@ -1530,6 +1740,27 @@ def _process_reason(value: Any) -> str:
     reasons = {
         "NO_RELATED_OR_BACKGROUND_OBJECTS": "未提供近缘种或背景物种，因此本项不适用",
         "HOST_NOT_PROVIDED_OPTIONAL_CHECK_SKIPPED": "未提供宿主，宿主专库排除为可选项且本次不适用",
+        "AT_LEAST_ONE_OLIGO_LACKS_REQUIRED_TARGET_HIT": "至少一条引物或探针未检出满足判定阈值的靶标命中",
+        "TARGET_HIT_NOT_EXACT_FOR_EVERY_OLIGO": "至少一条引物或探针的靶标命中未达到完全匹配要求",
+        "EVERY_OLIGO_HAS_EXACT_TARGET_HIT": "正向引物、反向引物和 TaqMan 探针均检出完全匹配的靶标命中",
+        "HOST_HIGH_RISK_HIT_OR_COMPATIBLE_AMPLICON": "检出宿主高风险命中或可形成兼容扩增产物的正反向引物命中",
+        "HOST_HIT_THERMODYNAMICS_NOT_EVALUATED": "检出宿主命中，但缺少完成风险判定所需的热力学数据",
+        "HOST_HITS_REQUIRE_REVIEW": "检出宿主命中，需要人工复核其非特异性风险",
+        "NO_HOST_HIT_BELOW_EVALUE_THRESHOLD": "未检出低于 E-value 判定阈值的宿主命中",
+        "NON_TARGET_COMPATIBLE_AMPLICON": "在非靶标序列上检出可形成兼容扩增产物的正反向引物命中",
+        "HIGH_SIMILARITY_RELATED_OR_BACKGROUND_HIT": "检出高相似度的近缘种或背景序列命中，需要复核",
+        "NO_RELEVANT_NON_TARGET_HIT": "未检出达到判定阈值的非靶标命中",
+        "TARGET_OBJECT_MISSING": "未提供可用于靶标命中判定的靶标物种信息",
+        "DEVELOPMENT_FALLBACK_CANNOT_PROVE_TARGET_HIT": "当前备用检索方式不能证明靶标命中",
+        "DEVELOPMENT_FALLBACK_CANNOT_PROVE_HOST_EXCLUSION": "当前备用检索方式不能证明已排除宿主非特异性命中",
+        "DEVELOPMENT_FALLBACK_CANNOT_PROVE_NT_SPECIFICITY": "当前备用检索方式不能证明已排除近缘种或背景序列命中",
+        "HOST_EXCLUSION_EVALUATED_FOR_REQUESTED_HOSTS": "已对用户指定的宿主完成非特异性检查",
+        "ALL_REQUIRED_SPECIFICITY_MODES_PASS": "所有必需特异性检查均已通过",
+        "AT_LEAST_ONE_MODE_REQUIRES_REVIEW": "至少一类特异性检查需要人工复核",
+        "AT_LEAST_ONE_MODE_FAILED": "至少一类必需特异性检查未通过",
+        "NOT_RUN_CANDIDATE_EXCLUDED_BEFORE_SPECIFICITY": "该候选已在特异性检查前被排除，因此未执行本项检查",
+        "SPECIFICITY_RESULT_NOT_SAVED": "未保存该候选的特异性检查结果",
+        "SKIPPED_MISSING_CONTEXT": "缺少执行特异性检查所需的靶标或数据库信息",
         "NO_DELIVERABLE_CANDIDATES": "没有候选同时满足当前交付要求",
         "COMPLETE_SEARCH_WITH_ONE_TO_NINE_CANDIDATES": "完整搜索后获得的合格候选少于十套",
         "AT_LEAST_ONE_TARGET_NOT_FULLY_SUCCEEDED": "至少一个靶标存在未完成或未通过项目",
@@ -1543,11 +1774,16 @@ def _process_reason(value: Any) -> str:
         "TARGET_SEARCH_TOOL_ERROR": "靶标命中搜索工具执行失败",
         "HOST_DATABASE_OR_VERSION_NOT_RESOLVED": "宿主数据库或数据库版本未能确定",
         "HOST_SEARCH_TOOL_ERROR": "宿主排除搜索工具执行失败",
+        "SINGLE_SEQUENCE_NO_POPULATION_CONSERVATION": "仅提供 1 条序列，无法声明已完成群体保守性评估",
+        "DEVELOPMENT_ALIGNMENT_FALLBACK_CANNOT_PROVE_CONSERVATION": "未实际完成 MAFFT，多序列备用处理不能证明保守性",
+        "M2_CONSERVATION_RECORD_NOT_SAVED": "未保存 M2 保守性分析记录",
+        "MAFFT_CONSERVATION_NOT_COMPLETED": "MAFFT 保守性分析尚未完成",
+        "MAFFT_SHANNON_BINDING_SITES_EVALUATED": "已基于 MAFFT 与 Shannon 熵完成候选结合位点保守性评估",
     }
     if text in reasons:
         return reasons[text]
     if re.fullmatch(r"[A-Z][A-Z0-9_]+", text):
-        return "具体原因已记录在内部审计数据中"
+        return f"原因码：{text}"
     return text
 
 
@@ -1689,6 +1925,17 @@ def _process_rule_actual(candidate: dict[str, Any], rule: dict[str, Any]) -> str
     reverse = candidate.get("reverse_primer") or {}
     probe = candidate.get("probe") or {}
     amplicon = candidate.get("amplicon") or {}
+    conservation = candidate.get("conservation") or {}
+    conservation_score = conservation.get("score")
+    conservation_summary = (
+        f"候选结合位点保守性 {_format_number(float(conservation_score) * 100)}%；"
+        f"代表序列 N={_format_number(conservation.get('sequence_count'))}；"
+        f"三条寡核苷酸全匹配覆盖 {_format_number(conservation.get('coverage_percent'))}%"
+        if conservation.get("status") == "EVALUATED"
+        and isinstance(conservation_score, (int, float))
+        and not isinstance(conservation_score, bool)
+        else _process_reason(conservation.get("reason")) or "保守性未评估"
+    )
     summaries = {
         "R01": (
             f"正向引物 {_format_number(forward.get('tm_celsius'))} ℃；"
@@ -1725,12 +1972,13 @@ def _process_rule_actual(candidate: dict[str, Any], rule: dict[str, Any]) -> str
             f"探针 {_format_number(probe.get('hairpin_dg_kcal'))} kcal/mol"
         ),
         "R12": f"正反向引物二聚体 ΔG {_format_number(candidate.get('pair_heterodimer_dg_kcal'))} kcal/mol",
+        "R16": conservation_summary,
         "R18": "热力学软件、算法与浓度元数据已检查",
         "R19": f"综合特异性结论：{_process_status((candidate.get('specificity') or {}).get('overall_status'))}",
         "R20": "检测证据来源已记录",
         "R21": (
             "引物、探针和扩增产物序列、Tm、关键 ΔG、扩增子长度及 "
-            "BLAST 摘要已检查；保守性评分本版本暂缓"
+            f"BLAST 摘要已检查；保守性证据状态为 {_process_status(conservation.get('status'))}"
         ),
     }
     actual = rule.get("actual")
@@ -1834,11 +2082,74 @@ def _specificity_object_name(mode: dict[str, Any]) -> str:
     return "、".join(names)
 
 
+_SPECIFICITY_OLIGO_LABELS = {
+    "forward": "正向引物",
+    "reverse": "反向引物",
+    "probe": "TaqMan 探针",
+}
+
+
+def _join_chinese_items(values: list[str]) -> str:
+    if len(values) < 2:
+        return "".join(values)
+    connector = "和 " if re.match(r"[A-Za-z]", values[-1]) else "和"
+    return "、".join(values[:-1]) + connector + values[-1]
+
+
+def _target_hit_threshold_text(mode: dict[str, Any]) -> str:
+    thresholds = mode.get("thresholds") or {}
+    facts: list[str] = []
+    identity = thresholds.get("pass_identity_pct")
+    coverage = thresholds.get("pass_coverage_pct")
+    mismatches = thresholds.get("pass_three_prime_mismatches")
+    if _r21_number_present(identity):
+        facts.append(f"相似度 {_format_number(identity, 2)}%")
+    if _r21_number_present(coverage):
+        facts.append(f"查询覆盖率 {_format_number(coverage, 2)}%")
+    if _r21_number_present(mismatches):
+        facts.append(f"3′端错配 {_format_number(mismatches)}")
+    return f"（要求{'、'.join(facts)}）" if facts else ""
+
+
+def _specificity_reason_evidence(mode: dict[str, Any]) -> str:
+    reason = _process_reason(mode.get("reason"))
+    if str(mode.get("mode") or "").upper() != "TARGET_HIT":
+        return reason
+
+    mode_specific = mode.get("mode_specific") or {}
+    per_query_status = mode_specific.get("per_query_status") or {}
+    if not isinstance(per_query_status, dict):
+        return reason
+    failed_roles = [
+        _SPECIFICITY_OLIGO_LABELS.get(str(role), str(role))
+        for role, status in per_query_status.items()
+        if str(status or "").upper() == "FAIL"
+    ]
+    caution_roles = [
+        _SPECIFICITY_OLIGO_LABELS.get(str(role), str(role))
+        for role, status in per_query_status.items()
+        if str(status or "").upper() == "CAUTION"
+    ]
+    threshold = _target_hit_threshold_text(mode)
+    if failed_roles:
+        subject = _join_chinese_items(failed_roles)
+        quantifier = "均" if len(failed_roles) > 1 else ""
+        return (
+            f"{subject}{quantifier}未检出满足判定阈值的靶标命中"
+            f"{threshold}"
+        )
+    if caution_roles:
+        subject = _join_chinese_items(caution_roles)
+        quantifier = "均" if len(caution_roles) > 1 else ""
+        return f"{subject}{quantifier}未达到完全匹配要求{threshold}"
+    return reason
+
+
 def _specificity_hit_evidence(mode: dict[str, Any]) -> str:
     hits = [item for item in mode.get("hits") or [] if isinstance(item, dict)]
+    status = str(mode.get("status") or "").upper()
+    reason = _specificity_reason_evidence(mode)
     if not hits:
-        status = str(mode.get("status") or "").upper()
-        reason = _process_reason(mode.get("reason"))
         if status == "NOT_APPLICABLE":
             return reason or "本项不适用"
         if str(mode.get("mode") or "") in {
@@ -1854,12 +2165,16 @@ def _specificity_hit_evidence(mode: dict[str, Any]) -> str:
     for hit in hits[:2]:
         subject = (
             hit.get("organism")
+            or hit.get("scientific_name")
             or hit.get("title")
             or hit.get("subject_title")
             or hit.get("subject_id")
+            or hit.get("accession")
             or "未命名序列"
         )
         identity = hit.get("identity_percent")
+        if identity is None:
+            identity = hit.get("identity_pct")
         coverage = hit.get("query_coverage_pct")
         if coverage is None:
             coverage = hit.get("coverage_percent")
@@ -1879,7 +2194,10 @@ def _specificity_hit_evidence(mode: dict[str, Any]) -> str:
             f"{subject}（{'，'.join(facts)}）" if facts else str(subject)
         )
     suffix = f"；另有 {len(hits) - 2} 条命中" if len(hits) > 2 else ""
-    return "；".join(summaries) + suffix
+    hit_summary = "；".join(summaries) + suffix
+    if status in {"FAIL", "CAUTION", "NOT_EVALUATED"} and reason:
+        return f"{reason}；代表性命中：{hit_summary}"
+    return hit_summary
 
 
 def _candidate_specificity_panel_html(
@@ -2021,6 +2339,10 @@ def _process_tables(
                 target_name,
                 template.get("source_file"),
                 template.get("length_nt"),
+                target_input.get("template_count") or 1,
+                _process_status(
+                    (target.get("conservation_evidence") or {}).get("status")
+                ),
                 target_label,
                 "、".join(str(item) for item in host_labels if item) or "未记录",
                 _process_parameters(target_input.get("parameters")),
@@ -2044,6 +2366,14 @@ def _process_tables(
                     ),
                     f"{_format_number(region.get('start'))}–{_format_number(region.get('end'))}",
                     region.get("length_nt"),
+                    (
+                        round(float(region["conservation_score"]) * 100, 3)
+                        if isinstance(region.get("conservation_score"), (int, float))
+                        and not isinstance(region.get("conservation_score"), bool)
+                        else None
+                    ),
+                    region.get("confidence"),
+                    region.get("selection_round"),
                     _process_parameters(unit.get("effective_parameters")),
                     _process_status(unit.get("status")),
                     counts.get("generated"),
@@ -2063,6 +2393,9 @@ def _process_tables(
                         _process_profile(run.get("profile_labels") or run.get("profile")),
                         "完整模板",
                         template.get("length_nt"),
+                        "",
+                        "",
+                        "",
                         _process_parameters(run.get("parameters")),
                         "搜索记录已保存",
                         "",
@@ -2140,6 +2473,7 @@ def _process_tables(
                 [
                     target_name,
                     candidate_label,
+                    (dimensions.get("conservation") or {}).get("raw_score"),
                     (dimensions.get("thermodynamics") or {}).get("raw_score"),
                     (dimensions.get("specificity") or {}).get("raw_score"),
                     (dimensions.get("amplicon_features") or {}).get("raw_score"),
@@ -2207,11 +2541,11 @@ def _process_tables(
             tool_rows,
         ),
         "inputs": (
-            ["靶标", "输入文件", "序列长度（nt）", "目标物种", "宿主", "设计参数", "序列校验值"],
+            ["靶标", "输入文件", "参考序列长度（nt）", "代表序列数", "保守性状态", "目标物种", "宿主", "设计参数", "序列校验值"],
             input_rows,
         ),
         "searches": (
-            ["靶标", "搜索轮次", "参数档位", "设计区域", "区域长度（nt）", "实际参数", "执行结果", "生成候选", "硬性检测通过", "硬性检测未通过", "未完成检测", "开始时间", "结束时间"],
+            ["靶标", "搜索轮次", "参数档位", "设计区域", "区域长度（nt）", "区域保守性（%）", "保守性置信度", "保守区筛选轮次", "实际参数", "执行结果", "生成候选", "硬性检测通过", "硬性检测未通过", "未完成检测", "开始时间", "结束时间"],
             search_rows,
         ),
         "candidates": (
@@ -2223,7 +2557,7 @@ def _process_tables(
             rule_rows,
         ),
         "scores": (
-            ["靶标", "候选编号", "热力学得分", "特异性得分", "扩增子特征得分", "加权基础分", "软性扣分（%）", "最终得分", "最终排名", "扣分说明"],
+            ["靶标", "候选编号", "保守性得分", "热力学得分", "特异性得分", "扩增子特征得分", "加权基础分", "软性扣分（%）", "最终得分", "最终排名", "扣分说明"],
             score_rows,
         ),
         "specificity": (
@@ -2573,6 +2907,9 @@ def _process_search_rows_for_html(
         "参数档位",
         "设计区域",
         "区域长度（nt）",
+        "区域保守性（%）",
+        "保守性置信度",
+        "保守区筛选轮次",
         "为何使用放宽规则",
         "执行结果",
         "生成候选",
@@ -2609,6 +2946,14 @@ def _process_search_rows_for_html(
                     ),
                     f"{_format_number(region.get('start'))}–{_format_number(region.get('end'))}",
                     region.get("length_nt"),
+                    (
+                        round(float(region["conservation_score"]) * 100, 3)
+                        if isinstance(region.get("conservation_score"), (int, float))
+                        and not isinstance(region.get("conservation_score"), bool)
+                        else None
+                    ),
+                    region.get("confidence"),
+                    region.get("selection_round"),
                     reason,
                     _process_status(unit.get("status")),
                     counts.get("generated"),
@@ -2633,6 +2978,9 @@ def _process_search_rows_for_html(
                         "完整模板",
                         template.get("length_nt"),
                         "",
+                        "",
+                        "",
+                        "",
                         "搜索记录已保存",
                         "",
                         "",
@@ -2653,14 +3001,14 @@ def render_process_detail_html(report: dict[str, Any]) -> bytes:
     sections = [
         ("tools", "实验过程与科学工具", "按执行顺序展示每一步使用的工具、处理对象和完成时间。", "tool_runs", True),
         ("inputs", "任务输入与设计参数", "展示传入的文件、原始输入序列和设计参数。", "inputs", True),
-        ("searches", "Primer3 候选生成过程", "标准参数成功时只展示标准轮次；只有未获得通过候选时，才展示放宽轮次及上一轮未满足的项目。", "searches", True),
+        ("searches", "MAFFT 保守区与 Primer3 候选生成过程", "先展示 MAFFT 保守区、阈值轮次与置信度；标准参数成功时只展示标准轮次，未获得通过候选时再展示放宽参数。", "searches", True),
         ("candidate-results", "候选筛选结果", "先汇总候选数量和筛选结论，再查看每个候选的得分、排名及主要未通过原因。", "candidate_results", True),
         ("candidates", "全部候选详情", "保留所有生成候选；每个候选单独展示引物、探针和扩增子。", "candidates", True),
         ("rules", "逐项检测结果", "按候选归类，直接显示各候选通过、未通过及需关注的项目数。", "rules", False),
         (
             "scores",
             "评分与排序过程",
-            "展示三维评分、软性扣分和最终排名；引物 Tm 在 55–65°C 内同等，50–<55°C 统一扣 5%，范围外候选在硬规则阶段排除。",
+            "展示实际参与的评分维度、软性扣分和最终排名；真实 MAFFT 证据可进入四维评分，未完成时不伪造分数并归一化其余三维。",
             "scores",
             False,
         ),
@@ -3114,10 +3462,9 @@ def _process_csv(headers: list[str], rows: list[list[Any]]) -> bytes:
 
 
 def render_scientific_data_archive(report: dict[str, Any]) -> bytes:
-    """Package human-readable process data without exposing code-shaped JSON."""
+    """Package the rule report and support tables without duplicating direct HTML."""
     artifact_manifest = report.get("_scientific_artifact_manifest") or {}
     tables = _process_tables(report, artifact_manifest)
-    process_html = render_process_detail_html(report)
     rules_html = render_rules_validation_html(report)
     filenames = {
         "tool_runs": "01_科学工具与数据清单.csv",
@@ -3133,6 +3480,8 @@ def render_scientific_data_archive(report: dict[str, Any]) -> bytes:
     readme = (
         "WF-01 科学工具数据包\r\n\r\n"
         "本数据包使用中文表格保存科学工具产生的数据和计算结果。\r\n"
+        "21条规则验证报告作为本压缩包内的 HTML 文件交付。\r\n"
+        "主报告和科学过程详情报告由系统作为独立 HTML 附件交付，本压缩包不重复保存。\r\n"
         "为便于阅读和保护运行环境，不包含 JSON、程序代码、命令行、内部字段名或访问密钥。\r\n"
         "服务端仍保留带校验值的不可变原始证据，可用于内部审计和问题追溯。\r\n"
         f"任务编号：{report.get('batch_code') or '-'}\r\n"
@@ -3147,7 +3496,6 @@ def render_scientific_data_archive(report: dict[str, Any]) -> bytes:
         compresslevel=6,
     ) as archive:
         archive.writestr("使用说明.txt", readme)
-        archive.writestr("科学过程详情报告.html", process_html)
         archive.writestr("21条规则验证报告.html", rules_html)
         for key, filename in filenames.items():
             headers, rows = tables[key]
@@ -3181,6 +3529,7 @@ _DELIVERY_CHECK_LABELS = {
     "R10": "正反向引物 3′ 端交叉二聚体风险",
     "R11": "引物及探针发卡结构风险",
     "R12": "非 3′ 端弱二聚体风险",
+    "R16": "MAFFT 靶序列保守性",
     "R19": "靶标命中、背景序列及可选宿主排除特异性",
 }
 
@@ -3192,10 +3541,12 @@ _DELIVERY_WARNING_LABELS = {
     "R03_SOFT": "引物 3′ 端序列构成需要复核",
     "R11": _DELIVERY_CHECK_LABELS["R11"],
     "R12": _DELIVERY_CHECK_LABELS["R12"],
+    "R16": _DELIVERY_CHECK_LABELS["R16"],
     "R19": _DELIVERY_CHECK_LABELS["R19"],
 }
 
 _DELIVERY_SCORING_DIMENSIONS = {
+    "conservation": "保守性",
     "thermodynamics": "热力学",
     "specificity": "特异性",
     "amplicon_features": "扩增子特征",
@@ -3206,6 +3557,7 @@ _DELIVERY_PENALTY_LABELS = {
     "R03_SOFT": "引物 3′ 端序列构成需要复核",
     "R11": "发卡结构需要关注",
     "R12": "非 3′ 端弱二聚体需要关注",
+    "LOW_CONFIDENCE_CONSERVATION": "保守性证据置信度较低",
 }
 
 
@@ -3221,6 +3573,33 @@ def _delivery_score(value: Any) -> str:
     return f"{number:.1f}/100" if number is not None else "未评估"
 
 
+def _delivery_candidate_scoring(candidate: dict[str, Any]) -> dict[str, Any]:
+    return candidate.get("scoring_detail") or (
+        (candidate.get("metadata") or {}).get("wf01_v02_scoring") or {}
+    )
+
+
+def _delivery_candidate_score(
+    candidate: dict[str, Any],
+) -> tuple[float | None, str | None]:
+    """Resolve an already-saved score without recalculating candidate data."""
+    scoring = _delivery_candidate_scoring(candidate)
+    for source, value in (
+        ("candidate.score", candidate.get("score")),
+        ("scoring.final_score", scoring.get("final_score")),
+        ("scoring.reported_score", scoring.get("reported_score")),
+    ):
+        number = _delivery_number(value, 6)
+        if number is not None:
+            return number, source
+
+    priority = scoring.get("pre_specificity_priority") or {}
+    number = _delivery_number(priority.get("after_penalties"), 6)
+    if number is not None:
+        return number, "scoring.pre_specificity_priority.after_penalties"
+    return None, None
+
+
 def _delivery_percent(value: Any) -> str:
     number = _delivery_number(value, 1)
     return f"{number:.1f}%" if number is not None else "未评估"
@@ -3232,11 +3611,29 @@ def _delivery_status(value: Any) -> str:
 
 
 def _delivery_score_label(candidate: dict[str, Any]) -> str:
-    scoring = candidate.get("scoring_detail") or (
-        (candidate.get("metadata") or {}).get("wf01_v02_scoring") or {}
-    )
+    scoring = _delivery_candidate_scoring(candidate)
     label = str(scoring.get("score_label") or "").strip()
-    return label if label in {"设计评分", "综合评分"} else "综合评分"
+    if label in {"设计评分", "综合评分", "预排序分"}:
+        return label
+    if str(scoring.get("score_type") or "").upper() == "DESIGN_SCORE":
+        return "设计评分"
+    if str(scoring.get("status") or "").upper() == "FINAL_DESIGN_ONLY":
+        return "设计评分"
+    execution_path = str(
+        scoring.get("execution_path")
+        or (candidate.get("report_membership") or {}).get("execution_path")
+        or ""
+    ).upper()
+    if execution_path == "DESIGN_ONLY":
+        return "设计评分"
+    _, score_source = _delivery_candidate_score(candidate)
+    if (
+        score_source == "scoring.pre_specificity_priority.after_penalties"
+        or str(scoring.get("status") or "").upper()
+        == "PENDING_SPECIFICITY"
+    ):
+        return "预排序分"
+    return "综合评分"
 
 
 def _delivery_candidates_score_label(candidates: list[dict[str, Any]]) -> str:
@@ -3278,36 +3675,95 @@ def _delivery_original_sequences(targets: list[dict[str, Any]]) -> str:
 
 def _delivery_scoring_policy(candidates: list[dict[str, Any]]) -> str:
     labels = {_delivery_score_label(candidate) for candidate in candidates}
-    if labels == {"设计评分"}:
+    full_candidates = [
+        candidate
+        for candidate in candidates
+        if _delivery_score_label(candidate) == "综合评分"
+    ]
+    conservation_modes = [
+        bool(
+            (
+                ((candidate.get("scoring_detail") or {}).get("dimensions") or {})
+                .get("conservation", {})
+            ).get("participates_in_score")
+        )
+        for candidate in full_candidates
+    ]
+    full_uses_conservation = any(conservation_modes)
+    full_uses_three_dimension_fallback = any(
+        not mode for mode in conservation_modes
+    )
+    if labels == {"预排序分"}:
+        items = [
+            ("当前状态", "Step 5 尚未完成"),
+            ("当前显示", "Step 5 前预排序分"),
+            ("用途", "仅用于候选顺序，不是最终综合评分"),
+        ]
+        formula = "读取已保存的预排序分；Step 5 完成后才生成最终综合评分。"
+    elif labels == {"设计评分"}:
         items = [
             ("热力学", "权重 55.5%"),
             ("特异性", "未评估，不参与设计评分"),
             ("扩增子特征", "权重 44.5%"),
-            ("保守性", "本期未评估，不计分"),
+            ("保守性", "证据可展示；设计评分路线不计入"),
         ]
         formula = (
             "二维归一化加权基础分 ×（1 − 软规则累计扣分比例）；"
             "仅适用于本次仅序列设计路线。"
         )
     elif len(labels) > 1:
-        items = [
-            ("仅序列路线", "热力学 55.5% + 扩增子特征 44.5%"),
-            ("完整路线", "热力学 35.7% + 特异性 35.7% + 扩增子特征 28.6%"),
-            ("软规则", "在对应路线的加权基础分上扣分"),
-            ("保守性", "本期未评估，不计分"),
-        ]
-        formula = "各靶标按其实际执行路线独立评分和排名，两种分数不混合比较。"
+        items = []
+        if "设计评分" in labels:
+            items.append(
+                ("仅序列路线", "热力学 55.5% + 扩增子特征 44.5%")
+            )
+        if "预排序分" in labels:
+            items.append(
+                ("Step 5 未完成", "显示预排序分，不冒充最终综合评分")
+            )
+        if full_uses_conservation:
+            items.append(
+                (
+                    "完整路线 · MAFFT 已评估",
+                    "保守性 30% + 热力学 25% + 特异性 25% + 扩增子特征 20%",
+                )
+            )
+        if full_uses_three_dimension_fallback:
+            items.append(
+                (
+                    "完整路线 · 保守性未评估",
+                    "热力学 35.7% + 特异性 35.7% + 扩增子特征 28.6%",
+                )
+            )
+        items.append(("未评估原则", "按已完成阶段和实际参与维度展示"))
+        formula = "预排序分、设计评分和综合评分保持独立口径，不互相替代。"
     else:
-        items = [
-            ("热力学", "权重 35.7%"),
-            ("特异性", "权重 35.7%"),
-            ("扩增子特征", "权重 28.6%"),
-            ("保守性", "本期未评估，不计分"),
-        ]
-        formula = (
-            "三维加权基础分 ×（1 − 软规则累计扣分比例）；"
-            "必需特异性评估未完成时不生成综合评分。"
-        )
+        if full_uses_conservation and not full_uses_three_dimension_fallback:
+            items = [
+                ("保守性", "权重 30.0%"),
+                ("热力学", "权重 25.0%"),
+                ("特异性", "权重 25.0%"),
+                ("扩增子特征", "权重 20.0%"),
+            ]
+            formula = "四维加权基础分 ×（1 − 软规则累计扣分比例）；低置信保守性证据另行扣分。"
+        elif full_uses_conservation:
+            items = [
+                ("有 MAFFT 证据的候选", "采用 30% / 25% / 25% / 20% 四维评分"),
+                ("保守性未评估的候选", "其余三维归一化为 35.7% / 35.7% / 28.6%"),
+                ("未评估原则", "不生成假保守分"),
+            ]
+            formula = "每个候选只使用有明确科学证据的维度计算综合评分。"
+        else:
+            items = [
+                ("热力学", "归一化权重 35.7%"),
+                ("特异性", "归一化权重 35.7%"),
+                ("扩增子特征", "归一化权重 28.6%"),
+                ("保守性", "未评估，不生成假分数"),
+            ]
+            formula = (
+                "三维归一化基础分 ×（1 − 软规则累计扣分比例）；"
+                "必需特异性评估未完成时不生成综合评分。"
+            )
     cards = "".join(
         f"<div><span>{html.escape(label)}</span>"
         f"<strong>{html.escape(value)}</strong></div>"
@@ -3322,11 +3778,58 @@ def _delivery_scoring_policy(candidates: list[dict[str, Any]]) -> str:
 
 
 def _delivery_score_breakdown(candidate: dict[str, Any]) -> str:
-    scoring = candidate.get("scoring_detail") or {}
+    scoring = _delivery_candidate_scoring(candidate)
     dimensions = scoring.get("dimensions") or {}
     weights = scoring.get("effective_weights") or scoring.get("weights") or {}
     score_label = _delivery_score_label(candidate)
     design_only = score_label == "设计评分"
+    priority_only = score_label == "预排序分"
+    priority = scoring.get("pre_specificity_priority") or {}
+    if design_only and not scoring.get("effective_weights"):
+        evaluated_weight = _delivery_number(priority.get("evaluated_weight"), 6)
+        if evaluated_weight:
+            weights = {
+                name: (
+                    float(weights.get(name)) / evaluated_weight
+                    if isinstance(weights.get(name), (int, float))
+                    and not isinstance(weights.get(name), bool)
+                    and name in {"thermodynamics", "amplicon_features"}
+                    else 0.0
+                )
+                for name in _DELIVERY_SCORING_DIMENSIONS
+            }
+    if priority_only and not scoring.get("effective_weights"):
+        participating_names = priority.get("participating_dimensions") or [
+            name
+            for name, detail in dimensions.items()
+            if name != "specificity"
+            and isinstance(detail, dict)
+            and _delivery_number(detail.get("raw_score"), 6) is not None
+        ]
+        priority_weights = priority.get("effective_weights") or {}
+        if priority_weights:
+            weights = priority_weights
+        else:
+            evaluated_weight = sum(
+                float(weights.get(name))
+                for name in participating_names
+                if isinstance(weights.get(name), (int, float))
+                and not isinstance(weights.get(name), bool)
+            )
+            if evaluated_weight:
+                weights = {
+                    name: (
+                        float(weights.get(name)) / evaluated_weight
+                        if name in participating_names
+                        and isinstance(weights.get(name), (int, float))
+                        and not isinstance(weights.get(name), bool)
+                        else 0.0
+                    )
+                    for name in _DELIVERY_SCORING_DIMENSIONS
+                }
+    conservation_participates = bool(
+        (dimensions.get("conservation") or {}).get("participates_in_score")
+    )
     dimension_items: list[str] = []
     for key, label in _DELIVERY_SCORING_DIMENSIONS.items():
         detail = dimensions.get(key) or {}
@@ -3334,9 +3837,31 @@ def _delivery_score_breakdown(candidate: dict[str, Any]) -> str:
         weight = weights.get(key)
         participates = detail.get("participates_in_score")
         if participates is None:
-            participates = not (
-                design_only and key == "specificity"
-            )
+            if priority_only:
+                participating_names = priority.get(
+                    "participating_dimensions"
+                ) or [
+                    name
+                    for name, candidate_detail in dimensions.items()
+                    if name != "specificity"
+                    and isinstance(candidate_detail, dict)
+                    and _delivery_number(
+                        candidate_detail.get("raw_score"), 6
+                    )
+                    is not None
+                ]
+                participates = key in participating_names
+            else:
+                participates = (
+                    key in {"thermodynamics", "amplicon_features"}
+                    if design_only
+                    else key
+                    in {
+                        "thermodynamics",
+                        "specificity",
+                        "amplicon_features",
+                    }
+                )
         score_text = _delivery_score(value)
         if participates:
             weight_text = (
@@ -3345,7 +3870,12 @@ def _delivery_score_breakdown(candidate: dict[str, Any]) -> str:
                 else "权重未提供"
             )
         else:
-            weight_text = "本路线不参与"
+            if priority_only and key == "specificity":
+                weight_text = "Step 5 尚未完成"
+            elif priority_only:
+                weight_text = "未纳入当前预排序"
+            else:
+                weight_text = "本路线不参与"
         dimension_items.append(
             '<div class="score-dimension">'
             f'<span>{html.escape(label)} · {html.escape(weight_text)}</span>'
@@ -3354,12 +3884,12 @@ def _delivery_score_breakdown(candidate: dict[str, Any]) -> str:
         )
 
     base_score = scoring.get("base_score")
+    if base_score is None and (design_only or priority_only):
+        base_score = priority.get("base")
     penalty = scoring.get("applied_penalty_percent")
     if penalty is None:
         penalty = scoring.get("total_penalty_percent")
-    final_score = scoring.get("final_score")
-    if final_score is None:
-        final_score = candidate.get("score")
+    final_score, _ = _delivery_candidate_score(candidate)
     penalty_number = _delivery_number(penalty, 1) or 0.0
     penalty_items = []
     for item in scoring.get("penalties") or []:
@@ -3382,16 +3912,26 @@ def _delivery_score_breakdown(candidate: dict[str, Any]) -> str:
         else '<p class="no-penalty">无软规则扣分</p>'
     )
     breakdown_title = (
-        "二维设计评分与软规则扣分"
+        "Step 5 前预排序分与软规则扣分"
+        if priority_only
+        else "二维设计评分与软规则扣分"
         if design_only
-        else "三维基础分与软规则扣分"
+        else "四维基础分与软规则扣分"
+        if conservation_participates
+        else "三维归一化基础分与软规则扣分"
     )
     breakdown_note = (
-        "特异性未评估，不参与设计评分"
+        "Step 5 尚未完成；当前数值仅用于候选顺序，不是最终综合评分"
+        if priority_only
+        else "特异性和保守性不参与设计评分"
         if design_only
-        else "保守性本期未评估，不参与评分"
+        else "MAFFT 候选结合位点证据已参与评分"
+        if conservation_participates
+        else "保守性未评估，不生成假分数；其余维度已归一化"
     )
-    final_score_label = f"最终{score_label}"
+    final_score_label = (
+        "当前预排序分" if priority_only else f"最终{score_label}"
+    )
     return f"""
         <section class="score-panel">
           <div class="score-panel-heading"><div><span>评分构成</span><h4>{html.escape(breakdown_title)}</h4></div><small>{html.escape(breakdown_note)}</small></div>
@@ -3460,7 +4000,29 @@ def _delivery_target_coverage(candidate: dict[str, Any]) -> float | None:
 
 
 def _delivery_conservation(candidate: dict[str, Any]) -> str:
-    return "本版本暂缓"
+    conservation = candidate.get("conservation") or {}
+    score = conservation.get("score")
+    if (
+        conservation.get("status") == "EVALUATED"
+        and isinstance(score, (int, float))
+        and not isinstance(score, bool)
+    ):
+        details = [f"{float(score) * 100:.1f}%"]
+        sequence_count = conservation.get("sequence_count")
+        if sequence_count is not None:
+            details.append(f"N={sequence_count}")
+        coverage = _delivery_number(conservation.get("coverage_percent"), 1)
+        if coverage is not None:
+            details.append(f"三位点全匹配 {coverage:.1f}%")
+        confidence = {
+            "HIGH": "高置信",
+            "LOW": "低置信",
+        }.get(str(conservation.get("confidence") or "").upper())
+        if confidence:
+            details.append(confidence)
+        return "；".join(details)
+    reason = _process_reason(conservation.get("reason"))
+    return f"未评估：{reason}" if reason else "未评估"
 
 
 def _delivery_metric(label: str, value: str, *, primary: bool = False) -> str:
@@ -3647,6 +4209,7 @@ def _delivery_candidate_summary_table(
     score_label = _delivery_candidates_score_label(candidates)
     rows = []
     for ordinal, candidate in enumerate(candidates, start=1):
+        candidate_score, _ = _delivery_candidate_score(candidate)
         verdict_key = str(candidate.get("verdict") or "").upper()
         status_class = (
             "attention" if verdict_key == "PASS_WITH_WARNINGS" else "recommended"
@@ -3662,7 +4225,7 @@ def _delivery_candidate_summary_table(
                 f'<td><span class="summary-sequence">{html.escape(sequence)}</span></td>'
                 for sequence in sequences
             )
-            + f'<td><strong class="summary-score">{html.escape(_delivery_score(candidate.get("score")))}</strong></td>'
+            + f'<td><strong class="summary-score">{html.escape(_delivery_score(candidate_score))}</strong></td>'
             + f'<td><span class="candidate-status {status_class}">{html.escape(_delivery_status(candidate.get("verdict")))}</span></td>'
             + "</tr>"
         )
@@ -3686,6 +4249,7 @@ def _delivery_candidate_parameter_table(
     probe = candidate.get("probe") or {}
     amplicon = candidate.get("amplicon") or {}
     score_label = _delivery_score_label(candidate)
+    candidate_score, _ = _delivery_candidate_score(candidate)
 
     def measure(value: Any, unit: str, decimals: int = 1) -> str:
         number = _delivery_number(value, decimals)
@@ -3703,7 +4267,7 @@ def _delivery_candidate_parameter_table(
       <section class="candidate-parameter-detail">
         <div class="candidate-parameter-heading"><span>候选方案数据</span><h4>引物探针详细参数</h4></div>
         <div class="candidate-data-table-wrap"><table class="candidate-data-table"><tbody>
-          <tr><th>目标基因 ID</th><td>{html.escape(target_gene_id)}</td><th>扩增子长度</th><td>{measure(amplicon.get('length_bp'), ' bp', 0)}</td><th>引物对{html.escape(score_label)}</th><td><strong class="detail-score">{html.escape(_delivery_score(candidate.get('score')))}</strong></td></tr>
+          <tr><th>目标基因 ID</th><td>{html.escape(target_gene_id)}</td><th>扩增子长度</th><td>{measure(amplicon.get('length_bp'), ' bp', 0)}</td><th>引物对{html.escape(score_label)}</th><td><strong class="detail-score">{html.escape(_delivery_score(candidate_score))}</strong></td></tr>
           {oligo_rows('正向引物', forward)}
           {oligo_rows('反向引物', reverse)}
           {oligo_rows('探针', probe)}
@@ -3741,13 +4305,14 @@ def _delivery_candidate_card(
     ).get("raw_score")
     coverage = _delivery_target_coverage(candidate)
     score_label = _delivery_score_label(candidate)
+    candidate_score, _ = _delivery_candidate_score(candidate)
     verdict_key = str(candidate.get("verdict") or "").upper()
     status_class = "attention" if verdict_key == "PASS_WITH_WARNINGS" else "recommended"
     metrics = "".join(
         [
             _delivery_metric("扩增子长度", f"{amplicon.get('length_bp')} bp" if amplicon.get("length_bp") is not None else "未提供"),
             _delivery_metric("扩增子 GC", f"{amplicon_gc:.1f}%" if amplicon_gc is not None else "未评估"),
-            _delivery_metric(score_label, _delivery_score(candidate.get("score")), primary=True),
+            _delivery_metric(score_label, _delivery_score(candidate_score), primary=True),
             _delivery_metric("热力学评分", _delivery_score(thermodynamics_score)),
             _delivery_metric("特异性评分", _delivery_score(specificity_score)),
             _delivery_metric("扩增子特征评分", _delivery_score(amplicon_feature_score)),
@@ -3762,7 +4327,7 @@ def _delivery_candidate_card(
       <article class="candidate-card">
         <div class="candidate-heading">
           <div><span class="rank">{ordinal:02d}</span><h3>候选方案 {ordinal:02d}</h3></div>
-          <div class="candidate-result"><span class="candidate-status {status_class}">{html.escape(_delivery_status(candidate.get('verdict')))}</span><strong>{html.escape(_delivery_score(candidate.get('score')))}</strong></div>
+          <div class="candidate-result"><span class="candidate-status {status_class}">{html.escape(_delivery_status(candidate.get('verdict')))}</span><strong>{html.escape(_delivery_score(candidate_score))}</strong></div>
         </div>
         {_delivery_candidate_parameter_table(candidate, target_gene_id=target_gene_id)}
         <div class="metrics">{metrics}</div>
@@ -3885,7 +4450,7 @@ def render_html(report: dict[str, Any]) -> bytes:
     .candidate-parameter-detail{{width:100%;max-width:100%;min-width:0;margin:16px 0;border:1px solid #dfe6ef;border-radius:12px;overflow:hidden;background:#fff}} .candidate-parameter-heading{{padding:11px 13px;background:#f1f6ff}} .candidate-parameter-heading span{{display:block;color:var(--muted);font-size:10px}} .candidate-parameter-heading h4{{margin:2px 0 0;font-size:15px}} .candidate-data-table-wrap{{width:100%;max-width:100%;min-width:0;overflow-x:auto}} .candidate-data-table{{width:100%;min-width:720px;table-layout:fixed;border-collapse:collapse;font-size:12px}} .candidate-data-table th,.candidate-data-table td{{padding:9px 10px;border-top:1px solid #e8edf3;text-align:left;vertical-align:middle}} .candidate-data-table th{{width:13%;background:#f8fafc;color:#52637d;white-space:nowrap}} .candidate-data-table td{{width:20.33%;color:#1f3652;overflow-wrap:anywhere}} .detail-sequence{{font-family:"Cascadia Mono","Consolas",monospace;letter-spacing:.02em;overflow-wrap:anywhere;word-break:break-all}} .detail-score{{color:var(--brand);font-size:14px;white-space:nowrap}} .detail-amplicon{{padding:11px 13px;border-top:1px solid #e8edf3;background:#fbfcfe}} .detail-amplicon>span{{display:block;color:var(--muted);font-size:11px;margin-bottom:5px}}
     .metrics{{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:16px 0}} .metric{{background:#f7f9fc;border-radius:10px;padding:10px 12px;min-width:0}} .metric.primary{{background:var(--brand-soft)}} .metric span{{display:block;color:var(--muted);font-size:11px}} .metric strong{{display:block;font-size:14px;overflow-wrap:anywhere}}
     .scoring-policy{{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-top:12px}} .scoring-policy>div{{border:1px solid #d5e1f8;background:#f8fbff;border-radius:10px;padding:10px 12px}} .scoring-policy span{{display:block;color:var(--muted);font-size:10px}} .scoring-policy strong{{display:block;font-size:13px;margin-top:2px}} .scoring-policy .formula{{grid-column:span 4;background:#f2f6ff;color:#29466f}}
-    .score-panel{{margin:0 0 16px;border:1px solid #d5e1f8;border-radius:12px;background:#fbfdff;overflow:hidden}} .score-panel-heading{{display:flex;justify-content:space-between;gap:16px;align-items:flex-start;padding:13px 14px;background:#f1f6ff}} .score-panel-heading span{{display:block;color:var(--muted);font-size:10px}} .score-panel-heading h4{{margin:2px 0 0;font-size:15px}} .score-panel-heading small{{color:#667085;text-align:right}} .dimension-scores{{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;padding:12px 14px}} .score-dimension{{border:1px solid #e2e8f3;border-radius:9px;padding:9px 10px;background:#fff}} .score-dimension span{{display:block;color:var(--muted);font-size:10px}} .score-dimension strong{{display:block;font-size:14px;margin-top:2px}} .score-equation{{display:grid;grid-template-columns:1fr auto 1fr auto 1fr;gap:9px;align-items:center;margin:0 14px 12px;padding:11px 12px;border-radius:9px;background:#f5f7fa}} .score-equation span{{display:block;color:var(--muted);font-size:10px}} .score-equation strong{{display:block;font-size:13px}} .score-equation b{{color:#98a2b3}} .score-equation .final strong{{color:var(--brand);font-size:15px}} .penalty-list{{list-style:none;margin:0;padding:0 14px 13px}} .penalty-list li{{display:flex;justify-content:space-between;gap:12px;padding:7px 10px;margin-top:5px;border-radius:8px;background:var(--attention-soft);color:#6f4c1f;font-size:12px}} .no-penalty{{margin:0 14px 13px;padding:7px 10px;border-radius:8px;background:var(--good-soft);color:var(--good);font-size:12px}}
+    .score-panel{{margin:0 0 16px;border:1px solid #d5e1f8;border-radius:12px;background:#fbfdff;overflow:hidden}} .score-panel-heading{{display:flex;justify-content:space-between;gap:16px;align-items:flex-start;padding:13px 14px;background:#f1f6ff}} .score-panel-heading span{{display:block;color:var(--muted);font-size:10px}} .score-panel-heading h4{{margin:2px 0 0;font-size:15px}} .score-panel-heading small{{color:#667085;text-align:right}} .dimension-scores{{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;padding:12px 14px}} .score-dimension{{border:1px solid #e2e8f3;border-radius:9px;padding:9px 10px;background:#fff}} .score-dimension span{{display:block;color:var(--muted);font-size:10px}} .score-dimension strong{{display:block;font-size:14px;margin-top:2px}} .score-equation{{display:grid;grid-template-columns:1fr auto 1fr auto 1fr;gap:9px;align-items:center;margin:0 14px 12px;padding:11px 12px;border-radius:9px;background:#f5f7fa}} .score-equation span{{display:block;color:var(--muted);font-size:10px}} .score-equation strong{{display:block;font-size:13px}} .score-equation b{{color:#98a2b3}} .score-equation .final strong{{color:var(--brand);font-size:15px}} .penalty-list{{list-style:none;margin:0;padding:0 14px 13px}} .penalty-list li{{display:flex;justify-content:space-between;gap:12px;padding:7px 10px;margin-top:5px;border-radius:8px;background:var(--attention-soft);color:#6f4c1f;font-size:12px}} .no-penalty{{margin:0 14px 13px;padding:7px 10px;border-radius:8px;background:var(--good-soft);color:var(--good);font-size:12px}}
     .check-panel{{margin:16px 0;border:1px solid #dfe6ef;border-radius:12px;overflow:hidden}} .check-heading{{display:flex;justify-content:space-between;gap:16px;align-items:center;padding:13px 14px;background:#f7f9fc}} .check-heading span{{color:var(--muted);font-size:11px}} .check-heading h4{{margin:1px 0 0;font-size:16px}} .check-counts{{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}} .check-counts span{{border-radius:999px;padding:4px 8px;font-weight:700}} .check-counts .pass-count{{background:var(--good-soft);color:var(--good)}} .check-counts .attention-count{{background:var(--attention-soft);color:var(--attention)}} .check-counts .fail-count{{background:#fff0f0;color:#b42318}}
     .passed-checks,.check-issues{{padding:13px 14px;border-top:1px solid #e8edf3}} .passed-checks h5,.check-issues h5{{margin:0 0 9px;font-size:12px;color:var(--muted)}} .passed-checks ul,.check-issues ul{{list-style:none;padding:0;margin:0}} .passed-checks ul{{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px 14px}} .passed-checks li{{font-size:12px;color:#344054}} .passed-checks li>span{{color:var(--good);font-weight:900;margin-right:6px}} .check-issues li{{display:grid;gap:2px;padding:8px 10px;border-radius:8px;margin-top:6px;font-size:12px}} .check-issues li span{{color:#5f4930}} .attention-checks li{{background:var(--attention-soft)}} .failed-checks li{{background:#fff0f0}} .pending-checks li{{background:#f2f4f7}} .oligos{{border:1px solid #e6eaf0;border-radius:12px;overflow:hidden}} .oligo-row{{padding:12px 14px;border-bottom:1px solid #e6eaf0}} .oligo-row:last-child{{border-bottom:0}} .oligo-title{{display:flex;justify-content:space-between;gap:12px;align-items:center;margin-bottom:7px}} .oligo-title span{{color:var(--muted);font-size:12px;text-align:right}} .sequence{{font-family:"Cascadia Mono","Consolas",monospace;background:#f7f9fc;border-radius:7px;padding:8px 10px;word-break:break-all;letter-spacing:.035em;font-size:13px}} .amplicon-row .sequence{{color:#334155}}
     .evidence-panel{{margin:16px 0;border:1px solid #dfe6ef;border-radius:12px;overflow:hidden;background:#fff}} .evidence-heading{{display:flex;justify-content:space-between;gap:18px;align-items:flex-start;padding:13px 14px;background:#f7f9fc}} .evidence-heading span{{display:block;color:var(--muted);font-size:10px}} .evidence-heading h4{{margin:2px 0 0;font-size:15px}} .evidence-heading small{{max-width:430px;color:var(--muted);text-align:right}} .evidence-panel .table-wrap{{overflow-x:auto}} .evidence-table{{width:100%;border-collapse:collapse;font-size:12px}} .evidence-table th,.evidence-table td{{padding:9px 10px;border-top:1px solid #e8edf3;text-align:left;vertical-align:top}} .evidence-table thead th{{border-top:0;background:#fbfcfe;color:#667085}} .evidence-table th[scope=row]{{min-width:120px;color:#344054}} .evidence-table .status{{display:inline-flex;border-radius:999px;padding:3px 7px;font-size:11px;font-weight:700;white-space:nowrap}} .evidence-table .status.pass{{background:var(--good-soft);color:var(--good)}} .evidence-table .status.fail{{background:#fff0f0;color:#b42318}} .evidence-table .status.warning{{background:var(--attention-soft);color:var(--attention)}} .evidence-table .status.neutral{{background:#f2f4f7;color:#667085}} .pair-dg-grid{{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:12px 14px}} .pair-dg-grid>div{{padding:9px 10px;border-radius:8px;background:#f7f9fc}} .pair-dg-grid span{{display:block;color:var(--muted);font-size:10px}} .pair-dg-grid strong{{display:block;margin-top:2px;font-size:13px}}
@@ -4193,6 +4758,10 @@ def _xlsx_rows(report: dict[str, Any]) -> list[dict[str, Any]]:
         "反向引物 5'-3'",
         "探针 5'-3'",
         "扩增子 bp",
+        "保守性状态",
+        "保守性得分（%）",
+        "三位点全匹配覆盖（%）",
+        "代表序列数",
         "得分",
         "判定",
         "证据等级",
@@ -4202,6 +4771,8 @@ def _xlsx_rows(report: dict[str, Any]) -> list[dict[str, Any]]:
 
     def candidate_row(target_id: str, candidate: dict[str, Any]) -> list[Any]:
         membership = candidate.get("report_membership") or {}
+        conservation = candidate.get("conservation") or {}
+        conservation_score = conservation.get("score")
         return [
             target_id,
             candidate.get("display_rank"),
@@ -4211,6 +4782,15 @@ def _xlsx_rows(report: dict[str, Any]) -> list[dict[str, Any]]:
             (candidate.get("reverse_primer") or {}).get("sequence_5to3"),
             (candidate.get("probe") or {}).get("sequence_5to3"),
             (candidate.get("amplicon") or {}).get("length_bp"),
+            conservation.get("status"),
+            (
+                round(float(conservation_score) * 100, 3)
+                if isinstance(conservation_score, (int, float))
+                and not isinstance(conservation_score, bool)
+                else None
+            ),
+            conservation.get("coverage_percent"),
+            conservation.get("sequence_count"),
             candidate.get("score"),
             candidate.get("verdict"),
             candidate.get("evidence_level"),
@@ -4244,12 +4824,16 @@ def _xlsx_rows(report: dict[str, Any]) -> list[dict[str, Any]]:
                     34,
                     12,
                     12,
+                    18,
+                    20,
+                    24,
+                    16,
                     24,
                     20,
                     30,
                     30,
                 ],
-                "status_columns": {9, 10},
+                "status_columns": {8, 13, 14},
             }
         )
 
@@ -4359,6 +4943,30 @@ def _xlsx_rows(report: dict[str, Any]) -> list[dict[str, Any]]:
                     sequence[offset : offset + 30000],
                 ]
             )
+        for member_index, member in enumerate(
+            (target["input"].get("templates") or [])[1:],
+            start=2,
+        ):
+            member_metadata = copy.deepcopy(member or {})
+            member_sequence = str(member_metadata.pop("sequence", "") or "")
+            target_input_rows.append(
+                [
+                    target["target_id"],
+                    f"representative_sequence_{member_index:04d}_metadata",
+                    member_metadata,
+                ]
+            )
+            for offset in range(0, len(member_sequence), 30000):
+                target_input_rows.append(
+                    [
+                        target["target_id"],
+                        (
+                            f"representative_sequence_{member_index:04d}_"
+                            f"chunk_{offset // 30000 + 1:04d}"
+                        ),
+                        member_sequence[offset : offset + 30000],
+                    ]
+                )
         for key in (
             "parameters",
             "issues",
@@ -4370,6 +4978,13 @@ def _xlsx_rows(report: dict[str, Any]) -> list[dict[str, Any]]:
             target_input_rows.append(
                 [target["target_id"], key, target["input"].get(key)]
             )
+        target_input_rows.append(
+            [
+                target["target_id"],
+                "conservation_evidence",
+                target.get("conservation_evidence"),
+            ]
+        )
     sheets.append(
         {
             "name": "靶标输入",
@@ -5153,7 +5768,6 @@ def render_pdf(report: dict[str, Any]) -> bytes:
 def render_all_exports(report: dict[str, Any]) -> dict[str, dict[str, Any]]:
     """Render all user-visible formats and return bytes plus stable metadata."""
     process_html = render_process_detail_html(report)
-    rules_html = render_rules_validation_html(report)
     rendered = {
         "html": {
             "media_type": "text/html; charset=utf-8",
@@ -5164,11 +5778,6 @@ def render_all_exports(report: dict[str, Any]) -> dict[str, dict[str, Any]]:
             "media_type": "text/html; charset=utf-8",
             "extension": "html",
             "content": process_html,
-        },
-        "rules_html": {
-            "media_type": "text/html; charset=utf-8",
-            "extension": "html",
-            "content": rules_html,
         },
         "scientific_data": {
             "media_type": "application/zip",
@@ -5200,7 +5809,6 @@ def render_available_exports(
     formats: Iterable[str] = (
         "html",
         "process_html",
-        "rules_html",
         "scientific_data",
     ),
 ) -> tuple[dict[str, dict[str, Any]], dict[str, dict[str, str]]]:
@@ -5215,11 +5823,6 @@ def render_available_exports(
             "text/html; charset=utf-8",
             "html",
             render_process_detail_html,
-        ),
-        "rules_html": (
-            "text/html; charset=utf-8",
-            "html",
-            render_rules_validation_html,
         ),
         "scientific_data": (
             "application/zip",

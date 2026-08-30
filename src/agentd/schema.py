@@ -18,8 +18,8 @@ def validate_output(data: dict) -> None:
         raise SchemaValidationError("输出缺少顶层必需字段", details={"missing": missing})
     if data["schema_version"] != "3.0.0-phase3":
         raise SchemaValidationError("输出Schema版本不匹配", details={"schema_version": data["schema_version"]})
-    if data["workflow"] not in {f"WF-{index:02d}" for index in range(1, 8)}:
-        raise SchemaValidationError("仅支持WF-01至WF-07", details={"workflow": data["workflow"]})
+    if data["workflow"] not in {f"WF-{index:02d}" for index in range(1, 6)}:
+        raise SchemaValidationError("仅支持WF-01至WF-05", details={"workflow": data["workflow"]})
     if data["status"] not in {"SUCCEEDED", "PARTIAL", "FAILED"}:
         raise SchemaValidationError("非法工作流状态", details={"status": data["status"]})
     if not isinstance(data["candidates"], list):

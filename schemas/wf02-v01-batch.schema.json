@@ -1,0 +1,830 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://wens.example/schemas/wf02-v01-batch-v1.json",
+  "title": "WF-02 v0.1 普通多重任务",
+  "description": "流程图 N01 至 N32 的 WF-02 任务，包含逐靶标候选、P5 内标、P4 面板筛选与放宽、Tm/GC 均衡、评分去重、Top 3 与报告交付。",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "batch_id",
+    "batch_code",
+    "workflow",
+    "workflow_version",
+    "policy_version",
+    "task_version",
+    "status",
+    "stage",
+    "next_action",
+    "created_at",
+    "updated_at",
+    "user_input_snapshot",
+    "input_snapshot_sha256",
+    "runtime_config_snapshot",
+    "rule_snapshot",
+    "preflight",
+    "workflow_trace",
+    "events"
+  ],
+  "properties": {
+    "schema_version": {"const": "wf02-v0.1-batch-v1"},
+    "batch_id": {"type": "string", "format": "uuid"},
+    "batch_code": {"type": "string", "minLength": 1},
+    "workflow": {"const": "WF-02"},
+    "workflow_version": {"const": "wf02-v0.1"},
+    "policy_version": {"const": "wf02-policy-v0.1"},
+    "dependency_contracts": {"type": "object"},
+    "task_version": {"type": "integer", "minimum": 1},
+    "source_batch_id": {"type": ["string", "null"]},
+    "source_version": {"type": ["integer", "null"]},
+    "lineage_root_batch_id": {"type": "string", "format": "uuid"},
+    "source_draft_id": {"type": ["string", "null"]},
+    "status": {
+      "enum": [
+        "READY_FOR_TARGET_DESIGN",
+        "DESIGNING_TARGETS",
+        "WAITING_CHILD_INPUT",
+        "WAITING_TARGET_RESOURCES",
+        "WAITING_TARGET_TOOL_RETRY",
+        "READY_FOR_INTERNAL_CONTROL",
+        "DESIGNING_INTERNAL_CONTROL",
+        "WAITING_INTERNAL_CONTROL_INPUT",
+        "READY_FOR_PANEL_COMBINATION",
+        "SCREENING_PANELS",
+        "WAITING_P4_RETRY",
+        "READY_FOR_RELAXATION",
+        "RELAXING_PANELS",
+        "READY_FOR_BALANCE",
+        "BALANCING_PANELS",
+        "READY_FOR_SCORING",
+        "COMPLETED",
+        "PARTIAL_PANEL_AVAILABLE",
+        "FAILED_INCOMPLETE_TARGET_COVERAGE",
+        "FAILED_NO_COMPATIBLE_PANEL"
+      ]
+    },
+    "stage": {"enum": ["N05", "N06", "N08", "N09", "N10", "N11", "N12", "N13", "N14", "N15", "N16", "N16A", "N17", "N18", "N19", "N20", "N21", "N22", "N23", "N24", "N25", "N26", "N27", "N28", "N29", "N30", "N31", "N32"]},
+    "next_action": {
+      "enum": [
+        "RUN_TARGET_DESIGN",
+        "CONTINUE_TARGET_DESIGN",
+        "WAIT_FOR_CHILD_INPUT",
+        "WAIT_FOR_RESOURCE",
+        "RETRY_TARGET_DESIGN",
+        "RUN_INTERNAL_CONTROL",
+        "WAIT_FOR_INTERNAL_CONTROL_INPUT",
+        "RUN_PANEL_COMBINATION",
+        "CONTINUE_PANEL_SCREENING",
+        "RETRY_PANEL_SCREENING",
+        "RUN_RELAXATION",
+        "CONTINUE_RELAXATION",
+        "RETRY_RELAXATION",
+        "REVIEW_PARTIAL_PANEL",
+        "REVIEW_FAILURE_GUIDANCE",
+        "RUN_BALANCE_ASSESSMENT",
+        "CONTINUE_BALANCE_ASSESSMENT",
+        "RUN_PANEL_SCORING",
+        "COMPLETE"
+      ]
+    },
+    "created_at": {"type": "string", "format": "date-time"},
+    "updated_at": {"type": "string", "format": "date-time"},
+    "task_name": {"type": ["string", "null"]},
+    "user_input_snapshot": {"$ref": "#/$defs/userInputSnapshot"},
+    "input_snapshot_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "runtime_config_snapshot": {"$ref": "#/$defs/runtimeConfig"},
+    "execution_options_snapshot": {"type": "object"},
+    "creation_request": {
+      "oneOf": [
+        {"type": "null"},
+        {
+          "type": "object",
+          "required": ["schema_version", "request_sha256"],
+          "properties": {
+            "schema_version": {"const": "wf02-create-replay-v1"},
+            "request_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "background_execution": {"$ref": "#/$defs/backgroundExecution"},
+    "rule_snapshot": {"$ref": "#/$defs/ruleSnapshot"},
+    "target_design": {
+      "oneOf": [
+        {"type": "null"},
+        {"$ref": "#/$defs/targetDesign"}
+      ]
+    },
+    "internal_control": {
+      "oneOf": [
+        {"type": "null"},
+        {"$ref": "#/$defs/internalControl"}
+      ]
+    },
+    "multiplex": {"$ref": "#/$defs/multiplexProgress"},
+    "report_id": {"type": "string", "format": "uuid"},
+    "report_summary": {"type": "object"},
+    "report_exports": {"type": "object"},
+    "outcome": {"$ref": "#/$defs/outcome"},
+    "version_reason": {"type": "string"},
+    "version_diff": {"type": "object"},
+    "completed_at": {"type": "string", "format": "date-time"},
+    "preflight": {
+      "type": "object",
+      "required": [
+        "schema_version",
+        "workflow",
+        "stage",
+        "status",
+        "can_create_task",
+        "user_input_snapshot",
+        "runtime_config_snapshot",
+        "rule_snapshot",
+        "issues",
+        "node_trace"
+      ],
+      "properties": {
+        "schema_version": {"const": "wf02-v0.1-intake-preflight-v1"},
+        "workflow": {"const": "WF-02"},
+        "stage": {"const": "N03"},
+        "status": {"const": "READY_TO_CREATE"},
+        "can_create_task": {"const": true},
+        "user_input_snapshot": {"$ref": "#/$defs/userInputSnapshot"},
+        "runtime_config_snapshot": {"$ref": "#/$defs/runtimeConfig"},
+        "rule_snapshot": {"$ref": "#/$defs/ruleSnapshot"},
+        "issues": {"type": "array", "maxItems": 0},
+        "node_trace": {"type": "array", "minItems": 3}
+      },
+      "additionalProperties": true
+    },
+    "workflow_trace": {
+      "type": "array",
+      "minItems": 4,
+      "items": {"$ref": "#/$defs/traceItem"}
+    },
+    "events": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"type": "object"}
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "enum": [
+              "COMPLETED",
+              "PARTIAL_PANEL_AVAILABLE",
+              "FAILED_INCOMPLETE_TARGET_COVERAGE",
+              "FAILED_NO_COMPATIBLE_PANEL"
+            ]
+          }
+        },
+        "required": ["status"]
+      },
+      "then": {
+        "required": [
+          "report_id",
+          "report_summary",
+          "report_exports",
+          "outcome",
+          "completed_at"
+        ]
+      }
+    }
+  ],
+  "additionalProperties": true,
+  "$defs": {
+    "backgroundExecution": {
+      "type": "object",
+      "required": [
+        "schema_version",
+        "state",
+        "attempt_count",
+        "synchronous_wait_seconds",
+        "recovered"
+      ],
+      "properties": {
+        "schema_version": {"const": "wf02-background-execution-v1"},
+        "state": {
+          "enum": [
+            "IDLE",
+            "QUEUED",
+            "RUNNING",
+            "WAITING_USER",
+            "WAITING_EXTERNAL",
+            "PAUSED",
+            "COMPLETED",
+            "FAILED"
+          ]
+        },
+        "attempt_count": {"type": "integer", "minimum": 0},
+        "synchronous_wait_seconds": {"type": "integer", "const": 235},
+        "requested_at": {"type": ["string", "null"], "format": "date-time"},
+        "started_at": {"type": ["string", "null"], "format": "date-time"},
+        "heartbeat_at": {"type": ["string", "null"], "format": "date-time"},
+        "stopped_at": {"type": ["string", "null"], "format": "date-time"},
+        "recovered": {"type": "boolean"},
+        "last_error": {"type": ["object", "null"]}
+      },
+      "additionalProperties": false
+    },
+    "outcome": {
+      "type": "object",
+      "required": [
+        "workflow_status",
+        "primary_failure_stage",
+        "coverage_status",
+        "panel_status",
+        "reason_codes"
+      ],
+      "properties": {
+        "workflow_status": {"enum": ["COMPLETED", "PARTIAL", "FAILED"]},
+        "primary_failure_stage": {"type": ["string", "null"]},
+        "coverage_status": {"type": "object"},
+        "panel_status": {"type": "string", "minLength": 1},
+        "reason_codes": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1},
+          "uniqueItems": true
+        }
+      },
+      "additionalProperties": true
+    },
+    "target": {
+      "type": "object",
+      "required": ["target_id", "display_name", "input_order", "source_input", "template_source"],
+      "properties": {
+        "target_id": {"type": "string", "minLength": 1},
+        "display_name": {"type": "string", "minLength": 1},
+        "input_order": {"type": "integer", "minimum": 1, "maximum": 5},
+        "source_input": {
+          "oneOf": [
+            {"type": "string", "minLength": 1},
+            {"type": "object"}
+          ]
+        },
+        "template_source": {
+          "$ref": "#/$defs/templateSource"
+        }
+      },
+      "additionalProperties": false
+    },
+    "templateSource": {
+      "type": "object",
+      "required": [
+        "policy_version",
+        "source_kind",
+        "file_count",
+        "file_name",
+        "record_grouping",
+        "sequence_mode",
+        "multiple_homologous_sequences_allowed",
+        "multi_target_file_auto_split"
+      ],
+      "properties": {
+        "policy_version": {"const": "wf02-one-file-per-target-v1"},
+        "source_kind": {
+          "enum": [
+            "NOT_PROVIDED",
+            "INLINE_SEQUENCE",
+            "INLINE_HOMOLOGOUS_SEQUENCES",
+            "INLINE_FASTA",
+            "SERVER_FASTA_FILE",
+            "UPLOADED_FASTA_FILE"
+          ]
+        },
+        "file_count": {"type": "integer", "minimum": 0, "maximum": 1},
+        "file_name": {"type": ["string", "null"]},
+        "record_grouping": {"const": "SINGLE_DETECTION_TARGET"},
+        "sequence_mode": {"const": "alignment_target"},
+        "multiple_homologous_sequences_allowed": {"const": true},
+        "multi_target_file_auto_split": {"const": false}
+      },
+      "additionalProperties": false
+    },
+    "userInputSnapshot": {
+      "type": "object",
+      "required": ["targets", "host_species", "include_internal_control"],
+      "properties": {
+        "targets": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 5,
+          "items": {"$ref": "#/$defs/target"}
+        },
+        "host_species": {"type": "string", "minLength": 1},
+        "include_internal_control": {"type": "boolean"},
+        "upload_intake_manifest": {
+          "type": "object",
+          "required": [
+            "policy_version",
+            "expected_target_count",
+            "received_target_count",
+            "failed_file_ids",
+            "complete"
+          ],
+          "properties": {
+            "policy_version": {"const": "wf02-upload-intake-v1"},
+            "expected_target_count": {"type": "integer", "minimum": 2, "maximum": 5},
+            "received_target_count": {"type": "integer", "minimum": 0, "maximum": 5},
+            "failed_file_ids": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": {"type": "integer", "minimum": 1}
+            },
+            "complete": {"const": true}
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "runtimeConfig": {
+      "type": "object",
+      "required": [
+        "instrument",
+        "rox_as_reference",
+        "source",
+        "rox_source",
+        "is_core_user_input"
+      ],
+      "properties": {
+        "instrument": {"type": "string", "minLength": 1},
+        "rox_as_reference": {"type": ["boolean", "null"]},
+        "source": {"enum": ["SYSTEM_DEFAULT", "USER_OVERRIDE"]},
+        "rox_source": {"enum": ["INSTRUMENT_DEFAULT", "USER_OVERRIDE"]},
+        "is_core_user_input": {"const": false}
+      },
+      "additionalProperties": false
+    },
+    "ruleSnapshot": {
+      "type": "object",
+      "required": [
+        "policy_version",
+        "minimum_targets",
+        "maximum_targets",
+        "internal_control_default",
+        "target_file_policy_version",
+        "one_file_per_target",
+        "multiple_homologous_sequences_per_file",
+        "multi_target_file_auto_split",
+        "config_sha256"
+      ],
+      "properties": {
+        "policy_version": {"const": "wf02-policy-v0.1"},
+        "minimum_targets": {"const": 2},
+        "maximum_targets": {"const": 5},
+        "internal_control_default": {"const": true},
+        "target_file_policy_version": {"const": "wf02-one-file-per-target-v1"},
+        "one_file_per_target": {"const": true},
+        "multiple_homologous_sequences_per_file": {"const": true},
+        "multi_target_file_auto_split": {"const": false},
+        "config_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      },
+      "additionalProperties": false
+    },
+    "traceItem": {
+      "type": "object",
+      "required": ["node", "status", "message"],
+      "properties": {
+        "node": {"enum": ["N01", "N02", "N03", "N04", "N05", "N06", "N07", "N08", "N09", "N10", "N11", "N12", "N13", "N14", "N15", "N16", "N16A", "N17", "N18", "N19", "N20", "N21", "N22", "N23", "N24", "N25", "N26", "N27", "N28", "N29", "N30", "N31", "N32"]},
+        "status": {"type": "string", "minLength": 1},
+        "message": {"type": "string", "minLength": 1},
+        "recorded_at": {"type": "string", "format": "date-time"},
+        "target_id": {"type": ["string", "null"]},
+        "child_batch_id": {"type": ["string", "null"]}
+      },
+      "additionalProperties": true
+    },
+    "targetDesign": {
+      "type": "object",
+      "required": [
+        "status",
+        "requested_targets",
+        "succeeded_targets",
+        "failed_targets",
+        "failed_target_ids",
+        "blocked_targets",
+        "blocked_target_ids",
+        "waiting_targets",
+        "coverage",
+        "coverage_gaps",
+        "p6_summary",
+        "targets"
+      ],
+      "properties": {
+        "status": {"enum": ["RUNNING", "WAITING_CHILD_INPUT", "WAITING_RESOURCE", "WAITING_TOOL_RETRY", "COMPLETED"]},
+        "requested_targets": {"type": "integer", "minimum": 2, "maximum": 5},
+        "succeeded_targets": {"type": "integer", "minimum": 0, "maximum": 5},
+        "failed_targets": {"type": "integer", "minimum": 0, "maximum": 5},
+        "failed_target_ids": {
+          "type": "array",
+          "maxItems": 5,
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1}
+        },
+        "blocked_targets": {"type": "integer", "minimum": 0, "maximum": 5},
+        "blocked_target_ids": {
+          "type": "array",
+          "maxItems": 5,
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1}
+        },
+        "waiting_targets": {"type": "integer", "minimum": 0, "maximum": 5},
+        "tool_retry_targets": {"type": "integer", "minimum": 0, "maximum": 5},
+        "coverage": {"$ref": "#/$defs/coverage"},
+        "coverage_gaps": {
+          "type": "array",
+          "maxItems": 5,
+          "items": {
+            "type": "object",
+            "required": ["target_id", "display_name", "reason_code"],
+            "properties": {
+              "target_id": {"type": "string", "minLength": 1},
+              "display_name": {"type": "string", "minLength": 1},
+              "input_order": {"type": ["integer", "null"], "minimum": 1, "maximum": 5},
+              "reason_code": {"type": "string", "minLength": 1},
+              "reason_message": {"type": ["string", "null"]},
+              "wf01_batch_id": {"type": ["string", "null"]},
+              "failure": {"type": "object"}
+            },
+            "additionalProperties": false
+          }
+        },
+        "p6_summary": {"$ref": "#/$defs/p6Summary"},
+        "targets": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 5,
+          "items": {"$ref": "#/$defs/targetDesignResult"}
+        }
+      },
+      "additionalProperties": false
+    },
+    "internalControl": {
+      "type": "object",
+      "required": [
+        "requested",
+        "status",
+        "candidate_gene_count",
+        "primer_scheme_count",
+        "candidates",
+        "combination_pool_member"
+      ],
+      "properties": {
+        "requested": {"type": "boolean"},
+        "status": {
+          "enum": [
+            "RUNNING",
+            "WAITING_USER",
+            "COMPLETED",
+            "COMPLETED_WITH_CAUTION",
+            "SKIPPED_BY_USER",
+            "SKIPPED_AFTER_FAILURE",
+            "FAILED_CONTINUE_WITHOUT_INTERNAL"
+          ]
+        },
+        "decision_source": {"type": ["string", "null"]},
+        "attempt_count": {"type": "integer", "minimum": 0},
+        "attempt_history": {"type": "array", "items": {"type": "object"}},
+        "input_overrides": {"type": "object"},
+        "p5_status": {"type": ["string", "null"]},
+        "p5_verdict": {"type": ["string", "null"]},
+        "p5_result": {"type": ["object", "null"]},
+        "selected_gene": {"type": ["string", "null"]},
+        "candidate_gene_count": {"type": "integer", "minimum": 0},
+        "primer_scheme_count": {"type": "integer", "minimum": 0, "maximum": 5},
+        "quantity_verdict": {"enum": ["PASS", "CAUTION", "FAIL", "NOT_APPLICABLE"]},
+        "candidates": {
+          "type": "array",
+          "maxItems": 5,
+          "items": {"type": "object"}
+        },
+        "combination_pool_member": {"type": "boolean"},
+        "cross_compatibility_status": {"type": ["string", "null"]},
+        "channel_reservation": {"$ref": "#/$defs/channelReservation"},
+        "warnings": {"type": "array", "items": {"type": "string"}},
+        "failure": {"type": ["object", "null"]},
+        "ui_message": {"type": ["object", "null"]},
+        "skip_reason": {"type": ["string", "null"]},
+        "follow_up_actions": {"type": "array", "items": {"type": "string"}}
+      },
+      "additionalProperties": true
+    },
+    "channelReservation": {
+      "type": "object",
+      "required": [
+        "policy_version",
+        "status",
+        "automatic_alternatives_allowed",
+        "expert_review_required"
+      ],
+      "properties": {
+        "policy_version": {"const": "wf02-ic-channel-dynamic-v2"},
+        "status": {"enum": ["RESERVED", "BLOCKED", "SKIPPED"]},
+        "fluorophore": {"type": ["string", "null"]},
+        "quencher": {"type": ["string", "null"]},
+        "automatic_alternatives_allowed": {"const": true},
+        "expert_review_required": {"type": "boolean"},
+        "instrument": {"type": ["string", "null"]},
+        "rox_as_reference": {"type": ["boolean", "null"]},
+        "available_report_channels": {"type": "integer", "minimum": 0},
+        "required_signal_channels": {"type": "integer", "minimum": 0},
+        "capacity_sufficient": {"type": "boolean"},
+        "suggested_fluorophore": {"type": ["string", "null"]},
+        "internal_control_selection_basis": {"type": ["string", "null"]},
+        "candidate_dyes_considered": {"type": "array", "items": {"type": "string"}},
+        "assignment_owner": {"const": "WF-02"},
+        "validation_owner": {"const": "P4"},
+        "p4_validation_status": {"type": ["string", "null"]},
+        "reasons": {"type": "array", "items": {"type": "string"}}
+      },
+      "additionalProperties": true
+    },
+    "coverage": {
+      "type": "object",
+      "required": [
+        "status",
+        "covered_targets",
+        "requested_targets",
+        "complete",
+        "message"
+      ],
+      "properties": {
+        "status": {"enum": ["PENDING", "BLOCKED", "INCOMPLETE", "COMPLETE"]},
+        "covered_targets": {"type": "integer", "minimum": 0, "maximum": 5},
+        "requested_targets": {"type": "integer", "minimum": 2, "maximum": 5},
+        "complete": {"type": "boolean"},
+        "message": {"type": "string", "minLength": 1}
+      },
+      "additionalProperties": false
+    },
+    "p6Summary": {
+      "type": "object",
+      "required": [
+        "status",
+        "candidate_count",
+        "evaluated_count",
+        "pass_count",
+        "caution_count",
+        "warning_count",
+        "not_evaluated_count"
+      ],
+      "properties": {
+        "status": {
+          "enum": [
+            "NOT_STARTED",
+            "NOT_APPLICABLE",
+            "NOT_EVALUATED",
+            "PARTIAL",
+            "COMPLETED"
+          ]
+        },
+        "candidate_count": {"type": "integer", "minimum": 0},
+        "evaluated_count": {"type": "integer", "minimum": 0},
+        "pass_count": {"type": "integer", "minimum": 0},
+        "caution_count": {"type": "integer", "minimum": 0},
+        "warning_count": {"type": "integer", "minimum": 0},
+        "not_evaluated_count": {"type": "integer", "minimum": 0}
+      },
+      "additionalProperties": false
+    },
+    "multiplexProgress": {
+      "type": "object",
+      "required": ["panel_size", "targets_order", "failed_targets"],
+      "properties": {
+        "panel_size": {"type": "integer", "minimum": 2, "maximum": 5},
+        "targets_order": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 5,
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1}
+        },
+        "failed_targets": {
+          "type": "array",
+          "maxItems": 5,
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1}
+        },
+        "screening": {"$ref": "#/$defs/panelScreening"},
+        "relaxation": {"$ref": "#/$defs/panelRelaxation"},
+        "balance": {"$ref": "#/$defs/panelBalance"},
+        "scoring": {"$ref": "#/$defs/panelScoring"},
+        "deduplication": {"$ref": "#/$defs/panelDeduplication"},
+        "selection": {"$ref": "#/$defs/panelSelection"}
+      },
+      "additionalProperties": true
+    },
+    "panelScreening": {
+      "type": "object",
+      "required": [
+        "status",
+        "policy_version",
+        "channel_policy_version",
+        "amplicon_length_policy_version",
+        "complete_panel_possible",
+        "missing_members",
+        "pool_order",
+        "pool_sizes",
+        "total_combinations",
+        "combination_batch_size",
+        "cursor",
+        "strict_count",
+        "risk_count",
+        "incompatible_count",
+        "invalid_count",
+        "panels",
+        "channel_assignment",
+        "instrument_evidence"
+      ],
+      "properties": {
+        "status": {
+          "enum": [
+            "RUNNING",
+            "WAITING_P4_RETRY",
+            "COMPLETED",
+            "NO_COMPLETE_PANEL"
+          ]
+        },
+        "policy_version": {"const": "wf02-panel-screening-v1"},
+        "channel_policy_version": {"const": "wf02-channel-input-order-dynamic-ic-v2"},
+        "amplicon_length_policy_version": {"const": "wf02-r17-hard-filter-v2"},
+        "complete_panel_possible": {"type": "boolean"},
+        "missing_members": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1}
+        },
+        "pool_order": {"type": "array", "items": {"type": "object"}},
+        "pool_sizes": {
+          "type": "object",
+          "additionalProperties": {"type": "integer", "minimum": 1, "maximum": 5}
+        },
+        "total_combinations": {"type": "integer", "minimum": 0},
+        "combination_batch_size": {"type": "integer", "minimum": 1},
+        "cursor": {"type": "integer", "minimum": 0},
+        "strict_count": {"type": "integer", "minimum": 0},
+        "risk_count": {"type": "integer", "minimum": 0},
+        "incompatible_count": {"type": "integer", "minimum": 0},
+        "invalid_count": {"type": "integer", "minimum": 0},
+        "panels": {"type": "array", "items": {"type": "object"}},
+        "channel_assignment": {"type": "array", "items": {"type": "object"}},
+        "instrument_evidence": {"type": "object"},
+        "tool_failure": {"type": ["object", "null"]},
+        "started_at": {"type": "string", "format": "date-time"},
+        "completed_at": {"type": "string", "format": "date-time"}
+      },
+      "additionalProperties": true
+    },
+    "panelRelaxation": {
+      "type": "object",
+      "required": [
+        "status",
+        "policy_version",
+        "decision_status",
+        "expert_confirmation_required",
+        "active_step",
+        "combination_batch_size",
+        "rounds",
+        "partial_levels",
+        "full_risk_panels",
+        "partial_panels",
+        "independent_target_schemes",
+        "relaxation_log"
+      ],
+      "properties": {
+        "status": {
+          "enum": [
+            "RUNNING",
+            "WAITING_P4_RETRY",
+            "COMPLETED_RISK_FULL",
+            "COMPLETED_PARTIAL",
+            "FAILED"
+          ]
+        },
+        "policy_version": {"const": "wf02-relaxation-conservative-v1"},
+        "decision_status": {"const": "TEMPORARY_CONSERVATIVE"},
+        "expert_confirmation_required": {"const": true},
+        "active_step": {"enum": ["N21", "N22", "N23", "N24", "N25", "N26"]},
+        "combination_batch_size": {"type": "integer", "minimum": 1},
+        "rounds": {"type": "array", "items": {"type": "object"}},
+        "partial_levels": {"type": "array", "items": {"type": "object"}},
+        "active_partial_level_index": {"type": "integer", "minimum": 0},
+        "full_risk_panels": {"type": "array", "items": {"type": "object"}},
+        "partial_panels": {"type": "array", "items": {"type": "object"}},
+        "maximum_partial_target_count": {"type": ["integer", "null"], "minimum": 2, "maximum": 4},
+        "independent_target_schemes": {"type": "array", "items": {"type": "object"}},
+        "relaxation_log": {"type": "array", "items": {"type": "object"}},
+        "failure_suggestions": {"type": "array", "items": {"type": "string"}},
+        "tool_failure": {"type": ["object", "null"]},
+        "started_at": {"type": "string", "format": "date-time"},
+        "completed_at": {"type": "string", "format": "date-time"}
+      },
+      "additionalProperties": true
+    },
+    "panelBalance": {
+      "type": "object",
+      "required": ["status", "policy_version", "maximum_redesign_attempts", "redesign_attempt_count", "redesign_attempts", "selected_panels"],
+      "properties": {
+        "status": {"enum": ["RUNNING", "REDESIGNING_TARGETS", "WAITING_CHILD_INPUT", "REDESIGN_UNAVAILABLE", "REBUILDING_PANELS", "REDESIGN_NO_FULL_PANEL", "COMPLETED"]},
+        "policy_version": {"const": "wf02-balance-sop-v1"},
+        "maximum_redesign_attempts": {"const": 2},
+        "redesign_attempt_count": {"type": "integer", "minimum": 0, "maximum": 2},
+        "redesign_attempts": {"type": "array", "maxItems": 2, "items": {"type": "object"}},
+        "selected_panels": {"type": "array", "items": {"type": "object"}},
+        "panel_assessments": {"type": "array", "items": {"type": "object"}},
+        "tm_warning_fallback": {"type": "boolean"}
+      },
+      "additionalProperties": true
+    },
+    "panelScoring": {
+      "type": "object",
+      "required": ["status", "policy_version", "panels"],
+      "properties": {
+        "status": {"const": "COMPLETED"},
+        "policy_version": {"const": "wf02-panel-score-conservative-v1"},
+        "panels": {"type": "array", "items": {"type": "object"}}
+      },
+      "additionalProperties": true
+    },
+    "panelDeduplication": {
+      "type": "object",
+      "required": ["status", "policy_version", "unique_count", "duplicate_count"],
+      "properties": {
+        "status": {"const": "COMPLETED"},
+        "policy_version": {"const": "wf02-sequence-members-v1"},
+        "unique_count": {"type": "integer", "minimum": 0},
+        "duplicate_count": {"type": "integer", "minimum": 0}
+      },
+      "additionalProperties": true
+    },
+    "panelSelection": {
+      "type": "object",
+      "required": ["status", "policy_version", "selection_mode", "top3"],
+      "properties": {
+        "status": {"const": "COMPLETED"},
+        "policy_version": {"const": "wf02-global-score-top3-v2"},
+        "selection_mode": {"const": "GLOBAL_SCORE_TOP3"},
+        "top3": {"type": "array", "maxItems": 3, "items": {"type": "object"}}
+      },
+      "additionalProperties": true
+    },
+    "targetDesignResult": {
+      "type": "object",
+      "required": [
+        "target_id",
+        "display_name",
+        "input_order",
+        "purpose",
+        "status",
+        "candidate_count",
+        "candidates",
+        "wf01_lineage"
+      ],
+      "properties": {
+        "target_id": {"type": "string", "minLength": 1},
+        "display_name": {"type": "string", "minLength": 1},
+        "input_order": {"type": "integer", "minimum": 1, "maximum": 5},
+        "purpose": {"const": "TARGET_DESIGN"},
+        "status": {
+          "enum": ["NOT_STARTED", "RUNNING", "WAITING_USER", "WAITING_TOOL_RETRY", "BLOCKED_RESOURCE", "PASS", "FAIL"]
+        },
+        "candidate_count": {"type": "integer", "minimum": 0, "maximum": 5},
+        "candidates": {
+          "type": "array",
+          "maxItems": 5,
+          "items": {"type": "object"}
+        },
+        "wf01_batch_id": {"type": ["string", "null"]},
+        "wf01_batch_code": {"type": ["string", "null"]},
+        "wf01_task_version": {"type": ["integer", "null"]},
+        "active_wf01_batch_id": {"type": ["string", "null"]},
+        "active_wf01_batch_code": {"type": ["string", "null"]},
+        "active_wf01_task_version": {"type": ["integer", "null"]},
+        "child_target_id": {"type": ["string", "null"]},
+        "child_status": {"type": ["string", "null"]},
+        "child_next_action": {"type": ["string", "null"]},
+        "child_ui_message": {"type": ["object", "null"]},
+        "supplemental_input": {"type": "object"},
+        "supplemental_input_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "wf01_result": {"type": ["object", "null"]},
+        "p6_summary": {"$ref": "#/$defs/p6Summary"},
+        "wf01_lineage": {"type": "array", "items": {"type": "object"}},
+        "failure": {"type": ["object", "null"]}
+      },
+      "additionalProperties": true
+    }
+  }
+}

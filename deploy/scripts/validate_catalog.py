@@ -77,6 +77,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--env-file", type=Path, required=True)
     parser.add_argument("--catalog", type=Path, required=True)
     parser.add_argument("--include-optional", action="store_true")
+    parser.add_argument(
+        "--resource-key",
+        action="append",
+        default=[],
+        help="只检查指定资源键；可重复使用",
+    )
     return parser.parse_args()
 
 
@@ -96,6 +102,13 @@ def main() -> int:
         print("[FAIL] database-catalog.json 的 resources 必须是对象", file=sys.stderr)
         return 1
 
+    requested_keys = set(args.resource_key)
+    missing_keys = sorted(requested_keys - resources.keys())
+    if missing_keys:
+        for key in missing_keys:
+            print(f"[FAIL] 目录中不存在指定资源: {key}", file=sys.stderr)
+        return 1
+
     blast_root = host_root(env_file, env.get("AGENTD_BLASTDB_DIR", "./server-data/blastdb"))
     sequence_root = host_root(env_file, env.get("AGENTD_SEQUENCE_DATA_DIR", "./server-data/sequences"))
     failures: list[str] = []
@@ -108,7 +121,10 @@ def main() -> int:
             failures.append(f"{key}: 资源定义不是对象")
             continue
         required = bool(raw_resource.get("required", False))
-        if not required and not args.include_optional:
+        if requested_keys and key not in requested_keys:
+            skipped += 1
+            continue
+        if not requested_keys and not required and not args.include_optional:
             skipped += 1
             continue
         if (

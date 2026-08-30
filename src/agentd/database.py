@@ -8,12 +8,67 @@ from __future__ import annotations
 
 import json
 import os
+import re
+import unicodedata
 from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
+from .errors import InputValidationError
 from .models import SequenceRecord
 from .sequence import normalize_sequence, read_fasta
+
+
+_SELECTOR_GROUP_RE = re.compile(r"[\(\[\{]([^\)\]\}]+)[\)\]\}]")
+_SELECTOR_DELIMITER_RE = re.compile(r"[/,，;；|、]+")
+
+
+def _normalize_selector(value: Any) -> str:
+    text = unicodedata.normalize("NFKC", str(value or ""))
+    return " ".join(text.strip().casefold().split())
+
+
+def _selector_forms(value: Any) -> set[str]:
+    """Return equivalent selector fragments without guessing a resource."""
+
+    text = unicodedata.normalize("NFKC", str(value or "")).strip()
+    if not text:
+        return set()
+    groups = _SELECTOR_GROUP_RE.findall(text)
+    outside = _SELECTOR_GROUP_RE.sub(" ", text)
+    forms: set[str] = set()
+    for candidate in (text, outside, *groups):
+        for fragment in _SELECTOR_DELIMITER_RE.split(candidate):
+            normalized = _normalize_selector(fragment)
+            if normalized:
+                forms.add(normalized)
+    return forms
+
+
+def finalize_versioned_resource(
+    resource: dict[str, Any] | None,
+    *,
+    scope: dict[str, Any],
+) -> dict[str, Any] | None:
+    """Attach the common P2 resolution contract to a catalog resource."""
+
+    if resource is None:
+        return None
+    finalized = deepcopy(resource)
+    version = str(finalized.get("version") or "").strip()
+    version_valid = bool(version and version != "SET_ON_SERVER")
+    finalized["version_valid"] = version_valid
+    finalized["scope"] = deepcopy(scope)
+    if not finalized.get("path") or not finalized.get("exists"):
+        finalized["resolution_status"] = "NOT_RESOLVED"
+        finalized["resolution_reason"] = "DATABASE_PATH_UNAVAILABLE"
+    elif not version_valid:
+        finalized["resolution_status"] = "NOT_RESOLVED"
+        finalized["resolution_reason"] = "DATABASE_VERSION_MISSING"
+    else:
+        finalized["resolution_status"] = "RESOLVED"
+        finalized["resolution_reason"] = None
+    return finalized
 
 
 class DatabaseCatalog:
@@ -22,9 +77,22 @@ class DatabaseCatalog:
     )
 
     def __init__(self, config: dict, *, catalog_path: str | Path | None = None) -> None:
-        configured = catalog_path or os.environ.get("AGENTD_DATABASE_CATALOG") or config.get("databases", {}).get("catalog_path")
+        database_config = config.get("databases", {})
+        if not isinstance(database_config, dict):
+            database_config = {}
+        configured = (
+            catalog_path
+            or os.environ.get("AGENTD_DATABASE_CATALOG")
+            or database_config.get("catalog_path")
+        )
         self.path = Path(configured).resolve() if configured else None
         self._base_dir = self.path.parent if self.path else Path.cwd()
+        configured_aliases = database_config.get("selector_aliases", {})
+        self.selector_aliases = (
+            deepcopy(configured_aliases)
+            if isinstance(configured_aliases, dict)
+            else {}
+        )
         self.resources: dict[str, dict[str, Any]] = {}
         self.load_error: str | None = None
         if self.path:
@@ -85,6 +153,174 @@ class DatabaseCatalog:
             return None
         return str(resource["path"])
 
+    def _resource_aliases(
+        self,
+        namespace: str,
+        canonical_selector: str,
+        resource: dict[str, Any],
+    ) -> list[str]:
+        aliases: list[str] = []
+        namespace_aliases = self.selector_aliases.get(namespace, {})
+        if isinstance(namespace_aliases, dict):
+            canonical_normalized = _normalize_selector(canonical_selector)
+            for configured_selector, configured_values in namespace_aliases.items():
+                if _normalize_selector(configured_selector) != canonical_normalized:
+                    continue
+                values = (
+                    configured_values
+                    if isinstance(configured_values, list)
+                    else [configured_values]
+                )
+                aliases.extend(str(value) for value in values if value not in (None, ""))
+        resource_aliases = resource.get("aliases", [])
+        if not isinstance(resource_aliases, list):
+            resource_aliases = [resource_aliases]
+        aliases.extend(
+            str(value) for value in resource_aliases if value not in (None, "")
+        )
+        return aliases
+
+    def resolve_selector(
+        self,
+        namespace: str,
+        selector: str,
+        *,
+        suffix: str,
+    ) -> dict | None:
+        """Resolve a user-facing selector through canonical keys and aliases."""
+
+        requested_forms = _selector_forms(selector)
+        raw_selector = _normalize_selector(selector)
+        if not requested_forms:
+            return None
+
+        expected_kind = {
+            "blast": "blast_database",
+            "sequences": "fasta",
+        }.get(suffix)
+        matches: list[tuple[tuple[int, int], str, str]] = []
+        prefix = f"{namespace}:"
+        suffix_marker = f":{suffix}"
+        for key, resource in self.resources.items():
+            if not key.startswith(prefix):
+                continue
+            if expected_kind and resource.get("kind") != expected_kind:
+                continue
+            body = key[len(prefix):]
+            if body.endswith(suffix_marker):
+                canonical = body[: -len(suffix_marker)]
+                suffix_rank = 0
+            elif ":" not in body:
+                canonical = body
+                suffix_rank = 1
+            else:
+                continue
+            canonical_normalized = _normalize_selector(canonical)
+            alias_forms = {
+                form
+                for alias in self._resource_aliases(namespace, canonical, resource)
+                for form in _selector_forms(alias)
+            }
+            if raw_selector == canonical_normalized:
+                match_rank = 0
+                match_method = "canonical"
+            elif canonical_normalized in requested_forms:
+                match_rank = 1
+                match_method = "embedded_canonical"
+            elif requested_forms & alias_forms:
+                match_rank = 2
+                match_method = "configured_alias"
+            else:
+                continue
+            matches.append(((match_rank, suffix_rank), key, match_method))
+
+        if not matches:
+            return None
+        matches.sort(key=lambda item: (item[0], item[1]))
+        best_rank = matches[0][0]
+        best = [item for item in matches if item[0] == best_rank]
+        selected = best[0]
+        if len(best) > 1:
+            resolved_candidates = [
+                (item, self.resolve(item[1]))
+                for item in best
+            ]
+            identities = {
+                (
+                    resource.get("kind"),
+                    resource.get("path"),
+                    resource.get("uri"),
+                    resource.get("version"),
+                )
+                for _item, resource in resolved_candidates
+                if resource is not None
+            }
+            if len(identities) != 1:
+                raise InputValidationError(
+                    "资源选择器匹配到多个目录项",
+                    details={
+                        "namespace": namespace,
+                        "suffix": suffix,
+                        "match_count": len(best),
+                    },
+                )
+            selected = min(best, key=lambda item: item[1])
+        resolved = self.resolve(selected[1])
+        if resolved is not None:
+            resolved["selector_match_method"] = (
+                "equivalent_catalog_alias"
+                if len(best) > 1
+                else selected[2]
+            )
+        return resolved
+
+    def resolve_versioned(
+        self,
+        *keys: str,
+        scope: dict[str, Any],
+    ) -> dict[str, Any] | None:
+        """Resolve a catalog entry without discarding missing-path evidence."""
+
+        first_unresolved: dict[str, Any] | None = None
+        for key in keys:
+            finalized = finalize_versioned_resource(
+                self.resolve(key),
+                scope=scope,
+            )
+            if finalized is None:
+                continue
+            if finalized.get("resolution_status") == "RESOLVED":
+                return finalized
+            if first_unresolved is None:
+                first_unresolved = finalized
+        return first_unresolved
+
+    def request_resource(
+        self,
+        path: str | Path,
+        *,
+        key: str,
+        version: str | None,
+        scope: dict[str, Any],
+        kind: str = "blast_database",
+    ) -> dict[str, Any]:
+        """Represent a request-supplied path using the same P2 contract."""
+
+        resolved_path = Path(path).resolve()
+        resource = {
+            "key": key,
+            "kind": kind,
+            "path": str(resolved_path),
+            "version": version,
+            "exists": self._path_available(
+                {"kind": kind},
+                resolved_path,
+            ),
+        }
+        finalized = finalize_versioned_resource(resource, scope=scope)
+        assert finalized is not None
+        return finalized
+
     def sequence_records(self, *keys: str) -> list[SequenceRecord]:
         path = self.resolve_path(*keys)
         return read_fasta(path) if path else []
@@ -128,21 +364,75 @@ class DatabaseCatalog:
             if enriched.get(field):
                 return
             resource = self.resolve(*keys)
+            apply_resource(field, resource)
+
+        def apply_resource(field: str, resource: dict | None) -> None:
+            if enriched.get(field):
+                return
             if resource and resource.get("path") and resource.get("exists"):
                 enriched[field] = resource["path"]
-                resolutions.append({"field": field, "key": resource["key"], "version": resource.get("version")})
+                resolution = {
+                    "field": field,
+                    "key": resource["key"],
+                    "version": resource.get("version"),
+                }
+                if resource.get("selector_match_method"):
+                    resolution["selector_match_method"] = resource[
+                        "selector_match_method"
+                    ]
+                if resource.get("selector_source_field"):
+                    resolution["selector_source_field"] = resource[
+                        "selector_source_field"
+                    ]
+                resolutions.append(resolution)
 
         target_id = str(enriched.get("target_id", "")).strip()
+        target_species = str(enriched.get("target_species", "")).strip()
         host = str(enriched.get("host_species", "")).strip()
-        if target_id:
-            apply_path("target_db", [f"target:{target_id}:blast", f"target:{target_id}"])
-        if host:
-            apply_path("host_db", [f"host:{host}:blast", f"host:{host}"])
-        apply_path("cross_db", ["cross:default:blast", "cross:default"])
-        if workflow in {"WF-01", "WF-05"} and not any(enriched.get(key) for key in ("sequence", "sequences", "fasta_path")) and target_id:
-            apply_path("fasta_path", [f"target:{target_id}:sequences"])
+        target_selectors = [
+            ("target_id", target_id),
+            ("target_species", target_species),
+        ]
 
-        if workflow in {"WF-02", "WF-06"} and isinstance(enriched.get("targets"), list):
+        def resolve_target_resource(*, suffix: str) -> dict | None:
+            seen: set[str] = set()
+            for source_field, selector in target_selectors:
+                normalized = _normalize_selector(selector)
+                if not normalized or normalized in seen:
+                    continue
+                seen.add(normalized)
+                resource = self.resolve_selector(
+                    "target",
+                    selector,
+                    suffix=suffix,
+                )
+                if resource is not None:
+                    resource["selector_source_field"] = source_field
+                    return resource
+            return None
+
+        if (target_id or target_species) and not enriched.get("target_db"):
+            apply_resource("target_db", resolve_target_resource(suffix="blast"))
+        if host and not enriched.get("host_db"):
+            apply_resource(
+                "host_db",
+                self.resolve_selector("host", host, suffix="blast"),
+            )
+        apply_path("cross_db", ["cross:default:blast", "cross:default"])
+        if (
+            workflow in {"WF-01", "WF-05"}
+            and not any(
+                enriched.get(key)
+                for key in ("sequence", "sequences", "fasta_path")
+            )
+            and (target_id or target_species)
+        ):
+            apply_resource(
+                "fasta_path",
+                resolve_target_resource(suffix="sequences"),
+            )
+
+        if workflow == "WF-02" and isinstance(enriched.get("targets"), list):
             child_targets = []
             for target in enriched["targets"]:
                 child = {**enriched, **target}

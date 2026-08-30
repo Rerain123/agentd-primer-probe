@@ -1,6 +1,6 @@
 # P6 运行契约
 
-P6 通过 WF-01、WF-03、WF-04、WF-06 和 WF-07 间接运行。检查 `candidates[].amplicon_structure` 或 `internal_control.candidates[]`。
+P6 通过 WF-01、WF-03 和 WF-04 间接运行。检查 `candidates[].amplicon_structure` 或 `internal_control.candidates[]`。
 
 适配器在每次受保护调用时加载 ViennaRNA DNA Mathews 2004 参数，在 60°C、50 mM Na+ 条件下把 T→U 后折叠 DNA，最大支持 500 nt。
 

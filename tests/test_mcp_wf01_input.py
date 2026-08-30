@@ -97,6 +97,36 @@ class MCPWF01InputTests(unittest.TestCase):
         preflight = WF01V02Preflight(normalized).run()
         self.assertTrue(preflight["can_auto_run"])
 
+    def test_direct_top_level_values_replace_empty_batch_defaults(self) -> None:
+        normalized, _ = normalize_wf01_mcp_payload(
+            {
+                "sequence": "ACGT" * 40,
+                "target_organism": "Synthetic target",
+                "host": "pig",
+                "coverage_requirement": "all records",
+                "batch_defaults": {
+                    "target_organism": None,
+                    "hosts": [],
+                    "coverage_requirement": "",
+                },
+            }
+        )
+
+        self.assertEqual(
+            normalized["batch_defaults"]["target_organism"],
+            "Synthetic target",
+        )
+        self.assertEqual(
+            normalized["batch_defaults"]["hosts"],
+            ["pig"],
+        )
+        self.assertEqual(
+            normalized["batch_defaults"]["coverage_requirement"],
+            "all records",
+        )
+        target = WF01V02Preflight(normalized).run()["targets"][0]
+        self.assertEqual(target["execution_path"], "FULL_SPECIFICITY")
+
     def test_form_without_user_field_update_cannot_start_preflight(self) -> None:
         with self.assertRaises(InputValidationError) as caught:
             normalize_wf01_mcp_payload(

@@ -18,11 +18,8 @@
 └── sequences/
     ├── target/
     │   └── CSFV/2026-07-01.fasta
-    └── internal/
-        └── pig/
-            ├── ACTB/2026-07-01.fasta
-            ├── GAPDH/2026-07-01.fasta
-            └── 18S_rRNA/2026-07-01.fasta
+    └── overrides/                 # 可选；P5 默认管家基因由 Entrez 获取
+        └── internal/pig/ACTB/2026-07-01.fasta
 ```
 
 `deploy/.env` 映射：

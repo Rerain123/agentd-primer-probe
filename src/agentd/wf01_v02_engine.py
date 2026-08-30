@@ -14,16 +14,22 @@ import json
 from datetime import datetime, timezone
 from typing import Any
 
-from .alignment import MafftAdapter, find_conserved_regions
+from .alignment import (
+    MafftAdapter,
+    build_conservation_profile,
+    candidate_conservation_evidence,
+    find_conserved_regions,
+    public_conservation_profile,
+)
 from .errors import AgentDError
 from .models import Candidate, RuleResult, RuleStatus, SequenceRecord
 from .primer3_tool import Primer3Adapter
 
 
 PRD_VERSION = "0.2"
-M2_ENGINE_VERSION = "wf01-v0.2-m2.3"
+M2_ENGINE_VERSION = "wf01-v0.2-m2.4-mafft-conservation"
 M2_PRIMER3_NUM_RETURN = 50
-EXPLORATION_POLICY_VERSION = "wf01-v0.2-conserved-region-v1"
+EXPLORATION_POLICY_VERSION = "wf01-v0.2-conserved-region-v2"
 HARD_RULE_CODES = frozenset(f"R{number:02d}" for number in range(1, 11))
 SOFT_RULE_PENALTIES_PERCENT = {
     "R01_SOFT": 5,
@@ -93,6 +99,47 @@ class WF01V02RuleEngine:
     @staticmethod
     def _rule_map(candidate: Candidate) -> dict[str, RuleResult]:
         return {rule.code: rule for rule in candidate.rules}
+
+    @staticmethod
+    def _conservation_rule(candidate: Candidate) -> RuleResult:
+        evidence = copy.deepcopy(
+            candidate.metadata.get("conservation_evidence") or {}
+        )
+        if evidence.get("status") != "EVALUATED":
+            return _not_evaluated(
+                "R16",
+                "conservation",
+                "MAFFT 多序列保守区及候选结合位点证据已完成",
+                "C5/MAFFT + WF01 conservation analysis",
+                str(
+                    evidence.get("reason")
+                    or "未完成多序列保守性评估"
+                ),
+                actual=evidence,
+            )
+        score = evidence.get("score")
+        confidence = str(evidence.get("confidence") or "LOW")
+        status = (
+            RuleStatus.PASS
+            if score is not None
+            and float(score) >= 0.95
+            and confidence == "HIGH"
+            else RuleStatus.WARNING
+        )
+        return _result(
+            "R16",
+            "conservation",
+            status,
+            evidence,
+            "优先 conservation≥0.95、连续区≥150 bp 且代表序列 N≥20；"
+            "放宽区或低样本量保留为 WARNING",
+            "C5/MAFFT + WF01 Shannon conservation",
+            (
+                "候选结合位点达到高置信度保守性要求"
+                if status == RuleStatus.PASS
+                else "保守性已评估，但使用放宽区域、全长回退或代表序列不足"
+            ),
+        )
 
     def evaluate(self, candidate: Candidate) -> list[RuleResult]:
         rules: list[RuleResult] = []
@@ -512,15 +559,7 @@ class WF01V02RuleEngine:
                     "PRD v0.2 scope",
                     "WF-01 本期不做内标设计",
                 ),
-                _result(
-                    "R16",
-                    "scope",
-                    RuleStatus.NOT_EVALUATED,
-                    None,
-                    "保守性规则",
-                    "PRD v0.2 scope",
-                    "本期不做保守性分析",
-                ),
+                self._conservation_rule(candidate),
                 _result(
                     "R17",
                     "scope",
@@ -579,7 +618,12 @@ class WF01V02RuleEngine:
             "amplicon": bool(candidate.amplicon_sequence_5to3),
             "thermodynamics": not missing_metadata,
             "specificity": False,
-            "conservation": False,
+            "conservation": (
+                (
+                    candidate.metadata.get("conservation_evidence") or {}
+                ).get("status")
+                in {"EVALUATED", "NOT_EVALUATED"}
+            ),
             "amplicon_secondary_structure": False,
         }
         rules.append(
@@ -605,12 +649,24 @@ class WF01V02RuleEngine:
             if rule.status in {RuleStatus.WARNING, RuleStatus.NOT_EVALUATED}
             and rule.category == "soft"
         ]
+        scientific_warning_codes = [
+            rule.code
+            for rule in candidate.rules
+            if rule.status == RuleStatus.WARNING
+            and rule.category == "conservation"
+        ]
         penalty_codes = [
             code
             for code in warning_codes
             if code in SOFT_RULE_PENALTIES_PERCENT
         ]
-        candidate.warnings = sorted(set(candidate.warnings + warning_codes))
+        candidate.warnings = sorted(
+            set(
+                candidate.warnings
+                + warning_codes
+                + scientific_warning_codes
+            )
+        )
         candidate.verdict = status
         candidate.metadata["wf01_v02_rule_summary"] = {
             "hard_rule_status": status,
@@ -786,23 +842,64 @@ class WF01V02TargetEngine:
             )
         reference = records[0]
         template = reference.sequence
+        source_records = [
+            {
+                "id": record.id,
+                "description": record.description,
+                "source": record.source,
+                "length_nt": len(record.sequence),
+                "checksum_sha256": hashlib.sha256(
+                    record.sequence.encode("ascii", errors="ignore")
+                ).hexdigest(),
+                "role": "REFERENCE" if index == 0 else "ALIGNMENT_MEMBER",
+            }
+            for index, record in enumerate(records)
+        ]
+        conservation_profile: dict[str, Any] | None = None
         if len(records) == 1:
+            aligned = records
             alignment_method = "single_sequence"
-            alignment_warnings: list[str] = []
+            alignment_warnings = [
+                "仅提供1条序列，未执行 MAFFT，不能声称完成群体保守性验证"
+            ]
             regions = [
                 {
                     "start": 0,
                     "end": len(template) - 1,
                     "length": len(template),
-                    "conservation_score": 1.0,
+                    "alignment_start": 0,
+                    "alignment_end": len(template) - 1,
+                    "alignment_length": len(template),
+                    "sequence": template,
+                    "consensus_sequence": template,
+                    "conservation_score": None,
+                    "mean_entropy_bits": None,
+                    "maximum_entropy_bits": None,
+                    "mean_coverage": None,
+                    "minimum_coverage": None,
+                    "variant_position_count": None,
+                    "variant_positions": [],
                     "label": "single_sequence_full_length",
+                    "selection_status": "NOT_EVALUATED_SINGLE_SEQUENCE",
+                    "selection_round": None,
+                    "selection_threshold": None,
+                    "minimum_required_length": None,
+                    "sequence_count": 1,
+                    "confidence": "NOT_EVALUATED",
+                    "low_confidence_reasons": [
+                        "POPULATION_SEQUENCE_COUNT_BELOW_2"
+                    ],
+                    "full_length_fallback": False,
                 }
             ]
-            conservation_method = "single_sequence"
+            conservation_method = "not_evaluated_single_sequence"
+            conservation_status = "NOT_EVALUATED"
+            conservation_reason = "SINGLE_SEQUENCE_NO_POPULATION_CONSERVATION"
             mafft_status = "SKIPPED_SINGLE_SEQUENCE"
             raw_alignment_output = {
                 "tool": "MAFFT",
                 "status": "SKIPPED_SINGLE_SEQUENCE",
+                "method": alignment_method,
                 "input_records": [
                     {"id": record.id, "sequence": record.sequence}
                     for record in records
@@ -814,11 +911,6 @@ class WF01V02TargetEngine:
             }
         else:
             aligned, alignment_method, alignment_warnings = self.mafft.align(records)
-            regions, conservation_method = find_conserved_regions(
-                aligned,
-                self.conservation_rounds,
-            )
-            mafft_status = "COMPLETED"
             raw_alignment_output = copy.deepcopy(
                 getattr(
                     self.mafft,
@@ -837,6 +929,64 @@ class WF01V02TargetEngine:
                     },
                 )
             )
+            mafft_status = str(
+                raw_alignment_output.get("status") or "COMPLETED"
+            )
+            if alignment_method == "mafft_shannon":
+                conservation_profile = build_conservation_profile(aligned)
+                regions, conservation_method = find_conserved_regions(
+                    aligned,
+                    self.conservation_rounds,
+                )
+                conservation_status = "EVALUATED"
+                conservation_reason = "MAFFT_SHANNON_COMPLETED"
+                raw_alignment_output["conservation_profile"] = (
+                    public_conservation_profile(conservation_profile)
+                )
+                if len(records) < 20:
+                    alignment_warnings = [
+                        *alignment_warnings,
+                        (
+                            f"代表序列数量 N={len(records)}<20，"
+                            "保守性置信度降低"
+                        ),
+                    ]
+            else:
+                conservation_method = alignment_method
+                conservation_status = "NOT_EVALUATED"
+                conservation_reason = (
+                    "DEVELOPMENT_ALIGNMENT_FALLBACK_CANNOT_PROVE_CONSERVATION"
+                )
+                regions = [
+                    {
+                        "start": 0,
+                        "end": len(template) - 1,
+                        "length": len(template),
+                        "alignment_start": 0,
+                        "alignment_end": len(template) - 1,
+                        "alignment_length": len(template),
+                        "sequence": template,
+                        "consensus_sequence": None,
+                        "conservation_score": None,
+                        "mean_entropy_bits": None,
+                        "maximum_entropy_bits": None,
+                        "mean_coverage": None,
+                        "minimum_coverage": None,
+                        "variant_position_count": None,
+                        "variant_positions": [],
+                        "label": "full_length_fallback",
+                        "selection_status": "NOT_EVALUATED_TOOL_FALLBACK",
+                        "selection_round": None,
+                        "selection_threshold": None,
+                        "minimum_required_length": None,
+                        "sequence_count": len(records),
+                        "confidence": "NOT_EVALUATED",
+                        "low_confidence_reasons": [
+                            "MAFFT_NOT_ACTUALLY_COMPLETED"
+                        ],
+                        "full_length_fallback": True,
+                    }
+                ]
         if not regions:
             raise AgentDError(
                 "WF01 v0.2 M2 未找到可供 Primer3 设计的保守区",
@@ -857,8 +1007,12 @@ class WF01V02TargetEngine:
             ],
             "template_length_nt": len(template),
             "template_count": len(records),
+            "source_records": source_records,
             "alignment_method": alignment_method,
+            "mafft_status": mafft_status,
+            "conservation_status": conservation_status,
             "conservation_method": conservation_method,
+            "conservation_rounds": copy.deepcopy(self.conservation_rounds),
             "regions": regions,
             "parameter_runs": runs,
             "primer3_num_return_per_unit": M2_PRIMER3_NUM_RETURN,
@@ -884,8 +1038,41 @@ class WF01V02TargetEngine:
                         "start": int(region["start"]),
                         "end": int(region["end"]),
                         "length_nt": int(region["length"]),
+                        "length": int(region["length"]),
                         "label": region.get("label"),
                         "conservation_score": region.get("conservation_score"),
+                        "confidence": region.get("confidence"),
+                        "selection_status": region.get("selection_status"),
+                        "selection_round": region.get("selection_round"),
+                        "selection_threshold": region.get(
+                            "selection_threshold"
+                        ),
+                        "minimum_required_length": region.get(
+                            "minimum_required_length"
+                        ),
+                        "variant_position_count": region.get(
+                            "variant_position_count"
+                        ),
+                        "variant_positions": copy.deepcopy(
+                            region.get("variant_positions") or []
+                        ),
+                        "mean_entropy_bits": region.get(
+                            "mean_entropy_bits"
+                        ),
+                        "maximum_entropy_bits": region.get(
+                            "maximum_entropy_bits"
+                        ),
+                        "mean_coverage": region.get("mean_coverage"),
+                        "minimum_coverage": region.get(
+                            "minimum_coverage"
+                        ),
+                        "sequence_count": region.get("sequence_count"),
+                        "low_confidence_reasons": copy.deepcopy(
+                            region.get("low_confidence_reasons") or []
+                        ),
+                        "full_length_fallback": region.get(
+                            "full_length_fallback"
+                        ),
                     },
                     "excluded_regions": [],
                     "parameter_run_id": run["run_id"],
@@ -976,6 +1163,52 @@ class WF01V02TargetEngine:
                     conservation_method=conservation_method,
                     sequence_count=len(records),
                 )
+                conservation_evidence = candidate_conservation_evidence(
+                    conservation_profile,
+                    intervals={
+                        "forward_primer": (
+                            (
+                                int(candidate.forward_primer.position_start),
+                                int(candidate.forward_primer.position_end),
+                            )
+                            if candidate.forward_primer.position_start
+                            is not None
+                            and candidate.forward_primer.position_end
+                            is not None
+                            else None
+                        ),
+                        "reverse_primer": (
+                            (
+                                int(candidate.reverse_primer.position_start),
+                                int(candidate.reverse_primer.position_end),
+                            )
+                            if candidate.reverse_primer.position_start
+                            is not None
+                            and candidate.reverse_primer.position_end
+                            is not None
+                            else None
+                        ),
+                        "probe": (
+                            (
+                                int(candidate.probe.position_start),
+                                int(candidate.probe.position_end),
+                            )
+                            if candidate.probe is not None
+                            and candidate.probe.position_start is not None
+                            and candidate.probe.position_end is not None
+                            else None
+                        ),
+                    },
+                    region=region,
+                    status=conservation_status,
+                    method=conservation_method,
+                    reason=conservation_reason,
+                )
+                candidate.conservation_score = conservation_evidence.get(
+                    "score"
+                )
+                candidate.conservation_method = conservation_method
+                candidate.conservation_sequence_count = len(records)
                 candidate.metadata.update(
                     {
                         "wf01_prd_version": PRD_VERSION,
@@ -993,11 +1226,8 @@ class WF01V02TargetEngine:
                             "final_relative_rule": "R07",
                         },
                         "specificity_status": "PENDING_M4",
-                        "conservation_status": (
-                            "NOT_APPLICABLE_SINGLE_SEQUENCE"
-                            if len(records) == 1
-                            else "EVALUATED"
-                        ),
+                        "conservation_status": conservation_evidence["status"],
+                        "conservation_evidence": conservation_evidence,
                         "amplicon_secondary_structure_status": "NOT_EVALUATED",
                     }
                 )
@@ -1041,13 +1271,61 @@ class WF01V02TargetEngine:
             "mafft_status": mafft_status,
             "mafft_tool_status": self.mafft.status(),
             "alignment": {
+                "status": (
+                    "EVALUATED"
+                    if alignment_method == "mafft_shannon"
+                    else "NOT_EVALUATED"
+                    if len(records) > 1
+                    else "NOT_APPLICABLE"
+                ),
                 "sequence_count": len(records),
+                "reference_id": reference.id,
+                "source_records": source_records,
                 "method": alignment_method,
+                "alignment_width": (
+                    len(aligned[0].sequence) if aligned else None
+                ),
                 "warnings": alignment_warnings,
                 "raw_tool_output": raw_alignment_output,
             },
             "conservation": {
+                "status": conservation_status,
+                "reason": conservation_reason,
                 "method": conservation_method,
+                "sequence_count": len(records),
+                "reference_id": reference.id,
+                "representative_sequence_target": 20,
+                "representative_sequence_count_sufficient": len(records) >= 20,
+                "progressive_rounds": copy.deepcopy(
+                    self.conservation_rounds
+                ),
+                "selected_rounds": sorted(
+                    {
+                        int(region["selection_round"])
+                        for region in regions
+                        if region.get("selection_round") is not None
+                    }
+                ),
+                "full_length_fallback": any(
+                    bool(region.get("full_length_fallback"))
+                    for region in regions
+                ),
+                "profile_summary": (
+                    {
+                        key: value
+                        for key, value in public_conservation_profile(
+                            conservation_profile
+                        ).items()
+                        if key
+                        not in {
+                            "columns",
+                            "reference_columns",
+                            "reference_sequence",
+                        }
+                    }
+                    if conservation_profile is not None
+                    else None
+                ),
                 "regions": copy.deepcopy(regions),
             },
             "parameter_runs": runs,

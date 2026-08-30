@@ -141,6 +141,39 @@ def summarize_tool_result(result: Any) -> dict[str, Any]:
     return sanitize_for_audit(summary)
 
 
+_UI_OUTPUT_TYPES = {
+    "agent_interaction",
+    "primer_design_input",
+    "primer_design_output",
+}
+
+
+def observable_tool_output(result: Any) -> tuple[str, Any]:
+    """Select the business value that the MCP caller actually observes.
+
+    Terminal and interaction tools promote ``ui_message`` to the MCP
+    ``structuredContent`` field after the service call.  Recording that object
+    here keeps the audit log aligned with the client-visible business payload
+    instead of copying the much larger internal workflow result.
+    """
+
+    if not isinstance(result, dict):
+        return "tool_result", result
+    if result.get("type") in _UI_OUTPUT_TYPES:
+        return "tool_result", result
+
+    ui_message = result.get("ui_message")
+    if isinstance(ui_message, dict):
+        return "ui_message", ui_message
+
+    retained = result.get("summary")
+    if isinstance(retained, dict):
+        ui_message = retained.get("ui_message")
+        if isinstance(ui_message, dict):
+            return "summary.ui_message", ui_message
+    return "tool_result", result
+
+
 class AgentAuditLog:
     """Append-only JSONL audit storage colocated with persisted workflow state."""
 
@@ -168,6 +201,7 @@ class AgentAuditLog:
         return trace_id
 
     def complete(self, trace_id: str, operation: str, result: Any) -> None:
+        output_source, output = observable_tool_output(result)
         self._append(
             {
                 "event_id": str(uuid4()),
@@ -176,6 +210,8 @@ class AgentAuditLog:
                 "event": "TOOL_COMPLETED",
                 "operation": operation,
                 "result": summarize_tool_result(result),
+                "output_source": output_source,
+                "output": sanitize_for_audit(output),
             }
         )
 

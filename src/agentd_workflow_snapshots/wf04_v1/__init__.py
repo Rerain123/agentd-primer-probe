@@ -1,0 +1,36 @@
+"""Independent WF-04 runtime snapshot."""
+
+SNAPSHOT_VERSION = "wf04-runtime-snapshot-v1"
+SOURCE_RELEASE = "1.1.13"
+SOURCE_ARCHIVE_SHA256 = (
+    "19df30aa9fbbc73ea9511a2ca3c50ecd90b2e4148c6368256292d2484277b05c"
+)
+BOOTSTRAP_PATCH = "REMOVE_EAGER_SERVICE_IMPORT"
+IMMUTABLE = True
+HOTFIX_REVISION = "wf04-dg-unit-r09-report-2026-08-28"
+HOTFIX_FILES_SHA256 = {
+    "primer3_tool.py": (
+        "600f5c4488a9a701855a7681f4d2760e3ecb8db933f7c5e751a3bd87c6685ad3"
+    ),
+    "workflow_report_html.py": (
+        "7fcdfa7cf0e3747c8c7676bbf9c6696d60685dc45984799c1e9d0757987f11d4"
+    ),
+}
+DEVELOPMENT_REVISION = "wf04-step-order-2026-08-28"
+DEVELOPMENT_FILES_SHA256 = {
+    "workflows/wf04_v01.py": (
+        "6e3b1366f4cb8305b844c3495e76427999d304218c25ed54274c9ad88025a3f0"
+    ),
+}
+
+__all__ = [
+    "BOOTSTRAP_PATCH",
+    "DEVELOPMENT_FILES_SHA256",
+    "DEVELOPMENT_REVISION",
+    "HOTFIX_FILES_SHA256",
+    "HOTFIX_REVISION",
+    "IMMUTABLE",
+    "SNAPSHOT_VERSION",
+    "SOURCE_ARCHIVE_SHA256",
+    "SOURCE_RELEASE",
+]

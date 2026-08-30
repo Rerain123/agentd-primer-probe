@@ -134,6 +134,32 @@ class RustFSArtifactPublisherTests(unittest.TestCase):
         self.assertEqual(len(fake.deleted), 1)
         self.assertNotIn(fake.deleted[0], fake.objects)
 
+    def test_publish_can_use_batch_scoped_object_name(self) -> None:
+        fake = FakeS3Client()
+        publisher = RustFSArtifactPublisher(self.settings(), client=fake)
+        with tempfile.TemporaryDirectory(prefix="agentd-rustfs-object-name-") as temp_dir:
+            report = Path(temp_dir) / "wf02-multiplex-report.pdf"
+            report.write_bytes(b"%PDF-1.7\n")
+            result = publisher.publish(
+                report,
+                batch_id="batch-fixture",
+                media_type="application/pdf",
+                sha256="fixture-sha256",
+                object_name="wf02-batch-fixture-multiplex-report.pdf",
+            )
+
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertEqual(
+            result["object_key"],
+            "data/wf02-batch-fixture-multiplex-report.pdf",
+        )
+        self.assertEqual(
+            result["file_url"],
+            "https://rustfs.ne.scqcyz.cn/wens/data/"
+            "wf02-batch-fixture-multiplex-report.pdf",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

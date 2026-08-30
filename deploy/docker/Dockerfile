@@ -1,7 +1,7 @@
 FROM python:3.12-slim
 
 LABEL org.opencontainers.image.title="Agent D 引物探针服务" \
-      org.opencontainers.image.version="1.0.3" \
+      org.opencontainers.image.version="1.2.13" \
       org.opencontainers.image.description="OligoSmith 可流式传输 HTTP MCP 服务"
 
 ENV PYTHONDONTWRITEBYTECODE=1 \

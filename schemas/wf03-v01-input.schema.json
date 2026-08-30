@@ -1,0 +1,126 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://wens.example/schemas/wf03-v01-input.json",
+  "title": "WF-03 宿主内标设计输入",
+  "description": "LLM仅映射用户明确输入；基因选择和所有科学判定由WF-03/P5后端完成。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["host_species"],
+  "dependentRequired": {
+    "input_gene": ["input_artifact_id"]
+  },
+  "properties": {
+    "host_species": {"type": "string", "minLength": 1},
+    "assay_id": {"type": "string", "minLength": 1},
+    "input_artifact_id": {
+      "type": "string",
+      "pattern": "^himat-[0-9a-f]{32}$"
+    },
+    "input_gene": {"type": "string", "minLength": 1},
+    "preferred_genes": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/preferredGene"}
+    },
+    "gene_accessions": {
+      "type": "object",
+      "additionalProperties": {"type": "string", "minLength": 1}
+    },
+    "gene_sequences": {
+      "type": "object",
+      "additionalProperties": {"$ref": "#/$defs/geneSequenceSet"}
+    },
+    "gene_fasta_paths": {
+      "type": "object",
+      "additionalProperties": {"type": "string", "minLength": 1}
+    },
+    "existing_targets": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/existingTarget"}
+    },
+    "host_db": {"type": "string", "minLength": 1},
+    "cross_db": {"type": "string", "minLength": 1},
+    "allow_fallback": {"type": "boolean"}
+  },
+  "$defs": {
+    "preferredGene": {
+      "oneOf": [
+        {"type": "string", "minLength": 1},
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["gene"],
+          "properties": {
+            "gene": {"type": "string", "minLength": 1},
+            "refseq_accession": {"type": "string", "minLength": 1}
+          }
+        }
+      ]
+    },
+    "sequenceRecord": {
+      "oneOf": [
+        {"type": "string", "pattern": "^[ACGTRYSWKMBDHVNacgtryswkmbdhvn\\s]+$"},
+        {
+          "type": "object",
+          "required": ["sequence"],
+          "properties": {
+            "id": {"type": "string"},
+            "sequence": {"type": "string", "minLength": 1},
+            "description": {"type": "string"},
+            "source": {"type": "string"}
+          }
+        }
+      ]
+    },
+    "geneSequenceSet": {
+      "oneOf": [
+        {
+          "type": "array",
+          "minItems": 1,
+          "items": {"$ref": "#/$defs/sequenceRecord"}
+        },
+        {
+          "type": "object",
+          "required": ["sequences"],
+          "properties": {
+            "sequences": {
+              "type": "array",
+              "minItems": 1,
+              "items": {"$ref": "#/$defs/sequenceRecord"}
+            }
+          }
+        }
+      ]
+    },
+    "oligo": {
+      "oneOf": [
+        {"type": "string", "minLength": 1},
+        {
+          "type": "object",
+          "required": ["sequence_5to3"],
+          "properties": {
+            "sequence_5to3": {"type": "string", "minLength": 1},
+            "fluorophore": {"type": "string"}
+          }
+        }
+      ]
+    },
+    "existingTarget": {
+      "type": "object",
+      "properties": {
+        "target_id": {"type": "string"},
+        "fwd_seq": {"type": "string", "minLength": 1},
+        "rev_seq": {"type": "string", "minLength": 1},
+        "probe_seq": {"type": "string", "minLength": 1},
+        "forward_primer": {"$ref": "#/$defs/oligo"},
+        "reverse_primer": {"$ref": "#/$defs/oligo"},
+        "probe": {"$ref": "#/$defs/oligo"},
+        "fluorophore": {"type": "string"}
+      },
+      "allOf": [
+        {"anyOf": [{"required": ["fwd_seq"]}, {"required": ["forward_primer"]}]},
+        {"anyOf": [{"required": ["rev_seq"]}, {"required": ["reverse_primer"]}]}
+      ]
+    }
+  }
+}

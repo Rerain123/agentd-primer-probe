@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from agentd.models import EvidenceLevel
-from agentd.specificity import BlastAdapter, SpecificityEvaluator
+from agentd.specificity import BlastAdapter, P2_THRESHOLDS, SpecificityEvaluator
 from agentd.workflows.common import evidence_from_specificity
 
 
@@ -86,8 +86,14 @@ class SpecificityRequirementTests(unittest.TestCase):
             )
 
         command = run.call_args.args[0]
-        self.assertEqual(command[command.index("-perc_identity") + 1], "95.0")
-        self.assertEqual(command[command.index("-qcov_hsp_perc") + 1], "95.0")
+        self.assertEqual(
+            command[command.index("-perc_identity") + 1],
+            str(P2_THRESHOLDS["TARGET_HIT"]["caution_identity_pct_min"]),
+        )
+        self.assertEqual(
+            command[command.index("-qcov_hsp_perc") + 1],
+            str(P2_THRESHOLDS["TARGET_HIT"]["caution_coverage_pct_min"]),
+        )
         self.assertEqual(command[command.index("-max_hsps") + 1], "100")
 
     def test_host_search_does_not_inherit_target_retrieval_filter(self) -> None:
@@ -154,15 +160,21 @@ class SpecificityRequirementTests(unittest.TestCase):
         self.assertEqual(result.verdict, "PASS")
         self.assertEqual(set(result.mode_specific["perfect_query_ids"]), set(queries))
 
-    def test_host_table_distinguishes_three_prime_mismatch_risk(self) -> None:
+    def test_host_single_hit_is_caution_even_when_hit_level_risk_is_high(self) -> None:
         queries = {"forward": "A" * 20, "reverse": "C" * 20}
         high_risk = [_hit("forward", evalue=1e-3, dg=-7.0, three_prime_mismatches=1)]
         evaluator = _RequirementEvaluator(_StaticBlast({"host": high_risk}), _StaticPrimer3())
-        self.assertEqual(evaluator.check_host(queries, "host-db", "pig").verdict, "FAIL")
+        result = evaluator.check_host(queries, "host-db", "fixture-host")
+        self.assertEqual(result.verdict, "CAUTION")
+        self.assertEqual(result.mode_specific["high_risk_hit_count"], 1)
+        self.assertEqual(result.mode_specific["compatible_amplicons"], [])
 
         lower_risk = [_hit("forward", evalue=1e-3, dg=-7.0, three_prime_mismatches=2)]
         evaluator = _RequirementEvaluator(_StaticBlast({"host": lower_risk}), _StaticPrimer3())
-        self.assertEqual(evaluator.check_host(queries, "host-db", "pig").verdict, "CAUTION")
+        self.assertEqual(
+            evaluator.check_host(queries, "host-db", "fixture-host").verdict,
+            "CAUTION",
+        )
 
     def test_compatible_host_primer_hits_are_fail(self) -> None:
         queries = {"forward": "A" * 20, "reverse": "C" * 20}
@@ -186,6 +198,73 @@ class SpecificityRequirementTests(unittest.TestCase):
         self.assertEqual(result.verdict, "CAUTION")
         self.assertEqual(result.blast_hits, 1)
         self.assertEqual(result.mode_specific["same_genus_species"], ["Pasteurella canis"])
+
+    def test_cross_species_excludes_target_accession_across_blast_id_forms(self) -> None:
+        queries = {"forward": "A" * 20, "reverse": "C" * 20}
+        hits = [
+            _hit("forward", accession="ref|TARGET_RECORD.2|"),
+            _hit("forward", accession="BACKGROUND_RECORD.1"),
+        ]
+        evaluator = _RequirementEvaluator(
+            _StaticBlast({"cross_species": hits}),
+            _StaticPrimer3(),
+        )
+
+        result = evaluator.check_cross_species(
+            queries,
+            "background-db",
+            None,
+            target_accessions={"TARGET_RECORD.1"},
+        )
+
+        self.assertEqual(result.verdict, "CAUTION")
+        self.assertEqual(result.blast_hits, 1)
+        self.assertEqual(result.mode_specific["excluded_target_hit_count"], 1)
+
+    def test_combined_regression_keeps_self_hit_out_and_single_host_hit_soft(self) -> None:
+        queries = {"forward": "A" * 20, "reverse": "C" * 20}
+        target_hits = [
+            _hit(query_id, accession="TARGET_RECORD.1")
+            for query_id in queries
+        ]
+        host_hits = [
+            _hit(
+                "forward",
+                accession="HOST_RECORD.1",
+                evalue=1e-3,
+                dg=-7.0,
+                three_prime_mismatches=1,
+            )
+        ]
+        background_hits = [
+            _hit("forward", accession="ref|TARGET_RECORD.2|")
+        ]
+        evaluator = _RequirementEvaluator(
+            _StaticBlast(
+                {
+                    "target": target_hits,
+                    "host": host_hits,
+                    "cross_species": background_hits,
+                }
+            ),
+            _StaticPrimer3(),
+        )
+
+        result = evaluator.evaluate(
+            type("Oligo", (), {"sequence_5to3": queries["forward"]})(),
+            type("Oligo", (), {"sequence_5to3": queries["reverse"]})(),
+            None,
+            target_db="target-db",
+            host_db="host-db",
+            cross_db="background-db",
+            host_species="fixture-host",
+            target_species=None,
+        )
+
+        self.assertEqual(result.target.verdict, "PASS")
+        self.assertEqual(result.host.verdict, "CAUTION")
+        self.assertEqual(result.cross_species.verdict, "PASS")
+        self.assertEqual(result.rating, "PASS_WITH_WARNINGS")
 
     def test_exact_target_evidence_is_per_query_not_all_returned_hits(self) -> None:
         queries = {"forward": "A" * 20, "reverse": "C" * 20}

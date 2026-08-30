@@ -36,7 +36,7 @@ class FakeResponse:
 def fake_opener(body: bytes = FASTA):
     def open_request(request, *, timeout: float):
         assert request.full_url == (
-            "https://himat.ne.scqcyz.cn/api/files/download/42"
+            "https://himat.ws.scqcyz.cn/api/files/download/42"
         )
         assert timeout == 30
         return FakeResponse(
@@ -100,6 +100,34 @@ class HiMatInputArtifactStoreTests(unittest.TestCase):
             self.assertTrue(Path(generic_payload["fasta_path"]).is_file())
             self.assertNotIn("input_artifact_id", generic_payload)
 
+            wf03_payload = store.materialize_wf03_payload(
+                {
+                    "host_species": "pig",
+                    "input_artifact_id": artifact["input_artifact_id"],
+                    "input_gene": "CUSTOM_INPUT",
+                }
+            )
+            wf03_path = Path(wf03_payload["gene_fasta_paths"]["CUSTOM_INPUT"])
+            self.assertTrue(wf03_path.is_file())
+            self.assertEqual(wf03_path.read_bytes(), FASTA)
+            self.assertEqual(wf03_payload["preferred_genes"], ["CUSTOM_INPUT"])
+            self.assertEqual(
+                wf03_payload["_wf03_input_artifact"]["input_artifact_id"],
+                artifact["input_artifact_id"],
+            )
+            self.assertNotIn("input_artifact_id", wf03_payload)
+            self.assertNotIn("input_gene", wf03_payload)
+
+            wf05_payload = store.materialize_wf05_payload(
+                {"input_artifact_id": artifact["input_artifact_id"]}
+            )
+            self.assertTrue(Path(wf05_payload["fasta_path"]).is_file())
+            self.assertEqual(
+                wf05_payload["_wf05_input_artifact"]["input_artifact_id"],
+                artifact["input_artifact_id"],
+            )
+            self.assertNotIn("input_artifact_id", wf05_payload)
+
     def test_inline_fasta_is_persisted_as_opaque_reusable_reference(self) -> None:
         with tempfile.TemporaryDirectory(prefix="inline-input-") as state_dir:
             store = HiMatInputArtifactStore(state_dir)
@@ -118,6 +146,129 @@ class HiMatInputArtifactStoreTests(unittest.TestCase):
             sequence_file = payload["sequence_files"][0]
             self.assertEqual(sequence_file["fasta_text"], text)
             self.assertEqual(sequence_file["file_name"], "直接输入序列.fasta")
+
+    def test_wf04_artifact_maps_named_records_inside_backend(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="wf04-input-") as state_dir:
+            store = HiMatInputArtifactStore(state_dir)
+            artifact = store.store_inline_fasta(
+                "\n".join(
+                    (
+                        ">forward",
+                        "ACGTACGTACGTACGTACGA",
+                        ">reverse",
+                        "TCGTACGTACGTACGTACGT",
+                        ">probe",
+                        "CACGTACGTACGTACGTACG",
+                        ">template",
+                        "ACGT" * 40,
+                    )
+                )
+                + "\n",
+                file_name="wf04-input.fasta",
+            )
+
+            payload = store.materialize_wf04_payload(
+                {"input_artifact_id": artifact["input_artifact_id"]}
+            )
+
+            self.assertEqual(payload["forward_primer"], "ACGTACGTACGTACGTACGA")
+            self.assertEqual(payload["reverse_primer"], "TCGTACGTACGTACGTACGT")
+            self.assertEqual(payload["probe"], "CACGTACGTACGTACGTACG")
+            self.assertEqual(payload["template"], "ACGT" * 40)
+            self.assertEqual(
+                payload["_wf04_input_artifact"]["mapped_fields"],
+                ["forward_primer", "probe", "reverse_primer", "template"],
+            )
+            self.assertNotIn("input_artifact_id", payload)
+
+    def test_wf04_single_upload_supplies_template_for_inline_pair(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="wf04-template-") as state_dir:
+            store = HiMatInputArtifactStore(state_dir)
+            artifact = store.store_inline_fasta(
+                ">uploaded\n" + "ACGT" * 40 + "\n",
+                file_name="wf04-template.fasta",
+            )
+
+            payload = store.materialize_wf04_payload(
+                {
+                    "forward_primer": "ACGTACGTACGTACGTACGA",
+                    "reverse_primer": "TCGTACGTACGTACGTACGT",
+                    "input_artifact_id": artifact["input_artifact_id"],
+                }
+            )
+
+            self.assertEqual(payload["template"], "ACGT" * 40)
+
+    def test_wf04_mixed_named_and_unnamed_records_map_missing_core(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="wf04-mixed-input-") as state_dir:
+            store = HiMatInputArtifactStore(state_dir)
+            artifact = store.store_inline_fasta(
+                "\n".join(
+                    (
+                        ">forward",
+                        "ACGTACGTACGTACGTACGA",
+                        ">uploaded-record",
+                        "TCGTACGTACGTACGTACGT",
+                        ">probe",
+                        "CACGTACGTACGTACGTACG",
+                    )
+                )
+                + "\n",
+                file_name="wf04-mixed-input.fasta",
+            )
+
+            payload = store.materialize_wf04_payload(
+                {"input_artifact_id": artifact["input_artifact_id"]}
+            )
+
+            self.assertEqual(payload["forward_primer"], "ACGTACGTACGTACGTACGA")
+            self.assertEqual(payload["reverse_primer"], "TCGTACGTACGTACGTACGT")
+            self.assertEqual(payload["probe"], "CACGTACGTACGTACGTACG")
+
+    def test_wf04_ambiguous_upload_is_rejected_in_backend(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="wf04-ambiguous-") as state_dir:
+            store = HiMatInputArtifactStore(state_dir)
+            artifact = store.store_inline_fasta(
+                "\n".join(
+                    (
+                        ">forward",
+                        "ACGTACGTACGTACGTACGA",
+                        ">record-one",
+                        "TCGTACGTACGTACGTACGT",
+                        ">record-two",
+                        "CACGTACGTACGTACGTACG",
+                    )
+                )
+                + "\n",
+            )
+
+            with self.assertRaisesRegex(InputValidationError, "无法确定性映射"):
+                store.materialize_wf04_payload(
+                    {"input_artifact_id": artifact["input_artifact_id"]}
+                )
+
+    def test_wf04_upload_inline_conflict_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="wf04-conflict-") as state_dir:
+            store = HiMatInputArtifactStore(state_dir)
+            artifact = store.store_inline_fasta(
+                "\n".join(
+                    (
+                        ">forward",
+                        "ACGTACGTACGTACGTACGA",
+                        ">reverse",
+                        "TCGTACGTACGTACGTACGT",
+                    )
+                )
+                + "\n",
+            )
+
+            with self.assertRaisesRegex(InputValidationError, "内联字段冲突"):
+                store.materialize_wf04_payload(
+                    {
+                        "input_artifact_id": artifact["input_artifact_id"],
+                        "forward_primer": "AAAAAAAAAAAAAAAAAAAA",
+                    }
+                )
 
     def test_service_preflight_accepts_artifact_reference(self) -> None:
         with tempfile.TemporaryDirectory(prefix="himat-input-") as state_dir:
@@ -148,30 +299,26 @@ class HiMatInputArtifactStoreTests(unittest.TestCase):
             self.assertEqual(batch["status"], "QUEUED")
             self.assertEqual(batch["targets"][0]["template"]["length_nt"], 160)
 
-    def test_service_prepare_wraps_raw_pasted_text_and_returns_reference(self) -> None:
-        with tempfile.TemporaryDirectory(prefix="inline-prepare-") as state_dir:
+    def test_service_create_accepts_raw_pasted_sequence_without_form(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="inline-create-") as state_dir:
             service = AgentDService(state_dir=state_dir)
             raw_sequence = "ACGT" * 40
 
-            form = service.prepare_wf01_design_input(
+            batch = service.create_wf01_v02_batch(
                 {
-                    "fasta_text": raw_sequence,
-                    "designInput": {
-                        "targetOrganism": "测试病毒",
-                        "host": "猪",
-                        "coverageRequirement": "单一毒株",
-                    },
-                }
+                    "sequence": raw_sequence,
+                    "target_organism": "测试病毒",
+                    "host": "猪",
+                },
+                interaction_mode="NO_POPUPS",
             )
 
-            source = form["data"]["sourceFile"]
-            self.assertEqual(source["inputMode"], "INLINE_SEQUENCE")
-            materialized = service.materialize_wf01_input(
-                {"input_artifact_id": source["inputArtifactId"]}
+            self.assertEqual(batch["status"], "QUEUED")
+            self.assertEqual(
+                batch["target_manifest"]["targets"][0]["execution_path"],
+                "FULL_SPECIFICITY",
             )
-            fasta_text = materialized["sequence_files"][0]["fasta_text"]
-            self.assertTrue(fasta_text.startswith(">pasted_sequence\n"))
-            self.assertIn(raw_sequence, fasta_text)
+            self.assertEqual(batch["targets"][0]["template"]["length_nt"], 160)
 
     def test_invalid_and_conflicting_references_are_rejected(self) -> None:
         with tempfile.TemporaryDirectory(prefix="himat-input-") as state_dir:
@@ -185,6 +332,38 @@ class HiMatInputArtifactStoreTests(unittest.TestCase):
                         "sequence_files": [{"fasta_text": ">x\nACGT"}],
                     }
                 )
+            with self.assertRaises(InputValidationError):
+                store.materialize_wf03_payload({"input_gene": "CUSTOM_INPUT"})
+            with self.assertRaises(InputValidationError):
+                store.materialize_wf05_payload(
+                    {
+                        "input_artifact_id": "himat-" + "0" * 32,
+                        "sequences": ["ACGT", "ACGT"],
+                    }
+                )
+            for unsupported in ("fasta_path", "_wf05_retry_context", "extra"):
+                with self.subTest(unsupported=unsupported):
+                    with self.assertRaisesRegex(
+                        InputValidationError,
+                        "未声明字段",
+                    ):
+                        store.materialize_wf05_payload(
+                            {
+                                "sequences": ["ACGT", "ACGT"],
+                                unsupported: "not-accepted",
+                            }
+                        )
+            invalid_payloads = (
+                {"sequences": ["ACGT", "ACGT"], "allow_fallback": None},
+                {"sequences": ["ACGT"]},
+                {"sequences": ["ACGT", {"sequence": "ACGT", "extra": 1}]},
+                {"sequences": ["ACGT", {"sequence": "ACGT", "id": 2}]},
+                {"sequences": ["ACGT", "ACGT"], "target_id": ""},
+            )
+            for payload in invalid_payloads:
+                with self.subTest(payload=payload):
+                    with self.assertRaises(InputValidationError):
+                        store.materialize_wf05_payload(payload)
 
 
 if __name__ == "__main__":

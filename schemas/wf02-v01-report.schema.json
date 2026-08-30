@@ -1,0 +1,382 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://wens.example/schemas/wf02-v01-report-v1.json",
+  "title": "WF-02 v0.1 普通多重面板报告",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "report_id",
+    "workflow",
+    "workflow_version",
+    "policy_version",
+    "generated_at",
+    "source",
+    "input_snapshot",
+    "runtime_config_snapshot",
+    "result_summary",
+    "outcome",
+    "internal_control_summary",
+    "balance_policy_version",
+    "scoring_policy_version",
+    "deduplication_policy_version",
+    "selection_policy_version",
+    "selection_mode",
+    "top3_panels",
+    "partial_panels",
+    "partial_panels_included",
+    "multiplex",
+    "traceability",
+    "candidate_comparison",
+    "result_explanation",
+    "experimental_validation_statement",
+    "evidence_statement",
+    "available_actions",
+    "exports"
+  ],
+  "properties": {
+    "schema_version": {"const": "wf02-v0.1-report-v1"},
+    "report_id": {"type": "string", "format": "uuid"},
+    "workflow": {"const": "WF-02"},
+    "workflow_version": {"const": "wf02-v0.1"},
+    "policy_version": {"const": "wf02-policy-v0.1"},
+    "generated_at": {"type": "string", "format": "date-time"},
+    "source": {
+      "type": "object",
+      "required": ["batch_id", "batch_code", "task_version"],
+      "properties": {
+        "batch_id": {"type": "string", "format": "uuid"},
+        "batch_code": {"type": "string", "minLength": 1},
+        "task_version": {"type": "integer", "minimum": 1},
+        "source_batch_id": {"type": ["string", "null"]},
+        "source_version": {"type": ["integer", "null"]},
+        "lineage_root_batch_id": {"type": "string", "format": "uuid"}
+      },
+      "additionalProperties": false
+    },
+    "input_snapshot": {"type": "object"},
+    "runtime_config_snapshot": {"type": "object"},
+    "version_diff": {"type": "object"},
+    "result_summary": {
+      "type": "object",
+      "required": ["status", "top3_count", "strict_candidate_count", "risk_candidate_count"],
+      "properties": {
+        "status": {"enum": ["PASS", "PASS_WITH_WARNING", "PARTIAL", "FAIL"]},
+        "primary_tier": {"type": ["string", "null"]},
+        "top3_count": {"type": "integer", "minimum": 0, "maximum": 3},
+        "strict_candidate_count": {"type": "integer", "minimum": 0},
+        "risk_candidate_count": {"type": "integer", "minimum": 0}
+      },
+      "additionalProperties": true
+    },
+    "internal_control_summary": {
+      "type": "object",
+      "required": [
+        "requested",
+        "included_in_panel",
+        "status",
+        "statement",
+        "follow_up_actions"
+      ],
+      "properties": {
+        "requested": {"type": "boolean"},
+        "included_in_panel": {"type": "boolean"},
+        "status": {"type": "string", "minLength": 1},
+        "p5_status": {"type": ["string", "null"]},
+        "p5_verdict": {"type": ["string", "null"]},
+        "failure": {"type": ["object", "null"]},
+        "channel_reservation": {"type": "object"},
+        "statement": {"type": "string", "minLength": 1},
+        "follow_up_actions": {"type": "array", "items": {"type": "string"}}
+      },
+      "additionalProperties": false
+    },
+    "balance_policy_version": {"const": "wf02-balance-sop-v1"},
+    "scoring_policy_version": {"const": "wf02-panel-score-conservative-v1"},
+    "deduplication_policy_version": {"const": "wf02-sequence-members-v1"},
+    "selection_policy_version": {"const": "wf02-global-score-top3-v2"},
+    "selection_mode": {"enum": ["GLOBAL_SCORE_TOP3", "PARTIAL_ONLY", "NO_COMPATIBLE_PANEL", "INCOMPLETE_TARGET_COVERAGE"]},
+    "top3_panels": {
+      "type": "array",
+      "minItems": 0,
+      "maxItems": 3,
+      "items": {"$ref": "#/$defs/panel"}
+    },
+    "risk_alternatives": {
+      "type": "array",
+      "maxItems": 3,
+      "items": {"$ref": "#/$defs/panel"}
+    },
+    "partial_panels": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/panel"}
+    },
+    "partial_panels_included": {"type": "boolean"},
+    "outcome": {
+      "type": "object",
+      "required": [
+        "workflow_status",
+        "primary_failure_stage",
+        "coverage_status",
+        "panel_status",
+        "reason_codes"
+      ],
+      "properties": {
+        "workflow_status": {"enum": ["COMPLETED", "PARTIAL", "FAILED"]},
+        "primary_failure_stage": {"type": ["string", "null"]},
+        "coverage_status": {"type": "object"},
+        "panel_status": {"type": "string", "minLength": 1},
+        "reason_codes": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1},
+          "uniqueItems": true
+        }
+      },
+      "additionalProperties": true
+    },
+    "independent_target_schemes": {"type": "array", "items": {"type": "object"}},
+    "failure_guidance": {"type": "array", "items": {"type": "string"}},
+    "multiplex": {"$ref": "#/$defs/multiplex"},
+    "traceability": {"$ref": "#/$defs/traceability"},
+    "candidate_comparison": {
+      "type": "object",
+      "required": ["component", "status", "renderer", "rows", "markdown"],
+      "properties": {
+        "component": {"const": "C29"},
+        "status": {"enum": ["COMPLETED", "NOT_APPLICABLE"]},
+        "renderer": {"const": "DETERMINISTIC_MARKDOWN_V1"},
+        "rows": {"type": "array", "items": {"type": "object"}},
+        "markdown": {"type": "string"}
+      },
+      "additionalProperties": false
+    },
+    "result_explanation": {
+      "type": "object",
+      "required": ["component", "status", "renderer", "text", "facts"],
+      "properties": {
+        "component": {"const": "C30"},
+        "status": {"const": "COMPLETED"},
+        "renderer": {"const": "DETERMINISTIC_STRUCTURED_TEXT_V1"},
+        "text": {"type": "string", "minLength": 1},
+        "facts": {"type": "object"}
+      },
+      "additionalProperties": false
+    },
+    "experimental_validation_statement": {"type": "string", "minLength": 1},
+    "evidence_statement": {"type": "string", "minLength": 1},
+    "available_actions": {
+      "type": "array",
+      "contains": {"const": "CREATE_NEW_VERSION"}
+    },
+    "exports": {
+      "type": "object",
+      "required": ["html"],
+      "properties": {
+        "html": {"$ref": "#/$defs/export"},
+        "csv": {"$ref": "#/$defs/export"},
+        "pdf": {"$ref": "#/$defs/export"}
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "multiplex": {
+      "type": "object",
+      "required": [
+        "status",
+        "panel_size",
+        "requested_panel_size",
+        "delivered_target_count",
+        "delivered_member_count",
+        "internal_control_included",
+        "targets_order",
+        "failed_targets",
+        "blocked_targets",
+        "coverage",
+        "coverage_gaps",
+        "primary_panel_id",
+        "delivered_panel_ids",
+        "relaxation_applied",
+        "channel_assignment",
+        "heterodimer",
+        "tm_spread_celsius",
+        "gc_spread_percent",
+        "issues",
+        "verdict"
+      ],
+      "properties": {
+        "status": {"type": "string", "minLength": 1},
+        "panel_size": {"type": "integer", "minimum": 2, "maximum": 5},
+        "requested_panel_size": {"type": "integer", "minimum": 2, "maximum": 5},
+        "delivered_target_count": {"type": "integer", "minimum": 0, "maximum": 5},
+        "delivered_member_count": {"type": "integer", "minimum": 0, "maximum": 6},
+        "internal_control_included": {"type": "boolean"},
+        "targets_order": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 5,
+          "items": {"type": "string", "minLength": 1}
+        },
+        "failed_targets": {"type": "array", "items": {"type": "string"}},
+        "blocked_targets": {"type": "array", "items": {"type": "string"}},
+        "coverage": {"type": "object"},
+        "coverage_gaps": {"type": "array", "items": {"type": "object"}},
+        "primary_panel_id": {"type": ["string", "null"]},
+        "delivered_panel_ids": {
+          "type": "array",
+          "maxItems": 3,
+          "items": {"type": "string", "minLength": 1}
+        },
+        "relaxation_applied": {"type": "boolean"},
+        "channel_assignment": {"type": "array", "items": {"type": "object"}},
+        "heterodimer": {
+          "type": "object",
+          "required": ["worst_dg_cal_per_mol", "worst_pair", "total_pairs_checked"],
+          "properties": {
+            "worst_dg_cal_per_mol": {"type": ["number", "null"]},
+            "worst_pair": {"type": "array", "items": {"type": "string"}},
+            "total_pairs_checked": {"type": ["integer", "null"], "minimum": 0}
+          },
+          "additionalProperties": false
+        },
+        "tm_spread_celsius": {"type": "object"},
+        "gc_spread_percent": {"type": ["number", "null"]},
+        "issues": {"type": "array"},
+        "verdict": {"type": "string", "minLength": 1}
+      },
+      "additionalProperties": false
+    },
+    "traceability": {
+      "type": "object",
+      "required": [
+        "execution_route",
+        "workflow_trace",
+        "events",
+        "target_lineage",
+        "tool_executions",
+        "relaxation",
+        "instrument_configuration",
+        "channel_assignment",
+        "uncompleted_reasons"
+      ],
+      "properties": {
+        "execution_route": {
+          "type": "object",
+          "required": ["workflow", "nodes", "terminal_stage", "terminal_status"],
+          "properties": {
+            "workflow": {"const": "WF-02"},
+            "nodes": {"type": "array", "items": {"type": "string"}},
+            "terminal_stage": {"type": "string", "minLength": 1},
+            "terminal_status": {"type": "string", "minLength": 1}
+          },
+          "additionalProperties": false
+        },
+        "dependency_contracts": {"type": "object"},
+        "workflow_trace": {"type": "array", "items": {"type": "object"}},
+        "events": {"type": "array", "items": {"type": "object"}},
+        "target_lineage": {"type": "array", "items": {"type": "object"}},
+        "tool_executions": {"type": "object"},
+        "relaxation": {"type": "object"},
+        "instrument_configuration": {"type": "object"},
+        "channel_assignment": {"type": "object"},
+        "uncompleted_reasons": {"type": "object"}
+      },
+      "additionalProperties": false
+    },
+    "export": {
+      "type": "object",
+      "required": ["format", "filename", "size_bytes", "download_url"],
+      "properties": {
+        "format": {"enum": ["html", "csv", "pdf"]},
+        "filename": {"type": "string", "minLength": 1},
+        "media_type": {"type": "string", "minLength": 1},
+        "renderer_version": {"type": "string", "minLength": 1},
+        "size_bytes": {"type": "integer", "minimum": 1},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "download_url": {"type": "string", "minLength": 1},
+        "file_url": {"type": "string", "minLength": 1},
+        "preview_url": {"type": ["string", "null"]},
+        "object_storage": {"type": "object"}
+      },
+      "additionalProperties": false
+    },
+    "panel": {
+      "type": "object",
+      "required": [
+        "panel_id",
+        "tier",
+        "classification",
+        "score",
+        "members",
+        "channel_assignment",
+        "balance",
+        "p4_result",
+        "recommended_annealing_temp_celsius",
+        "warnings"
+      ],
+      "properties": {
+        "rank": {"type": ["integer", "null"], "minimum": 1, "maximum": 3},
+        "panel_id": {"type": "string", "minLength": 1},
+        "tier": {"enum": ["STRICT", "RISK", "PARTIAL"]},
+        "classification": {"type": "string", "minLength": 1},
+        "score": {"type": "object"},
+        "sequence_signature_sha256": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"},
+        "members": {"type": "array", "minItems": 2, "items": {"$ref": "#/$defs/member"}},
+        "channel_assignment": {"type": "array", "items": {"type": "object"}},
+        "alternate_channel_assignments": {"type": "array", "items": {"type": "object"}},
+        "balance": {"type": "object"},
+        "p4_result": {"type": "object"},
+        "cross_dimer_evidence": {"type": "object"},
+        "amplicon_length_check": {"type": "object"},
+        "relaxation_applied": {"type": "array", "items": {"type": "string"}},
+        "recommended_annealing_temp_celsius": {"type": "number"},
+        "annealing_temperature_basis": {"type": "string"},
+        "warnings": {"type": "array", "items": {"type": "string"}}
+      },
+      "additionalProperties": true
+    },
+    "member": {
+      "type": "object",
+      "required": [
+        "target_id",
+        "role",
+        "candidate_id",
+        "fluorophore",
+        "quencher",
+        "forward_primer",
+        "reverse_primer",
+        "probe",
+        "amplicon",
+        "blast_summary",
+        "conservation_score"
+      ],
+      "properties": {
+        "target_id": {"type": "string", "minLength": 1},
+        "role": {"enum": ["target", "internal_control"]},
+        "candidate_id": {"type": "string", "minLength": 1},
+        "fluorophore": {"type": ["string", "null"]},
+        "quencher": {"type": ["string", "null"]},
+        "forward_primer": {"$ref": "#/$defs/oligo"},
+        "reverse_primer": {"$ref": "#/$defs/oligo"},
+        "probe": {"$ref": "#/$defs/oligo"},
+        "amplicon": {"type": "object"},
+        "specificity": {"type": "object"},
+        "blast_summary": {"type": "object"},
+        "conservation_score": {"type": ["number", "null"]},
+        "evidence_level": {"type": ["string", "null"]},
+        "amplicon_structure": {"type": "object"},
+        "warnings": {"type": "array"}
+      },
+      "additionalProperties": true
+    },
+    "oligo": {
+      "type": "object",
+      "required": ["sequence_5to3", "tm_celsius"],
+      "properties": {
+        "sequence_5to3": {"type": "string", "minLength": 1},
+        "tm_celsius": {"type": "number"}
+      },
+      "additionalProperties": true
+    }
+  }
+}

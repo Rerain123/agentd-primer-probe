@@ -13,6 +13,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from agentd.service import AgentDService
+from agentd.errors import InputValidationError
 from agentd.identifiers import wf01_batch_code
 from agentd.wf01_v02 import WF01V02BatchStore
 
@@ -60,6 +61,83 @@ class WF01V02PreflightTests(unittest.TestCase):
             fetched = WF01V02BatchStore(state_dir).get(batch_id)
 
             self.assertEqual(fetched["batch_code"], "WF01-260808-1306-8EC6")
+
+    def test_user_facing_batch_code_resolves_batch_and_artifacts(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="agentd-batch-code-") as state_dir:
+            batch_id = "8ec624e9-3846-4883-ac7f-b9b28d01fa07"
+            store = WF01V02BatchStore(state_dir)
+            store.save(
+                {
+                    "batch_id": batch_id,
+                    "workflow": "WF-01",
+                    "created_at": "2026-08-08T05:06:50.705243+00:00",
+                }
+            )
+            batch_code = "WF01-260808-1306-8EC6"
+            store.save_report(batch_id, {"batch_id": batch_id, "report_id": "r1"})
+            store.save_export(
+                batch_id,
+                "html",
+                b"<html></html>",
+                filename="report.html",
+            )
+
+            self.assertEqual(store.resolve_id(batch_code), batch_id)
+            self.assertEqual(store.get(batch_code)["batch_id"], batch_id)
+            self.assertEqual(store.get_report(batch_code)["report_id"], "r1")
+            self.assertEqual(
+                store.get_export_path(
+                    batch_code,
+                    "html",
+                    filename="report.html",
+                ).name,
+                "report.html",
+            )
+
+    def test_completed_runner_accepts_user_facing_batch_code(self) -> None:
+        batch_id = "8ec624e9-3846-4883-ac7f-b9b28d01fa07"
+        self.service.wf01_v02.store.save(
+            {
+                "batch_id": batch_id,
+                "workflow": "WF-01",
+                "created_at": "2026-08-08T05:06:50.705243+00:00",
+                "status": "SUCCEEDED",
+                "m6_outcome": "COMPLETED",
+                "m6_execution": {},
+                "targets": [],
+                "agent_interactions": [],
+            }
+        )
+
+        result = self.service.run_wf01_v02_until_blocked(
+            "WF01-260808-1306-8EC6"
+        )
+
+        self.assertEqual(result["batch_id"], batch_id)
+        self.assertEqual(result["next_action"], "COMPLETE")
+        self.assertEqual(result["executed_stages"], [])
+
+    def test_ambiguous_user_facing_batch_code_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="agentd-batch-code-collision-") as state_dir:
+            store = WF01V02BatchStore(state_dir)
+            created_at = "2026-08-08T05:06:50.705243+00:00"
+            for batch_id in (
+                "8ec624e9-3846-4883-ac7f-b9b28d01fa07",
+                "8ec6ffff-1111-4222-8333-444455556666",
+            ):
+                store.save(
+                    {
+                        "batch_id": batch_id,
+                        "workflow": "WF-01",
+                        "created_at": created_at,
+                    }
+                )
+
+            with self.assertRaisesRegex(
+                InputValidationError,
+                "任务编号对应多个批次",
+            ):
+                store.resolve_id("WF01-260808-1306-8EC6")
 
     def setUp(self) -> None:
         self.state_dir = tempfile.TemporaryDirectory(prefix="agentd-m1-")

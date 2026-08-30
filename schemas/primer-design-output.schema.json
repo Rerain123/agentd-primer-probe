@@ -28,6 +28,12 @@
             },
             {
               "pattern": "^/data/[^/]+$"
+            },
+            {
+              "pattern": "^/data/reports/[0-9a-fA-F-]+/[^/]+$"
+            },
+            {
+              "pattern": "^/v1/wf02/tasks/[0-9a-fA-F-]{36}/exports/(html|csv|pdf)$"
             }
           ]
         }

@@ -499,7 +499,6 @@ def summarize_wf01_batch(
         artifact_keys = {
             "html": "htmlUrl",
             "process_html": "processHtmlUrl",
-            "rules_html": "rulesHtmlUrl",
             "csv": "csvUrl",
             "pdf": "pdfUrl",
             "scientific_data": "scientificDataUrl",
@@ -516,7 +515,11 @@ def summarize_wf01_batch(
             "content_sha256": batch.get("report_content_sha256")
             or m6.get("canonical_content_sha256"),
             "completeness": copy.deepcopy(m6.get("completeness") or {}),
-            "generated_formats": sorted(exports),
+            "generated_formats": sorted(
+                format_name
+                for format_name in exports
+                if format_name != "rules_html"
+            ),
             "on_demand_formats": ["csv", "pdf"],
             "export_status": m6.get("export_status"),
             "export_failures": copy.deepcopy(

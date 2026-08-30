@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://wens.example/schemas/wf05-v01-input.json",
+  "title": "WF-05 v0.1 输入",
+  "description": "模型只映射明确输入；六节点执行与判定由独立后端完成。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["forward_primer", "reverse_primer"],
+  "oneOf": [
+    {
+      "required": ["input_artifact_id"],
+      "not": {"required": ["sequences"]}
+    },
+    {
+      "required": ["sequences"],
+      "not": {"required": ["input_artifact_id"]}
+    }
+  ],
+  "properties": {
+    "input_artifact_id": {
+      "type": "string",
+      "pattern": "^himat-[0-9a-f]{32}$"
+    },
+    "forward_primer": {"$ref": "#/$defs/sequence"},
+    "reverse_primer": {"$ref": "#/$defs/sequence"},
+    "probe": {"$ref": "#/$defs/sequence"},
+    "sequences": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2000,
+      "items": {
+        "oneOf": [
+          {"$ref": "#/$defs/sequence"},
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["sequence"],
+            "properties": {
+              "id": {"type": "string", "minLength": 1},
+              "sequence": {"$ref": "#/$defs/sequence"},
+              "description": {"type": "string"},
+              "source": {"type": "string"}
+            }
+          }
+        ]
+      }
+    },
+    "reference_sequence_id": {"type": "string", "minLength": 1},
+    "target_id": {"type": "string", "minLength": 1},
+    "target_species": {"type": "string", "minLength": 1},
+    "assay_id": {"type": "string", "minLength": 1},
+    "allow_fallback": {"type": "boolean"}
+  },
+  "$defs": {
+    "sequence": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 2000000,
+      "pattern": "^[ACGTRYSWKMBDHVNacgtryswkmbdhvn\\s]+$"
+    }
+  }
+}

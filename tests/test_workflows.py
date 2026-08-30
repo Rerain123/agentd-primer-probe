@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import sys
 import tempfile
 import unittest
@@ -17,11 +16,37 @@ from agentd.workflows.wf01 import WF01SingleTarget
 
 
 def load_example(name: str) -> dict:
-    payload = json.loads((ROOT / "examples" / name).read_text(encoding="utf-8"))
-    for key in ("host_db", "cross_db", "target_db"):
-        if payload.get(key):
-            payload[key] = str(ROOT / payload[key])
-    return payload
+    sequence = (
+        "TGGGCGAACTTGGTCACCCCGAAGTATCTGATGAGATGATCACCGAGAGCCGGGGCGAGGAAG"
+        "ATGTACGGATACTTTCCGCACAGGGACTAGGTTAACCGCGATTTCTTATCCTGCGATAGCCGGC"
+        "CGTGTAAACCTTTCTTAGGCATGGCAGAAAATGCAATCATATAACGGGGTTAGAAGGGAGCCTGT"
+        "AGCATGCTGCCCGATTTCCCGTGTACCCCTGTCGCTGCGAAGTATATCCAGAGGTGCCGGTGCTA"
+        "GCC"
+    )
+    common = {
+        "assay_id": "fixture_target_v1",
+        "target_id": "fixture_target",
+        "target_species": "Synthetic test virus",
+        "host_species": "pig",
+        "host_db": str(ROOT / "testdata" / "host.fasta"),
+        "cross_db": str(ROOT / "testdata" / "cross_species.fasta"),
+        "allow_fallback": True,
+    }
+    if name == "wf01-request.json":
+        return {
+            **common,
+            "gene": "development_fixture",
+            "sequence": sequence,
+        }
+    if name == "wf04-request.json":
+        return {
+            **common,
+            "forward_primer": "GCGAGGAAGATGTACGGATA",
+            "reverse_primer": "GCTACAGGCTCCCTTCTAA",
+            "probe": "ATCGCGGTTAACCTAGTCCCTGTGC",
+            "template": sequence,
+        }
+    raise AssertionError(f"unknown workflow fixture: {name}")
 
 
 class WorkflowTests(unittest.TestCase):

@@ -97,9 +97,25 @@ class JsonSchemaContractTests(unittest.TestCase):
 
         schema = json.loads((ROOT / "schemas" / "agentd-output.schema.json").read_text(encoding="utf-8"))
         jsonschema.Draft202012Validator.check_schema(schema)
-        payload = json.loads((ROOT / "examples" / "wf04-request.json").read_text(encoding="utf-8"))
-        payload["host_db"] = str(ROOT / payload["host_db"])
-        payload["cross_db"] = str(ROOT / payload["cross_db"])
+        payload = {
+            "assay_id": "wf04-schema-fixture",
+            "target_id": "fixture-target",
+            "target_species": "fixture",
+            "forward_primer": "GCGAGGAAGATGTACGGATA",
+            "reverse_primer": "GCTACAGGCTCCCTTCTAA",
+            "probe": "ATCGCGGTTAACCTAGTCCCTGTGC",
+            "template": (
+                "TGGGCGAACTTGGTCACCCCGAAGTATCTGATGAGATGATCACCGAGAGCC"
+                "GGGGCGAGGAAGATGTACGGATACTTTCCGCACAGGGACTAGGTTAACCGCGA"
+                "TTTCTTATCCTGCGATAGCCGGCCGTGTAAACCTTTCTTAGGCATGGCAGAAA"
+                "ATGCAATCATATAACGGGGTTAGAAGGGAGCCTGTAGCATGCTGCCCGATTTC"
+                "CCGTGTACCCCTGTCGCTGCGAAGTATATCCAGAGGTGCCGGTGCTAGCC"
+            ),
+            "host_species": "fixture-host",
+            "host_db": str(ROOT / "testdata" / "host.fasta"),
+            "cross_db": str(ROOT / "testdata" / "cross_species.fasta"),
+            "allow_fallback": True,
+        }
         with tempfile.TemporaryDirectory(prefix="agentd-schema-") as state_dir:
             output = AgentDService(state_dir=state_dir).run("WF-04", payload, persist=False)
         jsonschema.Draft202012Validator(schema).validate(output)

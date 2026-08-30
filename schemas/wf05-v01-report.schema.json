@@ -1,0 +1,86 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://wens.example/schemas/wf05-v01-report.json",
+  "title": "WF-05 v0.1 精简报告",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "workflow", "workflow_version", "job_id", "parent_job_id",
+    "execution_status", "decision", "decision_reasons", "next_action",
+    "assay_id", "target", "variation", "steps", "retry",
+    "evidence_level", "warnings", "errors", "report_tool"
+  ],
+  "properties": {
+    "workflow": {"const": "WF-05"},
+    "workflow_version": {"const": "wf05-v0.1-rules-2026-08-26"},
+    "job_id": {"type": "string", "minLength": 1},
+    "parent_job_id": {"type": ["string", "null"]},
+    "execution_status": {"enum": ["SUCCEEDED", "PARTIAL", "FAILED"]},
+    "decision": {"enum": ["ROBUST", "ACCEPTABLE", "REDESIGN_RECOMMENDED", "INCONCLUSIVE"]},
+    "decision_reasons": {"type": "array", "items": {"type": "string"}},
+    "next_action": {"enum": ["END", "RETRY", "HANDOFF_WF01"]},
+    "assay_id": {"type": "string", "minLength": 1},
+    "target": {"type": "object"},
+    "variation": {
+      "type": "object",
+      "properties": {
+        "sequences_analyzed": {"type": "integer", "minimum": 2},
+        "coverage_100pct_match": {"type": "number", "minimum": 0, "maximum": 1},
+        "coverage_1_mismatch": {"type": "number", "minimum": 0, "maximum": 1},
+        "coverage_2_mismatches": {"type": "number", "minimum": 0, "maximum": 1},
+        "high_risk_sites": {"type": "array", "items": {"type": "object"}},
+        "verdict": {"enum": ["ROBUST", "ACCEPTABLE", "REDESIGN_RECOMMENDED", "INCONCLUSIVE"]}
+      }
+    },
+    "steps": {
+      "type": "array",
+      "minItems": 6,
+      "maxItems": 6,
+      "items": {
+        "type": "object",
+        "required": ["step", "status", "retryable"],
+        "properties": {
+          "step": {"type": "string"},
+          "status": {"type": "string"},
+          "retryable": {"type": "boolean"}
+        }
+      }
+    },
+    "retry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["allowed", "accepted_fields", "tool"],
+      "properties": {
+        "allowed": {"type": "boolean"},
+        "accepted_fields": {"type": "array", "items": {"type": "string"}},
+        "tool": {"type": ["string", "null"]}
+      }
+    },
+    "evidence_level": {
+      "enum": ["in_silico_only", "blast_verified", "experimentally_validated"]
+    },
+    "warnings": {"type": "array", "items": {"type": "string"}},
+    "errors": {"type": "array", "items": {"type": "object"}},
+    "report_tool": {"const": "get_wf05_report"}
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "execution_status": {"enum": ["SUCCEEDED", "PARTIAL"]}
+        }
+      },
+      "then": {
+        "properties": {
+          "variation": {
+            "required": [
+              "sequences_analyzed", "coverage_100pct_match",
+              "coverage_1_mismatch", "coverage_2_mismatches",
+              "high_risk_sites", "verdict"
+            ]
+          }
+        }
+      }
+    }
+  ]
+}
