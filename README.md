@@ -1,6 +1,6 @@
 # Agent D：引物与探针设计智能体
 
-这是温氏 AI4S 项目中 Agent D 的工作流框架。当前稳定范围为相互隔离的 WF-01～WF-05。历史 WF-06、WF-07 已退役，不再提供运行时、CLI 或 HTTP 入口。项目同时包含 P1～P6、服务器可注入数据库目录、统一 Schema、CLI、Streamable HTTP MCP、HTTP API、任务记录、readiness 和 Docker Compose。
+这是温氏 AI4S 项目中 Agent D 的工作流框架。当前稳定范围为相互隔离的 WF-01～WF-05。WF-06、WF-07 的第二阶段任务已经完成，当前暂不继续开发，也不提供现行运行时、CLI 或 HTTP 入口。项目同时包含 P1～P6、服务器可注入数据库目录、统一 Schema、CLI、Streamable HTTP MCP、HTTP API、任务记录、readiness 和 Docker Compose。
 
 > **WF-01 当前实现**：M1～M7 批次路线已经实现。普通多记录输入默认组成一个 `alignment_target` 并按需运行 MAFFT；`target_manifest` 使用 `independent_targets`，逐靶标独立运行。当前入口、状态机、科学规则、前端消息、报告和兼容边界统一以 [`docs/WF01_CURRENT_IMPLEMENTATION.md`](docs/WF01_CURRENT_IMPLEMENTATION.md) 为准。
 
@@ -8,7 +8,7 @@
 
 > 本项目输出仅供科研设计参考；未经实验验证，不得直接用于临床或生产决策。
 
-> 新同事请先阅读 [`docs/PROJECT_ENGINEERING_GUIDE.md`](docs/PROJECT_ENGINEERING_GUIDE.md)，其中汇总了代码架构、工作流、接口、测试、协作、部署和运维；专题文档入口见 [`docs/README.md`](docs/README.md)。新的 WF-02 按 [`WF02_V0.1_IMPLEMENTATION_PLAN.md`](docs/WF02_V0.1_IMPLEMENTATION_PLAN.md) 中的 HTML 节点台账实施，WF-03 以 [`WF03_CURRENT_IMPLEMENTATION.md`](docs/WF03_CURRENT_IMPLEMENTATION.md) 为准。
+> 智能体开发同事请先阅读 [`docs/PROJECT_ENGINEERING_GUIDE.md`](docs/PROJECT_ENGINEERING_GUIDE.md)，其中汇总了代码架构、工作流、接口、测试和部署；专题文档入口见 [`docs/README.md`](docs/README.md)。新的 WF-02 按 [`WF02_V0.1_IMPLEMENTATION_PLAN.md`](docs/WF02_V0.1_IMPLEMENTATION_PLAN.md) 中的 HTML 节点台账实施，WF-03 以 [`WF03_CURRENT_IMPLEMENTATION.md`](docs/WF03_CURRENT_IMPLEMENTATION.md) 为准。
 
 ## 当前能力
 
@@ -82,7 +82,7 @@ python -B -m agentd run --workflow WF-05 --input $requestPath --output outputs\w
 
 将 `$requestPath` 指向符合对应工作流输入 Schema 的 JSON 文件，并按需替换 `--workflow` 与输出文件名；仓库不再维护容易过时的 `examples/*.json` 副本。
 
-当前 WF-01 批次路线请使用 MCP 工具或 `/v1/wf01/tasks` API，具体以 [`docs/WF01_CURRENT_IMPLEMENTATION.md`](docs/WF01_CURRENT_IMPLEMENTATION.md) 为准。WF-02 命令行兼容入口只负责调用新的 v0.1 建单服务；N06–N32 的智能体推进与报告交付使用 MCP 或下面的批次 REST 接口。WF-03、WF-04 与 WF-05 均绑定各自的独立后端、状态目录和终态交付；WF-05 由 MCP `run_wf05_variation` / `retry_wf05_variation` / `get_wf05_report` 暴露。通用 Workflow 入口仅作为兼容别名。WF-06、WF-07 已退役。
+当前 WF-01 批次路线请使用 MCP 工具或 `/v1/wf01/tasks` API，具体以 [`docs/WF01_CURRENT_IMPLEMENTATION.md`](docs/WF01_CURRENT_IMPLEMENTATION.md) 为准。WF-02 命令行兼容入口只负责调用新的 v0.1 建单服务；N06–N32 的智能体推进与报告交付使用 MCP 或下面的批次 REST 接口。WF-03、WF-04 与 WF-05 均绑定各自的独立后端、状态目录和终态交付；WF-05 由 MCP `run_wf05_variation` / `retry_wf05_variation` / `get_wf05_report` 暴露。通用 Workflow 入口仅作为兼容别名。WF-06、WF-07 的第二阶段任务已完成，当前暂不继续，也不属于现行公开入口。
 
 降级模式不是科学替代方案：输出固定标记为 `PARTIAL`、`in_silico_only`，缺失项目显示为 `NOT_EVALUATED` 或 `NOT_CHECKED`。
 

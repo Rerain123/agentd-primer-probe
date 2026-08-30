@@ -47,7 +47,7 @@ MCP 客户端配置示例：
 
 ### 2.2 REST API 请求
 
-REST API 是与 MCP 共用同一套 `AgentDService` 的兼容接口，适合后台系统、Dify 工作流和运维程序调用。
+REST API 是与 MCP 共用同一套 `AgentDService` 的兼容接口，适合后台系统和运维程序调用。
 
 请求头：
 
@@ -85,23 +85,6 @@ curl https://oligosmith.ne.scqcyz.cn/ready
 - `/health` 只表示进程存活。
 - `/ready` 检查科学工具和当前配置要求的数据库资源。
 - `/ready` 返回成功并不一定表示全部动态靶标数据库均已准备好。
-
-### 2.4 Dify 调用
-
-Dify 工作流需要配置：
-
-```dotenv
-AGENTD_BASE_URL=https://oligosmith.ne.scqcyz.cn
-AGENTD_BEARER_TOKEN=YOUR_JWT
-```
-
-如果 Dify 和 Agent D 位于同一个 Docker 网络，可使用容器服务地址：
-
-```dotenv
-AGENTD_BASE_URL=http://agentd:8000
-```
-
-Dify 运行在容器中时，`localhost` 指向 Dify 容器自身，通常不能用于访问宿主机或 Agent D 容器。
 
 ## 3. JWT 鉴权
 

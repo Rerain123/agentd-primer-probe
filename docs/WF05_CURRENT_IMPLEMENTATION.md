@@ -4,7 +4,7 @@
 
 ## 架构结论
 
-WF-05 绑定 `agentd_workflow_snapshots.wf05_v1`，运行标识为 `wf05-runtime-snapshot-v1`。该包只包含 WF-05 编排及实际运行依赖，不包含其他工作流的执行或报告分支，也不包含已退役工作流。包内使用相对导入，不得导回可变的顶层 `agentd` 实现。
+WF-05 绑定 `agentd_workflow_snapshots.wf05_v1`，运行标识为 `wf05-runtime-snapshot-v1`。该包只包含 WF-05 编排及实际运行依赖，不包含其他工作流的执行或报告分支；WF-06、WF-07 当前也不在此快照范围。包内使用相对导入，不得导回可变的顶层 `agentd` 实现。
 
 专家规则文档和既有工具实现均是只读边界。WF-05 不创建新的计算工具，只调用 C0、C5、C7 和 P1；C21 当前未提供实现，因此固定记录为 `NOT_EVALUATED`，不得自行补写替代实现。
 

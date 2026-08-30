@@ -7,7 +7,7 @@
 
 | 目的 | 文档 | 定位 |
 |---|---|---|
-| 新同事了解完整工程、协作与部署 | [项目工程文档](PROJECT_ENGINEERING_GUIDE.md) | 架构、代码、工作流、接口、测试、部署和运维总入口 |
+| 智能体开发交接 | [项目工程文档](PROJECT_ENGINEERING_GUIDE.md) | 当前架构、代码入口、工作流、MCP、测试和部署主链路 |
 | 了解、开发或排查 WF-01 | [WF-01 当前实现与运行路线](WF01_CURRENT_IMPLEMENTATION.md) | WF-01 唯一现行文档 |
 | 开发新的 WF-02 | [WF-02 v0.1 实施计划](WF02_V0.1_IMPLEMENTATION_PLAN.md) | 当前计划与节点台账 |
 | 了解、开发或排查 WF-03 | [WF-03 当前实现](WF03_CURRENT_IMPLEMENTATION.md) | MCP、后端、P5边界、重入与报告契约 |
