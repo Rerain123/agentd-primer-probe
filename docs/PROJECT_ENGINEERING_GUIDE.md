@@ -352,6 +352,7 @@ $env:PYTHONPATH = "src"
 |---|---|
 | `deploy/docker/Dockerfile` | 构建非 root 运行镜像 |
 | `deploy/docker-compose.yml` | 服务、卷、只读挂载、资源和健康检查 |
+| `deploy/scripts/install.sh` | 预检、构建、readiness、启动和验收主入口 |
 | `deploy/scripts/preflight.sh` | 部署前检查 |
 | `deploy/scripts/verify.sh` | 部署后验证 |
 | `deploy/release-manifest.json` | 发布包文件和默认参数 |
@@ -366,17 +367,140 @@ flowchart LR
     A --> O[可选对象存储]
 ```
 
-容器内监听 8000。生产环境通过宿主机回环地址绑定，再由 OpenResty / 1Panel 提供 HTTPS。不要把容器端口直接公开到外网，也不要把密钥写入 Compose、文档或 Git。
+容器内监听 8000。生产环境默认绑定宿主机 `127.0.0.1:8020`，再由 OpenResty / 1Panel 提供 HTTPS。不要把容器端口直接公开到外网，也不要把密钥写入 Compose、文档或 Git。
 
-发布检查保持简单：
+### 9.1 服务器准备
 
-1. 确认版本号、镜像标签和变更记录一致。
-2. 运行完整测试与快照完整性测试。
-3. 执行部署前检查。
-4. 构建并启动 Compose 服务。
-5. 检查 `/health`、`/ready` 和受限 MCP `tools/list`。
-6. 用一条最小任务验证建单、查询和终态附件。
-7. 保留上一镜像与状态备份，确认后再清理旧资源。
+推荐环境：Linux x86_64、Docker Engine 24+、Docker Compose v2、`curl`，至少 4 核 CPU、8 GB 内存和 10 GB 应用盘。数据库与任务数据另行规划磁盘。
+
+部署代码可以来自 Git 仓库或经过 SHA-256 校验的服务器源码包。进入项目根目录后先确保脚本可执行：
+
+```bash
+chmod +x deploy/scripts/*.sh
+```
+
+### 9.2 配置 `deploy/.env`
+
+```bash
+cp deploy/.env.example deploy/.env
+chmod 600 deploy/.env
+vi deploy/.env
+```
+
+首次部署至少核对：
+
+| 配置 | 要求 |
+|---|---|
+| `JWT_SECRET` | 替换为足够长的随机值，不能保留模板内容 |
+| `AGENTD_IMAGE_TAG` | 与本次发布版本一致 |
+| `AGENTD_BIND_ADDRESS` | 默认保持 `127.0.0.1` |
+| `AGENTD_PORT` | 默认 `8020` |
+| `AGENTD_BLASTDB_DIR` | 宿主机只读资源目录 |
+| `AGENTD_SEQUENCE_DATA_DIR` | 宿主机只读序列目录 |
+| `AGENTD_REQUIRE_DATABASES` | 正式生产设为 `true`；仅联调链路时可暂设 `false` |
+| `MCP_PUBLIC_BASE_URL` | 公网 HTTPS 根地址 |
+| `MCP_ALLOWED_HOSTS` | 公网域名及必要的本地探活地址 |
+| `MCP_ALLOWED_ORIGINS` | 允许访问的 HTTPS 来源 |
+| `RUSTFS_*` | 需要对象存储附件时配置最小权限账号，否则保持关闭 |
+
+资源目录映射和版本信息维护在 `deploy/server-config/database-catalog.json`。不要直接修改 `docker-compose.yml` 写死服务器路径或密钥。
+
+### 9.3 首次联网部署
+
+配置完成后执行：
+
+```bash
+bash deploy/scripts/install.sh
+```
+
+该脚本会依次完成：
+
+1. 检查 Docker、Compose、配置、端口和挂载目录；
+2. 构建 `agentd-primer-probe:<AGENTD_IMAGE_TAG>`；
+3. 在最终容器环境运行 `python -m agentd readiness`；
+4. 启动 Compose 服务；
+5. 验证健康检查、JWT 拒绝策略、全量 MCP 和五个受限 MCP 工具集。
+
+常用安装选项：
+
+| 命令 | 用途 |
+|---|---|
+| `bash deploy/scripts/install.sh --pull` | 构建时刷新基础镜像 |
+| `bash deploy/scripts/install.sh --build-only` | 只构建镜像，不启动服务 |
+| `bash deploy/scripts/install.sh --no-build` | 使用已经构建或 `docker load` 的镜像 |
+| `bash deploy/scripts/install.sh --skip-verify` | 跳过安装后的 HTTP 验收；只用于明确的排障场景 |
+
+安装完成后可重复执行验收：
+
+```bash
+bash deploy/scripts/verify.sh --wait 180
+docker compose --env-file deploy/.env -f deploy/docker-compose.yml ps
+docker compose --env-file deploy/.env -f deploy/docker-compose.yml logs --tail 100 agentd
+```
+
+验收失败时先查看 `/ready` 响应和容器日志，不要通过关闭鉴权、删除状态或放宽结果校验绕过错误。
+
+### 9.4 反向代理与客户端接入
+
+在 1Panel / OpenResty 中把整个域名代理到 `http://127.0.0.1:8020`，并启用 HTTPS。`/mcp`、`/mcp/wf01/`～`/mcp/wf05/`、`/v1`、报告下载和健康检查都由同一进程提供，不需要分别创建代理。
+
+服务部署完成后生成客户端 JWT：
+
+```bash
+bash deploy/scripts/generate-jwt.sh 30 oligosmith-backend
+```
+
+把输出令牌作为客户端 `Authorization: Bearer <token>` 使用。生产智能体优先连接对应的受限地址，例如 `https://<domain>/mcp/wf01/`。轮换 `JWT_SECRET` 会立即使旧令牌失效。
+
+### 9.5 更新部署
+
+更新前备份 `deploy/.env`、`deploy/server-config/`、资源版本目录和 `agentd-jobs` 持久化卷，并保留上一版本镜像。
+
+1. 更新代码或解压新版本源码包。
+2. 恢复并复核原 `deploy/.env`，把 `AGENTD_IMAGE_TAG` 改为新版本。
+3. 先执行 `bash deploy/scripts/install.sh --build-only`。
+4. 执行下面的容器内检查：
+
+```bash
+docker compose --env-file deploy/.env -f deploy/docker-compose.yml \
+  run --rm --no-deps agentd python -m agentd readiness
+```
+
+5. 检查通过后执行 `bash deploy/scripts/install.sh --no-build`。
+6. 再运行 `bash deploy/scripts/verify.sh --wait 180` 和一条最小工作流任务。
+
+更新数据库或资源时创建新版本目录并切换 catalog，不能覆盖旧目录。
+
+### 9.6 回滚
+
+仓库没有自动 `rollback.sh`，回滚按镜像、配置和状态三个层次手工执行：
+
+1. 把 `AGENTD_IMAGE_TAG` 恢复为上一版本。
+2. 恢复与上一版本匹配的 `deploy/server-config/` 和资源目录配置。
+3. 确认旧镜像仍在本机，然后执行 `bash deploy/scripts/install.sh --no-build`。
+4. 运行 `bash deploy/scripts/verify.sh --wait 180`。
+5. 只有状态格式发生不兼容变化时，才停止服务并恢复部署前备份的 `agentd-jobs` 卷。
+
+普通 `stop`、`restart` 和 `down` 不删除任务卷。不要执行 `docker compose down -v`，除非已经确认并备份全部任务记录。
+
+### 9.7 离线部署
+
+在同 CPU 架构的联网 Linux 主机执行：
+
+```bash
+bash deploy/scripts/install.sh --build-only
+bash deploy/scripts/export_offline_image.sh
+```
+
+把镜像压缩包、SHA-256 文件、源码包和外部资源复制到离线服务器，校验后加载镜像：
+
+```bash
+sha256sum -c agentd-primer-probe-<version>-linux-image.tar.gz.sha256
+gzip -dc agentd-primer-probe-<version>-linux-image.tar.gz | docker load
+bash deploy/scripts/install.sh --no-build
+```
+
+### 9.8 当前线上注意项
 
 2026-08-30 的线上只读检查显示服务和核心工具就绪，但 `databases_required=false`。这意味着 `/ready` 当前不会把数据库资源作为硬门禁；正式生产是否接受该配置需要项目明确决定。
 

@@ -125,7 +125,7 @@ bash deploy/scripts/install.sh
 2. 构建包含 Primer3、ViennaRNA、BLAST+ 和 MAFFT 的镜像；
 3. 在最终容器环境中执行 readiness；
 4. 启动服务；
-5. 验证 `/health`、`/ready`、工具状态和七个 Workflow 能力声明。
+5. 验证 `/health`、`/ready`、JWT 拒绝策略、全量 MCP 和五个受限 MCP 工具集。
 
 初次构建希望刷新基础镜像时使用：
 
