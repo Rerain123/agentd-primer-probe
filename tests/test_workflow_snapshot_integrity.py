@@ -4,7 +4,6 @@ import ast
 import hashlib
 import importlib
 import sys
-import zipfile
 from pathlib import Path
 
 
@@ -57,60 +56,60 @@ WF05_SNAPSHOT_SHA256 = (
 )
 
 
-def _source_files(release: str) -> tuple[Path, dict[str, bytes]]:
-    archive = ROOT / "dist" / f"agentd-primer-probe-server-{release}.zip"
-    prefix = f"agentd-primer-probe-server-{release}/src/agentd/"
-    with zipfile.ZipFile(archive) as package:
-        files = {
-            name[len(prefix) :]: package.read(name)
-            for name in package.namelist()
-            if name.startswith(prefix) and not name.endswith("/")
-        }
-    return archive, files
+def _snapshot_files(package_name: str) -> tuple[Path, list[Path]]:
+    package_root = (
+        ROOT
+        / "src"
+        / "agentd_workflow_snapshots"
+        / package_name
+        / "agentd"
+    )
+    files = sorted(
+        (
+            path
+            for path in package_root.rglob("*")
+            if path.is_file() and "__pycache__" not in path.parts
+        ),
+        key=lambda path: path.relative_to(package_root).as_posix(),
+    )
+    return package_root, files
 
 
-def test_snapshot_archives_and_python_files_are_immutable() -> None:
-    for package_name, release, expected_archive_hash in SNAPSHOTS:
-        archive, source_files = _source_files(release)
-        assert hashlib.sha256(archive.read_bytes()).hexdigest() == expected_archive_hash
+def _snapshot_tree_sha256(package_root: Path, files: list[Path]) -> str:
+    digest = hashlib.sha256()
+    for path in files:
+        relative_path = path.relative_to(package_root).as_posix()
+        digest.update(relative_path.encode("utf-8"))
+        digest.update(b"\0")
+        digest.update(path.read_bytes())
+        digest.update(b"\0")
+    return digest.hexdigest()
+
+
+def test_snapshot_packages_are_immutable_without_dist_archives() -> None:
+    for package_name, release, _expected_archive_hash in SNAPSHOTS:
         metadata = importlib.import_module(
             f"agentd_workflow_snapshots.{package_name}"
         )
+        package_root, files = _snapshot_files(package_name)
+        assert len(files) == metadata.SNAPSHOT_FILE_COUNT
+        assert (
+            _snapshot_tree_sha256(package_root, files)
+            == metadata.SNAPSHOT_TREE_SHA256
+        )
+
         hotfix_files = getattr(metadata, "HOTFIX_FILES_SHA256", {})
         development_files = getattr(metadata, "DEVELOPMENT_FILES_SHA256", {})
         assert not (set(hotfix_files) & set(development_files))
         declared_differences = {**hotfix_files, **development_files}
-
-        package_root = (
-            ROOT
-            / "src"
-            / "agentd_workflow_snapshots"
-            / package_name
-            / "agentd"
-        )
-        local_files = {
-            path.relative_to(package_root).as_posix(): path
-            for path in package_root.rglob("*")
-            if path.is_file() and "__pycache__" not in path.parts
-        }
-        assert set(local_files) == set(source_files)
-        for relative_path, source_content in source_files.items():
-            if relative_path == "__init__.py":
-                # The sole bootstrap patch prevents importing the copied
-                # application service as a side effect of loading a runtime.
-                bootstrap = local_files[relative_path].read_text(encoding="utf-8")
-                assert "from .service import" not in bootstrap
-                assert f'__version__ = "{release}"' in bootstrap
-                continue
-            if relative_path in declared_differences:
-                assert package_name == "wf04_v1"
-                assert (
-                    hashlib.sha256(local_files[relative_path].read_bytes()).hexdigest()
-                    == declared_differences[relative_path]
-                )
-                assert local_files[relative_path].read_bytes() != source_content
-                continue
-            assert local_files[relative_path].read_bytes() == source_content
+        bootstrap = (package_root / "__init__.py").read_text(encoding="utf-8")
+        assert "from .service import" not in bootstrap
+        assert f'__version__ = "{release}"' in bootstrap
+        for relative_path, expected_hash in declared_differences.items():
+            assert package_name == "wf04_v1"
+            local_path = package_root / relative_path
+            assert local_path.is_file()
+            assert hashlib.sha256(local_path.read_bytes()).hexdigest() == expected_hash
 
 
 def test_snapshot_metadata_matches_source_archives() -> None:

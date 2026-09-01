@@ -407,8 +407,8 @@ databases_required=false
 - `deploy/.env.example`：服务器环境变量模板。
 - `deploy/server-config/production.json`：生产运行配置。
 - `deploy/server-config/database-catalog.json`：数据库资源目录模板。
-- `docs/MCP_SERVER.md`：MCP、JWT 和智能体接入说明。
-- `docs/SERVER_INSTALL.md`：服务器安装、升级、回滚和运维说明。
+- `docs/operations/MCP_SERVER.md`：MCP、JWT 和智能体接入说明。
+- `docs/operations/SERVER_INSTALL.md`：服务器安装、升级、回滚和运维说明。
 - `deploy/DATA_LAYOUT.md`：服务器数据目录规范。
 - `src/agentd/mcp_server.py`：MCP 工具和服务装配入口。
 - `src/agentd/api.py`：REST API 路由。

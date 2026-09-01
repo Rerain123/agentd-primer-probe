@@ -3,3 +3,6 @@
 *.json text eol=lf
 *.yml text eol=lf
 *.yaml text eol=lf
+
+# Preserve archived design inputs byte-for-byte, including original whitespace.
+docs/source-materials/legacy-agentd-design/** -text -whitespace

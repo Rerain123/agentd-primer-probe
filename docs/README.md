@@ -1,40 +1,34 @@
 # Agent D 文档导航
 
-> 整理日期：2026-08-30
-> 原则：一个主题只有一个当前入口；历史通过 `CHANGELOG.md`、`HISTORY_PHASES.md` 或 Git 查询。
+> 本页是文档目录。根 [README](../README.md) 介绍产品，根 [AGENTS](../AGENTS.md) 路由智能体工作；业务与工程细节按下表逐层打开。
 
-## 当前入口
+## 按内容分类
 
-| 目的 | 文档 | 定位 |
+| 目录 | 收录内容 | 适合在什么时候读 |
 |---|---|---|
-| 智能体开发交接 | [项目工程文档](PROJECT_ENGINEERING_GUIDE.md) | 当前架构、代码入口、工作流、MCP、测试和部署主链路 |
-| 了解、开发或排查 WF-01 | [WF-01 当前实现与运行路线](WF01_CURRENT_IMPLEMENTATION.md) | WF-01 唯一现行文档 |
-| 开发新的 WF-02 | [WF-02 v0.1 实施计划](WF02_V0.1_IMPLEMENTATION_PLAN.md) | 当前计划与节点台账 |
-| 了解、开发或排查 WF-03 | [WF-03 当前实现](WF03_CURRENT_IMPLEMENTATION.md) | MCP、后端、P5边界、重入与报告契约 |
-| 了解、开发或排查 WF-05 | [WF-05 当前实现](WF05_CURRENT_IMPLEMENTATION.md) | 隔离运行包、六节点、重试、MCP 与报告契约 |
-| 部署和使用 MCP | [MCP 服务](MCP_SERVER.md) | 鉴权、工具、模型上下文与 UI 宿主边界 |
-| 安装、升级和回滚 | [服务器安装](SERVER_INSTALL.md) | 服务器交付手册 |
-| 配置附件对象存储 | [RustFS 附件发布](RUSTFS_ARTIFACT_STORAGE.md) | 对象存储、权限和完整性 |
-| 查询智能体执行事实 | [智能体工具审计](AGENT_AUDIT_LOG.md) | 脱敏审计与排障 |
-| 查询 P1～P6 Skill | [Skill 目录](SKILLS.md) | Skill 入口和语言规范 |
-| 查询版本变化 | [统一变更记录](CHANGELOG.md) | 发布历史 |
-| 查询早期阶段架构 | [阶段实现历史](HISTORY_PHASES.md) | 非现行历史资料 |
+| [architecture/](architecture/README.md) | 仓库分层、全局架构、工作流隔离 | 改跨模块设计或首次接手项目 |
+| [workflows/](workflows/README.md) | WF-01～WF-05 现行实现与施工台账 | 修改或排查某一个工作流 |
+| [operations/](operations/README.md) | MCP、鉴权、服务器、发布、存储与审计 | 接入、部署或排查运行环境 |
+| [reference/](reference/README.md) | Skill 等稳定参考入口 | 查找工具与机器可读契约 |
+| [source-materials/](source-materials/README.md) | 项目原始设计输入 | 追溯早期需求，不作现行契约 |
+| [history/](history/README.md) | 变更记录、阶段历史和整理台账 | 回答“为什么会变成这样” |
 
-## 本次瘦身结果
+## 按工作目的选路
 
-- WF-01 的旧 M0 基线、验收目录、决策台账、M1～M7 阶段契约、旧 UI 契约、科学产物契约和契约化之前的历史，已经收口为 `WF01_CURRENT_IMPLEMENTATION.md`。
-- 现行文档按当前代码、MCP、HTTP、Schema 和测试描述实际路线，包括 `alignment_target`、`independent_targets`、`DESIGN_ONLY`、`FULL_SPECIFICITY`、自动 M2～M6、可选 M7、前端消息、报告和科学证据。
-- 32 份单版本发布说明已经合并为 `CHANGELOG.md`。
-- `PHASE1.md`～`PHASE3.md` 已经合并为 `HISTORY_PHASES.md`。
-- 旧输入、交互、弹窗和输出说明不再独立维护；字段级契约直接使用 `schemas/*.schema.json`。
+| 目的 | 唯一当前入口 |
+|---|---|
+| 理解项目代码和请求主链路 | [工程交接文档](architecture/PROJECT_ENGINEERING_GUIDE.md) |
+| 判断文件应该放在哪里 | [仓库结构与归属](architecture/REPOSITORY_LAYOUT.md) |
+| 开发 WF-01～WF-05 | [工作流导航](workflows/README.md) |
+| 部署或连接 MCP | [运维导航](operations/README.md) |
+| 查 P1～P6 Skill | [Skill 目录](reference/SKILLS.md) |
+| 查版本变化 | [变更记录](history/CHANGELOG.md) |
 
-## 维护规则
+## 阅读优先级
 
-1. WF-01 行为变化同步修改代码、JSON Schema、测试和 `WF01_CURRENT_IMPLEMENTATION.md`，不再新增 M0～M7 或决策台账文档。
-2. 不再创建 `RELEASE_x.y.z.md`；发布变化写入 `CHANGELOG.md`。
-3. 历史实现只写入明确标记为历史的文档，不与当前入口并列。
-4. WF-02 节点状态只维护在 `WF02_V0.1_IMPLEMENTATION_PLAN.md`。
-5. WF-03 行为变化同步修改后端、MCP、Schema、测试和 `WF03_CURRENT_IMPLEMENTATION.md`；不得在 Workflow 或模型提示中复制 P1～P6 科学算法。
-6. WF-05 行为变化同步修改独立快照、MCP、Schema、测试和 `WF05_CURRENT_IMPLEMENTATION.md`；不得从快照导回可变顶层实现。
-7. 新增文档前先确认不能扩展现有主题；新增后必须登记到本页。
-8. 删除或改名文档后必须检查仓库内残留引用和相对链接。
+1. 代码、Schema 与测试是可执行的当前事实。
+2. `workflows/` 中的现行文档说明某个工作流的施工边界。
+3. `architecture/` 和 `operations/` 解释跨模块与运行环境。
+4. `source-materials/` 和 `history/` 只用于追溯。
+
+新增文档前先确认不能扩展现有主题。新文档必须登记到最近的分类 `README.md`，并通过 `tests.test_repository_layout`。

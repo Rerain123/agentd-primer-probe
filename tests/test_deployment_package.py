@@ -110,13 +110,14 @@ class DeploymentPackageTests(unittest.TestCase):
             encoding="utf-8"
         )
         self.assertIn('$optionalSourceRoots = @("examples")', package_script)
+        self.assertIn('"AGENTS.md"', package_script)
         self.assertIn('"src\\agentd_workflow_snapshots"', package_script)
         self.assertIn(
             'throw "Required package directory is missing: $sourceRoot"',
             package_script,
         )
 
-        mcp_docs = (ROOT / "docs" / "MCP_SERVER.md").read_text(
+        mcp_docs = (ROOT / "docs" / "operations" / "MCP_SERVER.md").read_text(
             encoding="utf-8"
         )
         self.assertIn(

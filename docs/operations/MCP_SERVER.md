@@ -332,4 +332,4 @@ CSV 表格，不重复收纳已独立交付的科学过程 HTML，也不包含�
 恢复或重新选择已完成任务。正式 `primer_design_output` UI JSON 不增加批次控制字段，任务句柄保留在
 外层 MCP 摘要中。
 
-完整路线、前端消息和交互边界见 [WF-01 当前实现与运行路线](WF01_CURRENT_IMPLEMENTATION.md#wf01-input-and-ui)。
+完整路线、前端消息和交互边界见 [WF-01 当前实现与运行路线](../workflows/wf01/WF01_CURRENT_IMPLEMENTATION.md#wf01-input-and-ui)。

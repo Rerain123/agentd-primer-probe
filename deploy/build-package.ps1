@@ -38,7 +38,7 @@ $stageRoot = Join-Path $temporaryRoot $packageName
 New-Item -ItemType Directory -Path $stageRoot -Force | Out-Null
 
 try {
-    $topLevelFiles = @(".dockerignore", ".gitattributes", ".gitignore", "pyproject.toml", "README.md")
+    $topLevelFiles = @(".dockerignore", ".gitattributes", ".gitignore", "pyproject.toml", "README.md", "AGENTS.md")
     foreach ($relativePath in $topLevelFiles) {
         $sourcePath = Join-Path $projectRoot $relativePath
         if (Test-Path -LiteralPath $sourcePath) {

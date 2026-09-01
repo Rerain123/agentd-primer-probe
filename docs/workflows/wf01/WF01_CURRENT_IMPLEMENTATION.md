@@ -1,7 +1,7 @@
 # WF-01 当前实现与运行路线
 
 > 状态：`CURRENT`
-> 对照日期：2026-08-19
+> 对照日期：2026-09-01
 > 适用代码：当前 `agentd-primer-probe` 工作区
 > 持久化协议版本：WF-01 PRD `0.2`
 
@@ -13,17 +13,17 @@
 
 | 主题 | 当前实现 |
 |---|---|
-| MCP 工具与资源 | [`src/agentd/mcp_server.py`](../src/agentd/mcp_server.py) |
-| 服务编排与自动推进 | [`src/agentd/service.py`](../src/agentd/service.py) |
-| M1、持久化、M2～M7 调度 | [`src/agentd/wf01_v02.py`](../src/agentd/wf01_v02.py) |
-| M2 Primer3 与规则 | [`src/agentd/wf01_v02_engine.py`](../src/agentd/wf01_v02_engine.py) |
-| M3 去重与评分 | [`src/agentd/wf01_v02_m3.py`](../src/agentd/wf01_v02_m3.py) |
-| M4 特异性 | [`src/agentd/wf01_v02_m4.py`](../src/agentd/wf01_v02_m4.py) |
-| M5 状态汇总 | [`src/agentd/wf01_v02_m5.py`](../src/agentd/wf01_v02_m5.py) |
-| M6 报告与导出 | [`src/agentd/wf01_v02_m6.py`](../src/agentd/wf01_v02_m6.py) |
-| M7 版本差异 | [`src/agentd/wf01_v02_m7.py`](../src/agentd/wf01_v02_m7.py) |
-| 模型安全摘要 | [`src/agentd/wf01_agent_view.py`](../src/agentd/wf01_agent_view.py) |
-| 前端消息 | [`src/agentd/ui_messages.py`](../src/agentd/ui_messages.py)、[`src/agentd/interactions.py`](../src/agentd/interactions.py) |
+| MCP 工具与资源 | [`src/agentd/mcp_server.py`](../../../src/agentd/mcp_server.py) |
+| 服务编排与自动推进 | [`src/agentd/service.py`](../../../src/agentd/service.py) |
+| M1、持久化、M2～M7 调度 | [`src/agentd/wf01_v02.py`](../../../src/agentd/wf01_v02.py) |
+| M2 Primer3 与规则 | [`src/agentd/wf01_v02_engine.py`](../../../src/agentd/wf01_v02_engine.py) |
+| M3 去重与评分 | [`src/agentd/wf01_v02_m3.py`](../../../src/agentd/wf01_v02_m3.py) |
+| M4 特异性 | [`src/agentd/wf01_v02_m4.py`](../../../src/agentd/wf01_v02_m4.py) |
+| M5 状态汇总 | [`src/agentd/wf01_v02_m5.py`](../../../src/agentd/wf01_v02_m5.py) |
+| M6 报告与导出 | [`src/agentd/wf01_v02_m6.py`](../../../src/agentd/wf01_v02_m6.py) |
+| M7 版本差异 | [`src/agentd/wf01_v02_m7.py`](../../../src/agentd/wf01_v02_m7.py) |
+| 模型安全摘要 | [`src/agentd/wf01_agent_view.py`](../../../src/agentd/wf01_agent_view.py) |
+| 前端消息 | [`src/agentd/ui_messages.py`](../../../src/agentd/ui_messages.py)、[`src/agentd/interactions.py`](../../../src/agentd/interactions.py) |
 
 旧接口 `POST /v1/wf01/design` 仍为兼容能力，但不属于当前 PRD v0.2 批次主路线。`POST /v1/tools/primer3/design` 是独立 Primer3 工具，也不等于 WF-01 完整工作流。
 
@@ -33,7 +33,14 @@
 
 ```mermaid
 flowchart TD
-    A["用户提出新引物设计"] --> B{"输入方式"}
+    A["用户提出新引物设计"] --> R{"执行意图"}
+    R -->|"只使用 Primer3"| S["POST /v1/tools/primer3/design"]
+    S --> ST{"单条序列与参数校验"}
+    ST -->|"不合格"| SE["422 结构化错误；不调用 Primer3"]
+    ST -->|"合格"| SP1["P1/Primer3：生成 1～50 个原始候选"]
+    SP1 --> SO["P1_Primer3_DESIGN：COMPLETED<br/>specificity=NOT_EVALUATED"]
+    SO --> SN["不建 WF-01 批次；不运行 MAFFT/P2/M3～M7；不生成规范报告"]
+    R -->|"完整 WF-01"| B{"输入方式"}
     B -->|"直接粘贴序列"| C["create_wf01_batch"]
     B -->|"上传文件"| F["download_himat_file"]
     F --> C
@@ -48,8 +55,10 @@ flowchart TD
     M2 --> M3["M3：完整搜索校验 → 靶标内去重 → 初步评分"]
     M3 --> M4A["M4：解析资源、准备候选查询"]
     M4A -->|"FULL_SPECIFICITY"| P2["P2（必需）：靶标、综合背景、可选宿主 → 判定/特异性分"]
+    M4A -.->|"DESIGN_ONLY（历史/底层兼容批次）"| D4["跳过 P2：特异性 NOT_EVALUATED<br/>生成二维 DESIGN_SCORE"]
     P2 --> M4B["M4：原样映射 P2 结果 → 重排"]
     M4B --> M5["M5：靶标/批次状态与可交付候选汇总"]
+    D4 --> M5
     M5 --> M6["M6：规范报告、4 个默认附件"]
     M6 --> O["primer_design_output：COMPLETED"]
     O --> P["get_wf01_report / candidate / export"]
@@ -57,7 +66,9 @@ flowchart TD
     V --> K
 ```
 
-正常新任务由 `create_wf01_batch` 在建批成功后自动调用推进器，依次执行 M2～M6。逐阶段 HTTP 端点主要用于后台控制、测试和故障恢复，不要求对话模型手工串联。
+图左侧的“只使用 Primer3”是独立 P1/REST 支线：它只校验一条模板及参数、调用一次 Primer3 并返回原始候选，不创建 WF-01 批次，也不执行规则过滤、去重排序、特异性、报告或版本管理。它不是 `DESIGN_ONLY`，也不是完整 WF-01 的降级结果。
+
+正常新任务由 `create_wf01_batch` 在建批成功后自动调用推进器，依次执行 M2～M6，并要求所有靶标走 `FULL_SPECIFICITY`。图中的虚线 `DESIGN_ONLY` 只表示历史批次和底层兼容调用仍可恢复的批次内路线，当前 REST、MCP 和 WF-02 子任务的新建入口不会进入它。逐阶段 HTTP 端点主要用于后台控制、测试和故障恢复，不要求对话模型手工串联。
 
 ## 3. 输入方式、模板组织与科学路线
 
@@ -107,6 +118,8 @@ flowchart TD
 一个 `target_manifest` 批次可以同时包含 `DESIGN_ONLY` 与 `FULL_SPECIFICITY` 靶标，模型摘要将其标记为 `MIXED`。宿主不是启动完整特异性的前提；它只是在已有靶标的完整路线中增加宿主专库排除。
 
 上述 `DESIGN_ONLY` 仅保留给历史批次和底层兼容调用；当前 REST、MCP 和 WF-02 子任务的新建入口均以 `require_full_route=True` 调用服务，不允许新任务静默进入该路线。该门禁在批次持久化前执行，并沿用到清单修订和 M7 新版本。
+
+`DESIGN_ONLY` 与独立 Primer3-only 工具不可混用：前者仍在 WF-01 批次中运行 M2～M6，只在 M4 跳过 P2；后者调用 `POST /v1/tools/primer3/design` 后直接返回 `P1_Primer3_DESIGN`，不进入 WF-01 状态机。
 
 ## 4. M1：预检与批次建立
 
@@ -231,9 +244,9 @@ R01～R10 是硬规则：`FAIL` 直接排除，证据缺失则进入硬规则未
 
 机器可读契约：
 
-- [`agent-interaction.schema.json`](../schemas/agent-interaction.schema.json)
-- [`agent-interaction-response.schema.json`](../schemas/agent-interaction-response.schema.json)
-- [`primer-design-output.schema.json`](../schemas/primer-design-output.schema.json)
+- [`agent-interaction.schema.json`](../../../schemas/agent-interaction.schema.json)
+- [`agent-interaction-response.schema.json`](../../../schemas/agent-interaction-response.schema.json)
+- [`primer-design-output.schema.json`](../../../schemas/primer-design-output.schema.json)
 
 MCP 同时通过 `oligosmith://contracts/*` 暴露这些 Schema。`outputSchema` 声明并约束
 终态分支；HTTP 响应层将权威业务对象直接放入 JSON-RPC `result`，顶层只包含
@@ -241,6 +254,8 @@ MCP 同时通过 `oligosmith://contracts/*` 暴露这些 Schema。`outputSchema`
 解释、Markdown 或重建 JSON，并立即结束当前轮次。
 
 ### 8.2 当前 10 个 WF-01 MCP 工具
+
+独立 Primer3-only 支线是 REST/P1 工具，不属于以下 10 个 WF-01 MCP 工具；模型不得用它替代用户请求的完整 WF-01。
 
 | 工具 | 用途 |
 |---|---|
@@ -265,6 +280,7 @@ UUID 与 `WF01-YYMMDD-HHMM-XXXX` 任务编号，但只有用户在后续轮次�
 
 | 类别 | 端点 |
 |---|---|
+| 独立 Primer3-only | `POST /v1/tools/primer3/design`；只返回原始候选，特异性为 `NOT_EVALUATED`，不创建 WF-01 批次 |
 | 输入与 M1 | `POST /v1/wf01/design-input`、`POST /v1/wf01/tasks/preflight`、`POST /v1/wf01/tasks` |
 | 批次与清单 | `GET /v1/wf01/tasks/{batch_id}`、`PATCH /v1/wf01/tasks/{batch_id}/targets`、`POST /v1/wf01/tasks/{batch_id}/confirm` |
 | 自动推进与交互 | `POST /v1/wf01/tasks/{batch_id}/run-until-blocked`、`GET /v1/wf01/tasks/{batch_id}/interactions`、`POST /v1/wf01/tasks/{batch_id}/interactions/response` |
@@ -279,7 +295,7 @@ UUID 与 `WF01-YYMMDD-HHMM-XXXX` 任务编号，但只有用户在后续轮次�
 
 ## 10. 报告、导出和科学证据
 
-M6 的唯一规范数据模型为 `wf01-prd-v0.2-canonical-report-v2`，导出契约为 `wf01-prd-v0.2-export-v5`，Schema 位于 [`wf01-v02-canonical-report.schema.json`](../schemas/wf01-v02-canonical-report.schema.json)。v2 显式保存靶标级 MAFFT/保守区证据和候选级保守性维度。在线筛选只生成只读视图，不裁剪 canonical report 或导出数据。
+M6 的唯一规范数据模型为 `wf01-prd-v0.2-canonical-report-v2`，导出契约为 `wf01-prd-v0.2-export-v5`，Schema 位于 [`wf01-v02-canonical-report.schema.json`](../../../schemas/wf01-v02-canonical-report.schema.json)。v2 显式保存靶标级 MAFFT/保守区证据和候选级保守性维度。在线筛选只生成只读视图，不裁剪 canonical report 或导出数据。
 
 ### 10.1 当前导出
 
@@ -307,7 +323,7 @@ M6 的唯一规范数据模型为 `wf01-prd-v0.2-canonical-report-v2`，导出�
 | M6 | canonical report、完整性校验、导出元数据与哈希 |
 | M7 | 来源版本、字段差异、重跑/复用靶标和来源哈希 |
 
-科学 artifact 使用 [`wf01-scientific-artifact.schema.json`](../schemas/wf01-scientific-artifact.schema.json) 和 [`wf01-scientific-artifact-index.schema.json`](../schemas/wf01-scientific-artifact-index.schema.json)。大体量原始证据只在后端和下载包中保存，不直接写入模型上下文。
+科学 artifact 使用 [`wf01-scientific-artifact.schema.json`](../../../schemas/wf01-scientific-artifact.schema.json) 和 [`wf01-scientific-artifact-index.schema.json`](../../../schemas/wf01-scientific-artifact-index.schema.json)。大体量原始证据只在后端和下载包中保存，不直接写入模型上下文。
 
 <a id="wf01-m7"></a>
 

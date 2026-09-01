@@ -1,7 +1,7 @@
 # OligoSmith Agent D 智能体开发交接文档
 
 > 读者：直接参与本仓库开发的智能体工程师
-> 文档版本：0.2
+> 文档版本：0.3
 > 对应代码版本：1.2.13
 > 更新日期：2026-08-30
 > 范围：代码架构、工作流编排、MCP 契约、状态持久化、测试与部署
@@ -356,7 +356,7 @@ $env:PYTHONPATH = "src"
 | `deploy/scripts/preflight.sh` | 部署前检查 |
 | `deploy/scripts/verify.sh` | 部署后验证 |
 | `deploy/release-manifest.json` | 发布包文件和默认参数 |
-| `docs/SERVER_INSTALL.md` | 完整安装、升级和回滚步骤 |
+| `docs/operations/SERVER_INSTALL.md` | 完整安装、升级和回滚步骤 |
 
 ```mermaid
 flowchart LR
@@ -369,7 +369,147 @@ flowchart LR
 
 容器内监听 8000。生产环境默认绑定宿主机 `127.0.0.1:8020`，再由 OpenResty / 1Panel 提供 HTTPS。不要把容器端口直接公开到外网，也不要把密钥写入 Compose、文档或 Git。
 
-### 9.1 服务器准备
+### 9.1 当前线上拓扑与文件位置
+
+以下内容记录的是 2026-08-30 已核对的生产布局。部署脚本和默认配置仍是可移植的；如果服务器目录、域名或外部服务发生变化，应在变更上线的同时更新本节。
+
+```mermaid
+flowchart LR
+    U[智能体客户端] -->|HTTPS + JWT| P[1Panel / OpenResty]
+    P -->|127.0.0.1:8020| A[Compose: agentd-primer-probe / agentd]
+    A --> J[Docker 卷 /data/jobs]
+    A --> B[/srv/oligosmith-data/blastdb]
+    A --> S[/srv/oligosmith-data/sequences]
+    A -->|host.docker.internal:8090| X[blast_search_mcp]
+    A --> H[HiMat 下载接口]
+    A --> R[RustFS wens/data]
+    A --> E[NCBI Entrez]
+```
+
+| 内容 | 当前线上位置或标识 | 说明 |
+|---|---|---|
+| 发布包上传目录 | `/opt/oligosmith` | ZIP、外部 SHA-256 文件和解压后的版本目录放在这里 |
+| 版本目录 | `/opt/oligosmith/agentd-primer-probe-server-<version>` | 每个正式版本使用独立目录；同版本热修使用带哈希后缀的目录 |
+| 生产环境变量 | 当前版本目录下的 `deploy/.env` | 含密钥，权限必须为 `0600`，不能进发布包、Git 或文档 |
+| 生产服务配置 | 当前版本目录下的 `deploy/server-config/` | 包括 `production.json` 和生产 `database-catalog.json` |
+| BLAST 数据库根目录 | `/srv/oligosmith-data/blastdb` | 独立于代码版本，挂载为只读 |
+| 序列资源根目录 | `/srv/oligosmith-data/sequences` | 独立于代码版本，挂载为只读 |
+| 任务持久化卷 | `agentd-primer-probe_agentd-jobs` | 容器内 `/data/jobs`；宿主机通常位于 `/var/lib/docker/volumes/agentd-primer-probe_agentd-jobs/_data` |
+| 独立 BLAST 服务 | `/opt/blast_search_mcp` | 容器名 `blast_search_mcp`，宿主机端口 `8090` |
+| 跨服务器迁移目录 | `/opt/oligosmith-migration-<version>` | 仅在迁移时创建；详见 9.9 |
+
+不要把生成的容器名写死在运维脚本中。Compose 项目名是 `agentd-primer-probe`，服务名是 `agentd`；容器名通常类似 `agentd-primer-probe-agentd-1`，但应始终通过标签定位：
+
+```bash
+CURRENT_CID=$(docker ps \
+  --filter label=com.docker.compose.project=agentd-primer-probe \
+  --filter label=com.docker.compose.service=agentd \
+  -q | head -n 1)
+
+test -n "$CURRENT_CID" || {
+  echo "未找到当前 Agent D 容器"
+  exit 1
+}
+
+CURRENT_WORKDIR=$(docker inspect "$CURRENT_CID" \
+  --format '{{ index .Config.Labels "com.docker.compose.project.working_dir" }}')
+
+if test -f "$CURRENT_WORKDIR/.env"; then
+  CURRENT_DEPLOY_DIR="$CURRENT_WORKDIR"
+elif test -f "$CURRENT_WORKDIR/deploy/.env"; then
+  CURRENT_DEPLOY_DIR="$CURRENT_WORKDIR/deploy"
+else
+  echo "找不到当前生产 .env：$CURRENT_WORKDIR"
+  exit 1
+fi
+
+CURRENT_DIR=$(dirname "$CURRENT_DEPLOY_DIR")
+echo "当前容器：$CURRENT_CID"
+echo "当前部署目录：$CURRENT_DIR"
+```
+
+### 9.2 当前挂载、数据库与外部服务
+
+#### 9.2.1 容器挂载
+
+| 宿主机或 Docker 资源 | 容器内路径 | 模式 |
+|---|---|---|
+| 当前版本 `deploy/server-config/production.json` | `/config/production.json` | 只读 |
+| 当前版本 `deploy/server-config/database-catalog.json` | `/config/database-catalog.json` | 只读 |
+| `/srv/oligosmith-data/blastdb` | `/data/blastdb` | 只读 |
+| `/srv/oligosmith-data/sequences` | `/data/sequences` | 只读 |
+| `agentd-primer-probe_agentd-jobs` | `/data/jobs` | 可写 |
+
+最近一次迁移盘点约为：BLAST 数据库 `3.7G`、序列资源 `476K`、任务卷 `12G`。这些只是容量快照，不是配额；迁移或备份前必须重新执行 `du -sh`。
+
+#### 9.2.2 已确认的数据库资源
+
+| 用途 | 当前宿主机路径或提供方式 | 当前已知版本 |
+|---|---|---|
+| 猪宿主 BLAST | `/srv/oligosmith-data/blastdb/host/sus_scrofa/current/db` | `Sscrofa11.1_GCF_000003025.6` |
+| CSFV 靶标 BLAST 文件 | `/srv/oligosmith-data/blastdb/target/csfv/NC_002657.1/db.*` | `NC_002657.1` |
+| 胞内劳森菌靶标 BLAST 文件 | `/srv/oligosmith-data/blastdb/target/lawsonia_intracellularis/GCF_000055945.1_ASM5594v1/db.*` | `GCF_000055945.1_ASM5594v1` |
+| 跨物种背景 BLAST | 远程 NCBI BLAST MCP | `http://host.docker.internal:8090` |
+
+`deploy/server-config/database-catalog.json` 随安装包提供的只是模板。最近一次线上盘点的生产 catalog 共登记 19 项资源，并包含真实资源版本号；升级时必须从当前运行目录复制，不能用新包模板覆盖。数据库目录使用版本子目录和 `current` 链接切换；更新数据库时新建版本目录，校验后再切换链接，不要原地覆盖现用文件。
+
+当前本地 `/data/blastdb/cross_species/current/db` 未作为可用跨物种库使用，`cross:default:blast` 由独立的远程 BLAST 服务提供。不要把“远程服务健康”误写成“本地 cross 数据库存在”。
+
+#### 9.2.3 独立 BLAST、HiMat、RustFS 和 NCBI
+
+独立 BLAST 服务的当前约定：
+
+| 项目 | 当前值 |
+|---|---|
+| 服务源码与 Compose | `/opt/blast_search_mcp` |
+| 容器名 | `blast_search_mcp` |
+| 宿主机监听 | `0.0.0.0:8090` |
+| Agent D 容器访问地址 | `http://host.docker.internal:8090` |
+| 健康检查 | `http://127.0.0.1:8090/health` |
+
+Docker 网络 IP（例如 `172.x.x.x`）会变化，配置中不能写死容器 IP。Compose 已通过 `host-gateway` 让 Linux 容器解析 `host.docker.internal`。
+
+当前独立 BLAST 服务发布到了 `0.0.0.0:8090`，应通过云防火墙或宿主机防火墙限制外部访问；Agent D 只需要经宿主机网关访问，不需要把该端口公开给互联网客户端。
+
+其他外部服务的当前约定：
+
+| 服务 | 当前配置 |
+|---|---|
+| Agent D 公网根地址 | `https://oligosmith.ne.scqcyz.cn` |
+| HiMat 文件下载 | `https://himat.ws.scqcyz.cn/api/files/download` |
+| RustFS | `RUSTFS_ENABLED=true`；Endpoint 和公开根地址均为 `https://rustfs.ne.scqcyz.cn` |
+| RustFS 对象位置 | Bucket `wens`，前缀 `data` |
+| NCBI Entrez | P5 在线获取 RefSeq 和同源序列；生产环境设置联系邮箱，API Key 可选 |
+
+RustFS AK/SK、JWT 密钥和 NCBI API Key 只保存在生产 `deploy/.env`。RustFS 账号应仅有 `wens/data/*` 所需的最小读写权限。
+
+#### 9.2.4 数据库门禁与盘点命令
+
+当前线上已知配置为 `AGENTD_REQUIRE_DATABASES=false`，因此 `/ready` 不会因可选或尚未就绪的数据库而整体失败；相应科学结果必须保持 `NOT_EVALUATED`，不能伪造评分。是否改为 `true` 是生产验收决策，不应在普通版本升级时擅自修改。
+
+每次部署前至少运行：
+
+```bash
+python3 deploy/scripts/validate_catalog.py \
+  --env-file deploy/.env \
+  --catalog deploy/server-config/database-catalog.json
+
+docker inspect "$(docker ps \
+  --filter label=com.docker.compose.project=agentd-primer-probe \
+  --filter label=com.docker.compose.service=agentd \
+  -q | head -n 1)" \
+  --format '{{ range .Mounts }}{{ println .Source " -> " .Destination }}{{ end }}'
+
+find /srv/oligosmith-data/blastdb -maxdepth 6 -type f \
+  \( -name '*.ndb' -o -name '*.nhr' -o -name '*.nin' -o -name '*.nsq' \) \
+  | sort
+
+curl -fsS http://127.0.0.1:8090/health
+```
+
+catalog 验证结果中的 `skipped_optional` 表示可选项未检查或未提供，不等于全部数据库都已安装。应结合具体工作流所需资源和最终报告中的评估状态判断。
+
+### 9.3 服务器准备
 
 推荐环境：Linux x86_64、Docker Engine 24+、Docker Compose v2、`curl`，至少 4 核 CPU、8 GB 内存和 10 GB 应用盘。数据库与任务数据另行规划磁盘。
 
@@ -379,7 +519,7 @@ flowchart LR
 chmod +x deploy/scripts/*.sh
 ```
 
-### 9.2 配置 `deploy/.env`
+### 9.4 配置 `deploy/.env`
 
 ```bash
 cp deploy/.env.example deploy/.env
@@ -395,114 +535,156 @@ vi deploy/.env
 | `AGENTD_IMAGE_TAG` | 与本次发布版本一致 |
 | `AGENTD_BIND_ADDRESS` | 默认保持 `127.0.0.1` |
 | `AGENTD_PORT` | 默认 `8020` |
-| `AGENTD_BLASTDB_DIR` | 宿主机只读资源目录 |
-| `AGENTD_SEQUENCE_DATA_DIR` | 宿主机只读序列目录 |
-| `AGENTD_REQUIRE_DATABASES` | 正式生产设为 `true`；仅联调链路时可暂设 `false` |
-| `MCP_PUBLIC_BASE_URL` | 公网 HTTPS 根地址 |
+| `AGENTD_BLASTDB_DIR` | 当前线上为 `/srv/oligosmith-data/blastdb` |
+| `AGENTD_SEQUENCE_DATA_DIR` | 当前线上为 `/srv/oligosmith-data/sequences` |
+| `AGENTD_REQUIRE_DATABASES` | 理想生产门禁为 `true`；当前线上为 `false`，普通升级必须原样继承，含义见 9.2.4 |
+| `MCP_PUBLIC_BASE_URL` | 当前线上为 `https://oligosmith.ne.scqcyz.cn` |
 | `MCP_ALLOWED_HOSTS` | 公网域名及必要的本地探活地址 |
 | `MCP_ALLOWED_ORIGINS` | 允许访问的 HTTPS 来源 |
-| `RUSTFS_*` | 需要对象存储附件时配置最小权限账号，否则保持关闭 |
+| `BLAST_SEARCH_SERVICE_URL` | 当前线上为 `http://host.docker.internal:8090` |
+| `HIMAT_FILE_DOWNLOAD_BASE_URL` | 当前线上为 `https://himat.ws.scqcyz.cn/api/files/download` |
+| `RUSTFS_*` | 当前线上已启用，Bucket 为 `wens`、前缀为 `data`；只使用最小权限账号 |
 
 资源目录映射和版本信息维护在 `deploy/server-config/database-catalog.json`。不要直接修改 `docker-compose.yml` 写死服务器路径或密钥。
 
-### 9.3 首次联网部署
+### 9.5 日常版本更新
 
-配置完成后执行：
+线上服务已经完成首次部署。本节只说明日常如何把 Agent D 更新到新版本；首次安装、服务器迁移和数据库建设不属于同事的日常更新操作。
+
+更新时遵守五条规则：
+
+1. 把新 ZIP 和同名 `.zip.sha256` 上传到 `/opt/oligosmith`。
+2. 每次发布都使用新的版本号；不要用不同内容覆盖已经上线的同版本包。
+3. 下面整段命令只需要修改第一处 `VERSION`。
+4. 不需要备份 BLAST 数据库、序列目录或任务卷；它们位于版本目录之外。新版本会自动继承当前生产 `.env` 和 `server-config`。
+5. 禁止执行 `docker compose down -v`，它会删除任务卷。
+
+#### 9.5.1 执行更新
+
+下面以 `1.2.14` 为示例。可以整段复制到服务器终端执行；如果安装包已经在 1Panel 中解压，脚本会直接验证现有目录，不会重复解压。
 
 ```bash
+set -Eeuo pipefail
+
+# 每次更新只修改这一行
+VERSION=1.2.14
+
+BASE_DIR=/opt/oligosmith
+ZIP="$BASE_DIR/agentd-primer-probe-server-$VERSION.zip"
+SHA_FILE="$ZIP.sha256"
+NEW_DIR="$BASE_DIR/agentd-primer-probe-server-$VERSION"
+
+cd "$BASE_DIR"
+sha256sum -c "$SHA_FILE"
+
+# 已经在 1Panel 解压时会跳过此步
+if test ! -d "$NEW_DIR"; then
+  unzip -q "$ZIP"
+fi
+
+cd "$NEW_DIR"
+sha256sum -c PACKAGE-MANIFEST.sha256
+chmod +x deploy/scripts/*.sh
+
+# 定位当前线上版本
+CURRENT_CID=$(docker ps \
+  --filter label=com.docker.compose.project=agentd-primer-probe \
+  --filter label=com.docker.compose.service=agentd \
+  -q | head -n 1)
+
+test -n "$CURRENT_CID" || {
+  echo "未找到当前 Agent D 容器"
+  exit 1
+}
+
+CURRENT_DEPLOY_DIR=$(docker inspect "$CURRENT_CID" \
+  --format '{{ index .Config.Labels "com.docker.compose.project.working_dir" }}')
+
+test -f "$CURRENT_DEPLOY_DIR/.env" || {
+  echo "找不到当前生产 .env：$CURRENT_DEPLOY_DIR"
+  exit 1
+}
+
+CURRENT_DIR=$(dirname "$CURRENT_DEPLOY_DIR")
+
+test "$CURRENT_DIR" != "$NEW_DIR" || {
+  echo "目标版本已经上线；请使用新的版本号重新打包"
+  exit 1
+}
+
+echo "当前版本目录：$CURRENT_DIR"
+echo "新版本目录：$NEW_DIR"
+
+# 继承生产配置
+cp -a "$CURRENT_DEPLOY_DIR/.env" "$NEW_DIR/deploy/.env"
+cp -a "$CURRENT_DEPLOY_DIR/server-config/." \
+  "$NEW_DIR/deploy/server-config/"
+
+chmod 600 "$NEW_DIR/deploy/.env"
+
+grep -q '^AGENTD_IMAGE_TAG=' "$NEW_DIR/deploy/.env" || {
+  echo "生产 .env 缺少 AGENTD_IMAGE_TAG"
+  exit 1
+}
+
+sed -i "s/^AGENTD_IMAGE_TAG=.*/AGENTD_IMAGE_TAG=$VERSION/" \
+  "$NEW_DIR/deploy/.env"
+
+# 安装脚本会完成预检、构建、切换和验收
 bash deploy/scripts/install.sh
+
+# 确认实际运行版本
+NEW_CID=$(docker ps \
+  --filter label=com.docker.compose.project=agentd-primer-probe \
+  --filter label=com.docker.compose.service=agentd \
+  -q | head -n 1)
+
+RUNNING_VERSION=$(docker exec "$NEW_CID" \
+  python -c 'import agentd; print(agentd.__version__)')
+
+test "$RUNNING_VERSION" = "$VERSION" || {
+  echo "版本不一致：期望 $VERSION，实际 $RUNNING_VERSION"
+  exit 1
+}
+
+docker compose \
+  --env-file deploy/.env \
+  -f deploy/docker-compose.yml \
+  ps
+
+echo "Agent D $VERSION 更新完成"
 ```
 
-该脚本会依次完成：
+`deploy/scripts/install.sh` 已经包含预检、镜像构建、容器 readiness、服务切换和 HTTP 验收，不需要再分开执行 `--build-only` 和 `--no-build`。
 
-1. 检查 Docker、Compose、配置、端口和挂载目录；
-2. 构建 `agentd-primer-probe:<AGENTD_IMAGE_TAG>`；
-3. 在最终容器环境运行 `python -m agentd readiness`；
-4. 启动 Compose 服务；
-5. 验证健康检查、JWT 拒绝策略、全量 MCP 和五个受限 MCP 工具集。
+如果发布说明明确新增了环境变量，先把新键补到复制后的 `deploy/.env` 再执行安装；不能用 `.env.example` 覆盖生产配置，也不能用安装包模板覆盖生产 `database-catalog.json`。
 
-常用安装选项：
+#### 9.5.2 更新后的确认与清理
 
-| 命令 | 用途 |
-|---|---|
-| `bash deploy/scripts/install.sh --pull` | 构建时刷新基础镜像 |
-| `bash deploy/scripts/install.sh --build-only` | 只构建镜像，不启动服务 |
-| `bash deploy/scripts/install.sh --no-build` | 使用已经构建或 `docker load` 的镜像 |
-| `bash deploy/scripts/install.sh --skip-verify` | 跳过安装后的 HTTP 验收；只用于明确的排障场景 |
+命令全部通过后，再从上层智能体运行一条本次受影响工作流的最小真实任务，确认：
 
-安装完成后可重复执行验收：
+- 状态可以正常推进到终态；
+- 报告、附件预览/下载和 RustFS 地址正常；
+- 最终输出仍符合当前 `{data,type}` 协议；
+- 特异性或数据库未执行时，报告保持 `NOT_EVALUATED`，不会伪造评分。
+
+出现问题时，在新版本目录查看日志：
 
 ```bash
-bash deploy/scripts/verify.sh --wait 180
-docker compose --env-file deploy/.env -f deploy/docker-compose.yml ps
-docker compose --env-file deploy/.env -f deploy/docker-compose.yml logs --tail 100 agentd
+docker compose \
+  --env-file deploy/.env \
+  -f deploy/docker-compose.yml \
+  logs --tail 150 agentd
 ```
 
-验收失败时先查看 `/ready` 响应和容器日志，不要通过关闭鉴权、删除状态或放宽结果校验绕过错误。
+确认新版本和真实任务都正常后，可以删除不用的旧版本目录、旧 ZIP 和旧 SHA-256 文件。不要删除：
 
-### 9.4 反向代理与客户端接入
-
-在 1Panel / OpenResty 中把整个域名代理到 `http://127.0.0.1:8020`，并启用 HTTPS。`/mcp`、`/mcp/wf01/`～`/mcp/wf05/`、`/v1`、报告下载和健康检查都由同一进程提供，不需要分别创建代理。
-
-服务部署完成后生成客户端 JWT：
-
-```bash
-bash deploy/scripts/generate-jwt.sh 30 oligosmith-backend
-```
-
-把输出令牌作为客户端 `Authorization: Bearer <token>` 使用。生产智能体优先连接对应的受限地址，例如 `https://<domain>/mcp/wf01/`。轮换 `JWT_SECRET` 会立即使旧令牌失效。
-
-### 9.5 更新部署
-
-更新前备份 `deploy/.env`、`deploy/server-config/`、资源版本目录和 `agentd-jobs` 持久化卷，并保留上一版本镜像。
-
-1. 更新代码或解压新版本源码包。
-2. 恢复并复核原 `deploy/.env`，把 `AGENTD_IMAGE_TAG` 改为新版本。
-3. 先执行 `bash deploy/scripts/install.sh --build-only`。
-4. 执行下面的容器内检查：
-
-```bash
-docker compose --env-file deploy/.env -f deploy/docker-compose.yml \
-  run --rm --no-deps agentd python -m agentd readiness
-```
-
-5. 检查通过后执行 `bash deploy/scripts/install.sh --no-build`。
-6. 再运行 `bash deploy/scripts/verify.sh --wait 180` 和一条最小工作流任务。
-
-更新数据库或资源时创建新版本目录并切换 catalog，不能覆盖旧目录。
-
-### 9.6 回滚
-
-仓库没有自动 `rollback.sh`，回滚按镜像、配置和状态三个层次手工执行：
-
-1. 把 `AGENTD_IMAGE_TAG` 恢复为上一版本。
-2. 恢复与上一版本匹配的 `deploy/server-config/` 和资源目录配置。
-3. 确认旧镜像仍在本机，然后执行 `bash deploy/scripts/install.sh --no-build`。
-4. 运行 `bash deploy/scripts/verify.sh --wait 180`。
-5. 只有状态格式发生不兼容变化时，才停止服务并恢复部署前备份的 `agentd-jobs` 卷。
-
-普通 `stop`、`restart` 和 `down` 不删除任务卷。不要执行 `docker compose down -v`，除非已经确认并备份全部任务记录。
-
-### 9.7 离线部署
-
-在同 CPU 架构的联网 Linux 主机执行：
-
-```bash
-bash deploy/scripts/install.sh --build-only
-bash deploy/scripts/export_offline_image.sh
-```
-
-把镜像压缩包、SHA-256 文件、源码包和外部资源复制到离线服务器，校验后加载镜像：
-
-```bash
-sha256sum -c agentd-primer-probe-<version>-linux-image.tar.gz.sha256
-gzip -dc agentd-primer-probe-<version>-linux-image.tar.gz | docker load
-bash deploy/scripts/install.sh --no-build
-```
-
-### 9.8 当前线上注意项
-
-2026-08-30 的线上只读检查显示服务和核心工具就绪，但 `databases_required=false`。这意味着 `/ready` 当前不会把数据库资源作为硬门禁；正式生产是否接受该配置需要项目明确决定。
+- `/srv/oligosmith-data/blastdb`；
+- `/srv/oligosmith-data/sequences`；
+- `agentd-primer-probe_agentd-jobs` 卷；
+- `/opt/blast_search_mcp`；
+- 当前运行版本的 `deploy/.env` 和 `deploy/server-config/`；
+- RustFS 上的 `wens/data/*` 对象。
 
 ## 10. 修改代码的标准流程
 
@@ -549,14 +731,14 @@ bash deploy/scripts/install.sh --no-build
 
 ## 12. 继续阅读
 
-- [文档导航](README.md)
-- [MCP 服务与鉴权](MCP_SERVER.md)
-- [服务器安装、升级与回滚](SERVER_INSTALL.md)
+- [文档导航](../README.md)
+- [MCP 服务与鉴权](../operations/MCP_SERVER.md)
+- [服务器安装、升级与回滚](../operations/SERVER_INSTALL.md)
 - [工作流隔离架构](WORKFLOW_ISOLATION_ARCHITECTURE.md)
-- [WF-01 当前实现](WF01_CURRENT_IMPLEMENTATION.md)
-- [WF-02 当前实施台账](WF02_V0.1_IMPLEMENTATION_PLAN.md)
-- [WF-03 当前实现](WF03_CURRENT_IMPLEMENTATION.md)
-- [WF-05 当前实现](WF05_CURRENT_IMPLEMENTATION.md)
-- [统一变更记录](CHANGELOG.md)
+- [WF-01 当前实现](../workflows/wf01/WF01_CURRENT_IMPLEMENTATION.md)
+- [WF-02 当前实施台账](../workflows/wf02/WF02_V0.1_IMPLEMENTATION_PLAN.md)
+- [WF-03 当前实现](../workflows/wf03/WF03_CURRENT_IMPLEMENTATION.md)
+- [WF-05 当前实现](../workflows/wf05/WF05_CURRENT_IMPLEMENTATION.md)
+- [统一变更记录](../history/CHANGELOG.md)
 
 本文只维护智能体开发同事需要的主链路。具体字段查 Schema，具体行为查测试，历史变化查 Git 和 `CHANGELOG.md`。

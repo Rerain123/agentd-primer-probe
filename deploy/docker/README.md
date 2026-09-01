@@ -33,6 +33,6 @@ curl http://localhost:8020/v1/tool-status
 
 只有靶标、宿主和交叉数据库均完成真实 BLAST+ 检查后，候选才可能标记为 `blast_verified`。
 
-完整服务器部署推荐使用 `deploy/docker-compose.yml`，其中已经配置生产配置文件、数据库目录、只读 BLAST/序列卷、任务持久化卷和 readiness 检查。历史架构说明见 [`docs/HISTORY_PHASES.md`](../../docs/HISTORY_PHASES.md)。
+完整服务器部署推荐使用 `deploy/docker-compose.yml`，其中已经配置生产配置文件、数据库目录、只读 BLAST/序列卷、任务持久化卷和 readiness 检查。历史架构说明见 [`docs/history/HISTORY_PHASES.md`](../../docs/history/HISTORY_PHASES.md)。
 
-服务器安装包与运维步骤见 `docs/SERVER_INSTALL.md`，数据目录约定见 `deploy/DATA_LAYOUT.md`。
+服务器安装包与运维步骤见 `docs/operations/SERVER_INSTALL.md`，数据目录约定见 `deploy/DATA_LAYOUT.md`。
