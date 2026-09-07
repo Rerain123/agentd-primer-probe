@@ -350,7 +350,7 @@ $env:PYTHONPATH = "src"
 
 | 文件 | 作用 |
 |---|---|
-| `deploy/docker/Dockerfile` | 构建非 root 运行镜像 |
+| `Dockerfile` | 根目录镜像构建入口，构建非 root 运行镜像 |
 | `deploy/docker-compose.yml` | 服务、卷、只读挂载、资源和健康检查 |
 | `deploy/scripts/install.sh` | 预检、构建、readiness、启动和验收主入口 |
 | `deploy/scripts/preflight.sh` | 部署前检查 |

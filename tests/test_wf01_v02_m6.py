@@ -1493,9 +1493,7 @@ class WF01V02M6ExportTests(unittest.TestCase):
 
     def test_m6_export_runtime_dependencies_are_packaged(self) -> None:
         pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
-        dockerfile = (
-            ROOT / "deploy" / "docker" / "Dockerfile"
-        ).read_text(encoding="utf-8")
+        dockerfile = (ROOT / "Dockerfile").read_text(encoding="utf-8")
         self.assertIn('"reportlab>=4.2,<5"', pyproject)
         self.assertIn('"pypdf>=5.0,<7"', pyproject)
         self.assertIn("fonts-noto-cjk", dockerfile)

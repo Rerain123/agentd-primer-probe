@@ -4,7 +4,7 @@ services:
   agentd:
     build:
       context: ..
-      dockerfile: deploy/docker/Dockerfile
+      dockerfile: Dockerfile
     image: agentd-primer-probe:${AGENTD_IMAGE_TAG:-1.2.13}
     restart: unless-stopped
     init: true

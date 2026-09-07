@@ -403,7 +403,7 @@ databases_required=false
 ## 12. 相关项目文件
 
 - `deploy/docker-compose.yml`：完整容器编排、端口、环境变量和数据卷。
-- `deploy/docker/Dockerfile`：镜像构建、科学工具和启动命令。
+- `Dockerfile`：仓库根目录的镜像构建入口、科学工具和启动命令。
 - `deploy/.env.example`：服务器环境变量模板。
 - `deploy/server-config/production.json`：生产运行配置。
 - `deploy/server-config/database-catalog.json`：数据库资源目录模板。

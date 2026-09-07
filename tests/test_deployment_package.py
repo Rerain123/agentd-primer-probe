@@ -129,9 +129,7 @@ class DeploymentPackageTests(unittest.TestCase):
             mcp_docs,
         )
 
-        dockerfile = (ROOT / "deploy" / "docker" / "Dockerfile").read_text(
-            encoding="utf-8"
-        )
+        dockerfile = (ROOT / "Dockerfile").read_text(encoding="utf-8")
         self.assertIn(
             'org.opencontainers.image.description="OligoSmith 可流式传输 HTTP MCP 服务"',
             dockerfile,
