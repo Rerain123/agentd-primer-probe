@@ -1,0 +1,2438 @@
+{
+  "retrieved_at": "2026-10-12T03:26:50.035063+00:00",
+  "source": "NCBI nucleotide GenBank",
+  "diversity_scope": "distinct deposited sequences; breed coverage not established",
+  "resources": {
+    "internal:pig:ACTB:sequences": {
+      "reference_accession": "NM_001444420.1",
+      "query": "((ACTB[Gene Name] OR \"beta actin\"[Title] OR \"beta-actin\"[Title])) AND txid9823[Organism:exp] AND 80:10000[SLEN] NOT \"whole genome shotgun\"[Title] NOT intron[Title] NOT EST[filter] NOT PREDICTED[Title]",
+      "sequence_count": 5,
+      "records": [
+        {
+          "accession": "NM_001444420.1",
+          "description": "Sus scrofa actin beta (ACTB), mRNA",
+          "organism": "Sus scrofa",
+          "taxid": 9823,
+          "feature_location": "full transcript; verified CDS [90:1218](+)",
+          "source_qualifiers": {
+            "organism": [
+              "Sus scrofa"
+            ],
+            "mol_type": [
+              "mRNA"
+            ],
+            "db_xref": [
+              "taxon:9823"
+            ],
+            "chromosome": [
+              "3"
+            ],
+            "map": [
+              "3"
+            ],
+            "breed": [
+              "Duroc"
+            ]
+          },
+          "sha256": "9ce47cfe2509c7b24647e577fb49e08db3f7e1ee1d4fb1baec54febd41656e9e"
+        },
+        {
+          "accession": "DQ452569.1",
+          "description": "Sus scrofa beta actin (ACTB) gene, partial cds",
+          "organism": "Sus scrofa",
+          "taxid": 9823,
+          "feature_location": "join{[<0:30](+), [479:923](+), [1021:>1102](+)}",
+          "source_qualifiers": {
+            "organism": [
+              "Sus scrofa"
+            ],
+            "mol_type": [
+              "genomic DNA"
+            ],
+            "db_xref": [
+              "taxon:9823"
+            ],
+            "chromosome": [
+              "3"
+            ],
+            "map": [
+              "3p15-p17"
+            ]
+          },
+          "sha256": "aa584adfffb06676c677f698bf574442aa6413ae02571d5eed9be6ba1228fb06"
+        },
+        {
+          "accession": "DQ178122.1",
+          "description": "Sus scrofa beta actin (ACTB) mRNA, partial cds",
+          "organism": "Sus scrofa",
+          "taxid": 9823,
+          "feature_location": "full transcript; verified CDS [<0:>114](+)",
+          "source_qualifiers": {
+            "organism": [
+              "Sus scrofa"
+            ],
+            "mol_type": [
+              "mRNA"
+            ],
+            "db_xref": [
+              "taxon:9823"
+            ]
+          },
+          "sha256": "ab15a8b5adabbf70fd3c5efa4f53f79d2f7965ef4ae2207b7a0e5584ef53c3b1"
+        },
+        {
+          "accession": "MW280291.1",
+          "description": "Sus scrofa actin beta (ACTB) mRNA, partial cds",
+          "organism": "Sus scrofa",
+          "taxid": 9823,
+          "feature_location": "full transcript; verified CDS [<0:>211](+)",
+          "source_qualifiers": {
+            "organism": [
+              "Sus scrofa"
+            ],
+            "mol_type": [
+              "mRNA"
+            ],
+            "isolation_source": [
+              "liver"
+            ],
+            "db_xref": [
+              "taxon:9823"
+            ]
+          },
+          "sha256": "c882467b11845db4a845db38c7c334effc0356af114a934df2bbda36b1e30462"
+        },
+        {
+          "accession": "GBZA01000018.1",
+          "description": "TSA: Sus scrofa domesticus HD552 transcribed RNA sequence",
+          "organism": "Sus scrofa domesticus",
+          "taxid": 9823,
+          "feature_location": "full transcript; verified CDS [93:1221](+)",
+          "source_qualifiers": {
+            "organism": [
+              "Sus scrofa domesticus"
+            ],
+            "mol_type": [
+              "transcribed RNA"
+            ],
+            "submitter_seqid": [
+              "HD552"
+            ],
+            "db_xref": [
+              "taxon:9825"
+            ],
+            "note": [
+              "breed: Yorkshire-Poland China"
+            ]
+          },
+          "sha256": "81121db8050c7e9e0ad3b72d629b81df9ba26560461217924b03efcb1a228255"
+        },
+        {
+          "accession": "ON164673.1",
+          "description": "Sus scrofa isolate mmpACTB beta-actin mRNA, complete cds",
+          "organism": "Sus scrofa",
+          "taxid": 9823,
+          "feature_location": "full transcript; verified CDS [7:1135](+)",
+          "source_qualifiers": {
+            "organism": [
+              "Sus scrofa"
+            ],
+            "mol_type": [
+              "mRNA"
+            ],
+            "isolate": [
+              "mmpACTB"
+            ],
+            "db_xref": [
+              "taxon:9823"
+            ]
+          },
+          "sha256": "e781619021ba5628c0c01f124ee712976c7f525eef46729e5fb9d7ba6869c8da"
+        },
+        {
+          "accession": "AF054837.1",
+          "description": "Sus scrofa beta actin mRNA, partial cds",
+          "organism": "Sus scrofa",
+          "taxid": 9823,
+          "feature_location": "full transcript; verified CDS [<0:>245](+)",
+          "source_qualifiers": {
+            "organism": [
+              "Sus scrofa"
+            ],
+            "mol_type": [
+              "mRNA"
+            ],
+            "db_xref": [
+              "taxon:9823"
+            ]
+          },
+          "sha256": "36c14f6bfca02b01b69303a9bab4947b904c52d6b813103930631791458e906d"
+        },
+        {
+          "accession": "DQ845171.1",
+          "description": "Sus scrofa beta-actin mRNA, partial cds",
+          "organism": "Sus scrofa",
+          "taxid": 9823,
+          "feature_location": "full transcript; verified CDS [<0:794](+)",
+          "source_qualifiers": {
+            "organism": [
+              "Sus scrofa"
+            ],
+            "mol_type": [
+              "mRNA"
+            ],
+            "db_xref": [
+              "taxon:9823"
+            ]
+          },
+          "sha256": "e40ebabcf8256f2d0da9cefa72166c2565cf627aa34534230975feeb7cb6f20b"
+        },
+        {
+          "accession": "AY550069.1",
+          "description": "Sus scrofa cytoskeletal beta actin mRNA, partial cds",
+          "organism": "Sus scrofa",
+          "taxid": 9823,
+          "feature_location": "full transcript; verified CDS [<0:1215](+)",
+          "source_qualifiers": {
+            "organism": [
+              "Sus scrofa"
+            ],
+            "mol_type": [
+              "mRNA"
+            ],
+            "db_xref": [
+              "taxon:9823"
+            ],
+            "dev_stage": [
+              "embryo"
+            ]
+          },
+          "sha256": "4cdd57bca241a77aefce5c5402ff1673a6c5cb67a15020b8101dfb8886a4091e"
+        },
+        {
+          "accession": "U07786.1",
+          "description": "Sus scrofa beta actin mRNA, partial cds",
+          "organism": "Sus scrofa",
+          "taxid": 9823,
+          "feature_location": "full transcript; verified CDS [<0:>706](+)",
+          "source_qualifiers": {
+            "organism": [
+              "Sus scrofa"
+            ],
+            "mol_type": [
+              "mRNA"
+            ],
+            "strain": [
+              "crossbred"
+            ],
+            "db_xref": [
+              "taxon:9823"
+            ],
+            "clone": [
+              "pigbactin 7-6"
+            ],
+            "cell_line": [
+              "TST-3"
+            ],
+            "cell_type": [
+              "fibroblast, transformed"
+            ],
+            "tissue_type": [
+              "testis"
+            ]
+          },
+          "sha256": "009dba898018c0f060a8925213031afcdfbafc736143920e31bbbb652b2f0c25"
+        },
+        {
+          "accession": "AJ312193.1",
+          "description": "Sus scrofa partial beta-actin gene, exons 1-2",
+          "organism": "Sus scrofa",
+          "taxid": 9823,
+          "feature_location": "join{[<0:419](+), [514:>602](+)}",
+          "source_qualifiers": {
+            "organism": [
+              "Sus scrofa"
+            ],
+            "mol_type": [
+              "genomic DNA"
+            ],
+            "db_xref": [
+              "taxon:9823"
+            ],
+            "tissue_type": [
+              "heart"
+            ],
+            "dev_stage": [
+              "adult"
+            ],
+            "geo_loc_name": [
+              "Denmark"
+            ]
+          },
+          "sha256": "f65cd648b671dad2b782540ec524debd280929606a7bab9c3c92afacc36b2e67"
+        }
+      ],
+      "status": "READY",
+      "fasta_sha256": "b90725b2eeba626beb521fb86d97c695396ef881e044978aaaeafc06f3373509",
+      "relative_path": "pig/ACTB/sequences.fasta",
+      "template_scope": "SHARED_REFERENCE_INTERVAL",
+      "reference_interval": {
+        "reference_accession": "NM_001444420.1",
+        "start_1based": 801,
+        "end_1based": 1226
+      },
+      "source_coordinates": [
+        {
+          "accession": "NM_001444420.1",
+          "start_1based": 801,
+          "end_1based": 1226
+        },
+        {
+          "accession": "GBZA01000018.1",
+          "start_1based": 804,
+          "end_1based": 1229
+        },
+        {
+          "accession": "ON164673.1",
+          "start_1based": 718,
+          "end_1based": 1143
+        },
+        {
+          "accession": "DQ845171.1",
+          "start_1based": 377,
+          "end_1based": 802
+        },
+        {
+          "accession": "AY550069.1",
+          "start_1based": 798,
+          "end_1based": 1223
+        }
+      ],
+      "selected_accessions": [
+        "NM_001444420.1",
+        "GBZA01000018.1",
+        "ON164673.1",
+        "DQ845171.1",
+        "AY550069.1"
+      ],
+      "unique_sequence_count": 2,
+      "conservation": 0.999531,
+      "conservation_status": "PASS",
+      "source_fasta": "/data/internal-controls-20261012-r01/pig/ACTB/sequences.fasta"
+    },
+    "internal:pig:GAPDH:sequences": {
+      "reference_accession": "NM_001206359.1",
+      "query": "((GAPDH[Gene Name] OR GAPDH[Title] OR GAPD[Title] OR G3PDH[Title] OR (glyceraldehyde[Title] AND dehydrogenase[Title]))) AND txid9823[Organism:exp] AND 80:10000[SLEN] NOT \"whole genome shotgun\"[Title] NOT intron[Title] NOT EST[filter] NOT PREDICTED[Title]",
+      "sequence_count": 5,
+      "records": [
+        {
+          "accession": "NM_001206359.1",
+          "description": "Sus scrofa glyceraldehyde-3-phosphate dehydrogenase (GAPDH), mRNA",
+          "organism": "Sus scrofa",
+          "taxid": 9823,
+          "feature_location": "full transcript; verified CDS [100:1102](+)",
+          "source_qualifiers": {
+            "organism": [
+              "Sus scrofa"
+            ],
+            "mol_type": [
+              "mRNA"
+            ],
+            "db_xref": [
+              "taxon:9823"
+            ],
+            "chromosome": [
+              "5"
+            ],
+            "map": [
+              "5"
+            ]
+          },
+          "sha256": "a401f9a2486eb870b046215cfbb21d18e2caab4dac2551649f925c2f565bfbc5"
+        },
+        {
+          "accession": "AF017079.1",
+          "description": "Sus scrofa glyceraldehyde 3-phosphate dehydrogenase (GAPDH) mRNA, complete cds",
+          "organism": "Sus scrofa",
+          "taxid": 9823,
+          "feature_location": "full transcript; verified CDS [341:1343](+)",
+          "source_qualifiers": {
+            "organism": [
+              "Sus scrofa"
+            ],
+            "mol_type": [
+              "mRNA"
+            ],
+            "db_xref": [
+              "taxon:9823"
+            ]
+          },
+          "sha256": "710ae226f11c1d0535303dc17113446f87ee506604ad280aeb1a414d0fbf3ca8"
+        },
+        {
+          "accession": "MW280296.1",
+          "description": "Sus scrofa glyceraldehyde-3-phosphate dehydrogenase (GAPDH) mRNA, partial cds",
+          "organism": "Sus scrofa",
+          "taxid": 9823,
+          "feature_location": "full transcript; verified CDS [<0:>167](+)",
+          "source_qualifiers": {
+            "organism": [
+              "Sus scrofa"
+            ],
+            "mol_type": [
+              "mRNA"
+            ],
+            "isolation_source": [
+              "liver"
+            ],
+            "db_xref": [
+              "taxon:9823"
+            ]
+          },
+          "sha256": "4f94c685741f66fbb5d6ae99988f2393cf1804aa768f20399f33069e7616a8b0"
+        },
+        {
+          "accession": "AF141959.1",
+          "description": "Sus scrofa glyceraldehyde-3-phosphate dehydrogenase GAPDH (GAPDH) mRNA, partial cds",
+          "organism": "Sus scrofa",
+          "taxid": 9823,
+          "feature_location": "full transcript; verified CDS [<0:>573](+)",
+          "source_qualifiers": {
+            "organism": [
+              "Sus scrofa"
+            ],
+            "mol_type": [
+              "mRNA"
+            ],
+            "db_xref": [
+              "taxon:9823"
+            ]
+          },
+          "sha256": "e43600df59e1d25671c0f83352702bd9317b7aae1ff83c9186ceee0f4fc60072"
+        },
+        {
+          "accession": "AF069649.1",
+          "description": "Sus scrofa glyceraldehyde-3-phosphate dehydrogenase (GAPDH) mRNA, partial cds",
+          "organism": "Sus scrofa",
+          "taxid": 9823,
+          "feature_location": "full transcript; verified CDS [<0:>333](+)",
+          "source_qualifiers": {
+            "organism": [
+              "Sus scrofa"
+            ],
+            "mol_type": [
+              "mRNA"
+            ],
+            "db_xref": [
+              "taxon:9823"
+            ],
+            "cell_type": [
+              "articular cartilage chondrocyte"
+            ]
+          },
+          "sha256": "4bc2841d6ec76dd158ae2e52bb85c51c683d472f9f5619e92675662a1a4028ee"
+        },
+        {
+          "accession": "AF043486.1",
+          "description": "Sus scrofa glycerine aldehyde 3-phosphate dehydrogenase (GAPDH) mRNA, partial cds",
+          "organism": "Sus scrofa",
+          "taxid": 9823,
+          "feature_location": "full transcript; verified CDS [<0:316](+)",
+          "source_qualifiers": {
+            "organism": [
+              "Sus scrofa"
+            ],
+            "mol_type": [
+              "mRNA"
+            ],
+            "db_xref": [
+              "taxon:9823"
+            ]
+          },
+          "sha256": "7603fb1ff1b58b4542bf959f6821f116f5e1c85e1a654933bc986db398708513"
+        },
+        {
+          "accession": "DQ648565.1",
+          "description": "Sus scrofa glyceraldehyde-3-phosphate dehydrogenase (GAPDH) gene, exons 3 through 6 and partial cds",
+          "organism": "Sus scrofa",
+          "taxid": 9823,
+          "feature_location": "join{[<0:69](+), [148:255](+), [376:467](+), [593:>698](+)}",
+          "source_qualifiers": {
+            "organism": [
+              "Sus scrofa"
+            ],
+            "mol_type": [
+              "genomic DNA"
+            ],
+            "db_xref": [
+              "taxon:9823"
+            ]
+          },
+          "sha256": "7c985bf6c405f7ade92740057430a7b593461e7511bfe3748ca3473cae180c85"
+        },
+        {
+          "accession": "KJ786424.1",
+          "description": "Sus scrofa glyceraldehyde-3-phosphate dehydrogenase (GAPDH) mRNA, complete cds",
+          "organism": "Sus scrofa",
+          "taxid": 9823,
+          "feature_location": "full transcript; verified CDS [0:1002](+)",
+          "source_qualifiers": {
+            "organism": [
+              "Sus scrofa"
+            ],
+            "mol_type": [
+              "mRNA"
+            ],
+            "db_xref": [
+              "taxon:9823"
+            ],
+            "cell_type": [
+              "peripheral blood mononuclear cells"
+            ],
+            "dev_stage": [
+              "three months old"
+            ],
+            "note": [
+              "breed: Yorkshire x Landrace x Duroc"
+            ]
+          },
+          "sha256": "4b26cb6b77ad2220359622d72ceab719318a0128357957db8028a21ce4bf34b5"
+        },
+        {
+          "accession": "DQ178124.1",
+          "description": "Sus scrofa glyceraldehyde-3-phosphate dehydrogenase (GAPDH) mRNA, partial cds",
+          "organism": "Sus scrofa",
+          "taxid": 9823,
+          "feature_location": "full transcript; verified CDS [<0:>100](+)",
+          "source_qualifiers": {
+            "organism": [
+              "Sus scrofa"
+            ],
+            "mol_type": [
+              "mRNA"
+            ],
+            "db_xref": [
+              "taxon:9823"
+            ]
+          },
+          "sha256": "e74f47bbd65b0af400f0fa53e92657d7c322d934dc7bd9cc853ed16d371ab77f"
+        },
+        {
+          "accession": "HQ013301.1",
+          "description": "Sus scrofa glyceraldehyde-3-phosphate dehydrogenase (GAPDH) mRNA, partial cds",
+          "organism": "Sus scrofa",
+          "taxid": 9823,
+          "feature_location": "full transcript; verified CDS [<0:>826](+)",
+          "source_qualifiers": {
+            "organism": [
+              "Sus scrofa"
+            ],
+            "mol_type": [
+              "mRNA"
+            ],
+            "db_xref": [
+              "taxon:9823"
+            ],
+            "PCR_primers": [
+              "fwd_seq: aaggtcggagtgaacggatttg, rev_seq: ggtgctcagtgtagcccaggat"
+            ]
+          },
+          "sha256": "1de72e7719e902a7b38e0deaf3e38a2838c6dbdd75733131abbe6318a51c5840"
+        }
+      ],
+      "status": "READY",
+      "fasta_sha256": "1709c825ab5ca77371b7e15f8104196f3b194461938724548017ca2ef6224ef6",
+      "relative_path": "pig/GAPDH/sequences.fasta",
+      "template_scope": "SHARED_REFERENCE_INTERVAL",
+      "reference_interval": {
+        "reference_accession": "NM_001206359.1",
+        "start_1based": 155,
+        "end_1based": 526
+      },
+      "source_coordinates": [
+        {
+          "accession": "NM_001206359.1",
+          "start_1based": 155,
+          "end_1based": 526
+        },
+        {
+          "accession": "AF017079.1",
+          "start_1based": 396,
+          "end_1based": 767
+        },
+        {
+          "accession": "DQ648565.1",
+          "start_1based": 1,
+          "end_1based": 372
+        },
+        {
+          "accession": "KJ786424.1",
+          "start_1based": 55,
+          "end_1based": 426
+        },
+        {
+          "accession": "HQ013301.1",
+          "start_1based": 49,
+          "end_1based": 420
+        }
+      ],
+      "selected_accessions": [
+        "NM_001206359.1",
+        "AF017079.1",
+        "DQ648565.1",
+        "KJ786424.1",
+        "HQ013301.1"
+      ],
+      "unique_sequence_count": 4,
+      "conservation": 0.978495,
+      "conservation_status": "CAUTION",
+      "source_fasta": "/data/internal-controls-20261012-r01/pig/GAPDH/sequences.fasta"
+    },
+    "internal:pig:18S rRNA:sequences": {
+      "reference_accession": "NR_046261.1",
+      "query": "((\"18S ribosomal RNA\"[Title] OR \"18S rRNA\"[Title])) AND txid9823[Organism:exp] AND 80:10000[SLEN] NOT \"whole genome shotgun\"[Title] NOT intron[Title] NOT EST[filter] NOT PREDICTED[Title]",
+      "sequence_count": 7,
+      "records": [
+        {
+          "accession": "NR_046261.1",
+          "description": "Sus scrofa 18S ribosomal RNA (RN18S), ribosomal RNA",
+          "organism": "Sus scrofa",
+          "taxid": 9823,
+          "feature_location": "[0:2302](+)",
+          "source_qualifiers": {
+            "organism": [
+              "Sus scrofa"
+            ],
+            "mol_type": [
+              "rRNA"
+            ],
+            "db_xref": [
+              "taxon:9823"
+            ],
+            "chromosome": [
+              "10"
+            ],
+            "map": [
+              "10"
+            ],
+            "breed": [
+              "Duroc"
+            ]
+          },
+          "sha256": "c2ea8673645a25dfeb30d1a65bf3b0b267c763484e7e628aa793a380112e7bf4"
+        },
+        {
+          "accession": "HQ127318.1",
+          "description": "Sus scrofa 18S ribosomal RNA gene, partial sequence",
+          "organism": "Sus scrofa",
+          "taxid": 9823,
+          "feature_location": "[<0:>100](+)",
+          "source_qualifiers": {
+            "organism": [
+              "Sus scrofa"
+            ],
+            "mol_type": [
+              "genomic DNA"
+            ],
+            "db_xref": [
+              "taxon:9823"
+            ],
+            "tissue_type": [
+              "small intestine epithelium; kidney"
+            ],
+            "PCR_primers": [
+              "fwd_seq: acgctattggagctggaattacc, rev_seq: ccctgtaattggaatgagtccactt"
+            ]
+          },
+          "sha256": "e0fc20049b4d04f6a23ed8533c4da6298b26f4637f5f1d5bb56de6ff820d0a06"
+        },
+        {
+          "accession": "AB117609.1",
+          "description": "Sus scrofa 18S rRNA, partial sequence",
+          "organism": "Sus scrofa",
+          "taxid": 9823,
+          "feature_location": "[<0:>565](+)",
+          "source_qualifiers": {
+            "organism": [
+              "Sus scrofa"
+            ],
+            "mol_type": [
+              "rRNA"
+            ],
+            "db_xref": [
+              "taxon:9823"
+            ]
+          },
+          "sha256": "09d43dec1484c851708fe5353489db3a2c1fb6163b015fcedb035ea2cf0c66ab"
+        },
+        {
+          "accession": "DQ437859.1",
+          "description": "Sus scrofa 18S ribosomal RNA gene, partial sequence",
+          "organism": "Sus scrofa",
+          "taxid": 9823,
+          "feature_location": "[<0:>404](+)",
+          "source_qualifiers": {
+            "organism": [
+              "Sus scrofa"
+            ],
+            "mol_type": [
+              "genomic DNA"
+            ],
+            "db_xref": [
+              "taxon:9823"
+            ],
+            "note": [
+              "common: European wild boar"
+            ]
+          },
+          "sha256": "eca6feae3661cd9ba15b5b2d3436e4f82b860135269507dff85a5317f26f519c"
+        },
+        {
+          "accession": "AY366363.1",
+          "description": "Sus scrofa domestica 18S ribosomal RNA gene, partial sequence",
+          "organism": "Sus scrofa domesticus",
+          "taxid": 9823,
+          "feature_location": "[<0:>193](+)",
+          "source_qualifiers": {
+            "organism": [
+              "Sus scrofa domesticus"
+            ],
+            "mol_type": [
+              "genomic DNA"
+            ],
+            "db_xref": [
+              "taxon:9825"
+            ]
+          },
+          "sha256": "80ee55557e8ae0983c7fe1633adefa817fab848f330b369d428fd13869a9a0ee"
+        },
+        {
+          "accession": "AF102857.1",
+          "description": "Sus scrofa 18S ribosomal RNA gene, partial sequence",
+          "organism": "Sus scrofa",
+          "taxid": 9823,
+          "feature_location": "[<0:>649](+)",
+          "source_qualifiers": {
+            "organism": [
+              "Sus scrofa"
+            ],
+            "mol_type": [
+              "genomic DNA"
+            ],
+            "db_xref": [
+              "taxon:9823"
+            ],
+            "note": [
+              "primer sequence derived from rat"
+            ]
+          },
+          "sha256": "03e0614a73ec42cbc00065564623f696b51e218947060a627d2a9c61d40ecd76"
+        },
+        {
+          "accession": "AF179868.1",
+          "description": "Sus scrofa 18S ribosomal RNA gene, partial sequence",
+          "organism": "Sus scrofa",
+          "taxid": 9823,
+          "feature_location": "[<0:>306](+)",
+          "source_qualifiers": {
+            "organism": [
+              "Sus scrofa"
+            ],
+            "mol_type": [
+              "genomic DNA"
+            ],
+            "db_xref": [
+              "taxon:9823"
+            ],
+            "tissue_type": [
+              "smooth muscle"
+            ]
+          },
+          "sha256": "772ae445eee61f7081a8d26d0b1689ee686aea45707006df734806d493f485ae"
+        }
+      ],
+      "status": "READY",
+      "fasta_sha256": "da709538cd0fc4ee9b40fdff7088093d6f6568bdef85d7fe99e682baf3a3ed2f",
+      "relative_path": "pig/18S_rRNA/sequences.fasta",
+      "template_scope": "DEPOSITED_SEQUENCES_WITH_INCOMPLETE_SHARED_COVERAGE",
+      "reference_interval": null,
+      "source_coordinates": [],
+      "selected_accessions": [
+        "NR_046261.1",
+        "HQ127318.1",
+        "AB117609.1",
+        "DQ437859.1",
+        "AY366363.1",
+        "AF102857.1",
+        "AF179868.1"
+      ],
+      "unique_sequence_count": 7,
+      "conservation": 0.257475,
+      "conservation_status": "FAIL",
+      "source_fasta": "/data/internal-controls-20261012-r01/pig/18S_rRNA/sequences.fasta"
+    },
+    "internal:cattle:ACTB:sequences": {
+      "reference_accession": "NM_173979.3",
+      "query": "((ACTB[Gene Name] OR \"beta actin\"[Title] OR \"beta-actin\"[Title])) AND txid9913[Organism:exp] AND 80:10000[SLEN] NOT \"whole genome shotgun\"[Title] NOT intron[Title] NOT EST[filter] NOT PREDICTED[Title]",
+      "sequence_count": 6,
+      "records": [
+        {
+          "accession": "NM_173979.3",
+          "description": "Bos taurus actin beta (ACTB), mRNA",
+          "organism": "Bos taurus",
+          "taxid": 9913,
+          "feature_location": "full transcript; verified CDS [92:1220](+)",
+          "source_qualifiers": {
+            "organism": [
+              "Bos taurus"
+            ],
+            "mol_type": [
+              "mRNA"
+            ],
+            "db_xref": [
+              "taxon:9913"
+            ],
+            "chromosome": [
+              "25"
+            ],
+            "map": [
+              "25"
+            ],
+            "breed": [
+              "mixed"
+            ]
+          },
+          "sha256": "588301b9fcacc88f2c216a3199c90c178a330599a624cc0340c80d67ced33fff"
+        },
+        {
+          "accession": "BC142413.1",
+          "description": "Bos taurus actin, beta, mRNA (cDNA clone MGC:159611 IMAGE:8448844), complete cds",
+          "organism": "Bos taurus",
+          "taxid": 9913,
+          "feature_location": "full transcript; verified CDS [88:1216](+)",
+          "source_qualifiers": {
+            "organism": [
+              "Bos taurus"
+            ],
+            "mol_type": [
+              "mRNA"
+            ],
+            "strain": [
+              "Hereford"
+            ],
+            "db_xref": [
+              "taxon:9913"
+            ],
+            "clone": [
+              "MGC:159611 IMAGE:8448844"
+            ],
+            "tissue_type": [
+              "Thymus, female, 8.5 months, Hereford"
+            ],
+            "clone_lib": [
+              "GC_BGC-13"
+            ],
+            "lab_host": [
+              "DH10B"
+            ],
+            "note": [
+              "Vector: pCMV-SPORT6.0"
+            ]
+          },
+          "sha256": "e73869b749ec01f5fc07ef08c49c3c3d4eaee57470881a83654fe9719a4bcb96"
+        },
+        {
+          "accession": "BT030480.1",
+          "description": "Bos taurus actin, beta (ACTB), mRNA, complete cds",
+          "organism": "Bos taurus",
+          "taxid": 9913,
+          "feature_location": "full transcript; verified CDS [29:1157](+)",
+          "source_qualifiers": {
+            "organism": [
+              "Bos taurus"
+            ],
+            "mol_type": [
+              "mRNA"
+            ],
+            "db_xref": [
+              "taxon:9913"
+            ],
+            "clone": [
+              "2BOV82P21; plate 82 row P column 21"
+            ],
+            "tissue_type": [
+              "pooled"
+            ],
+            "clone_lib": [
+              "2BOV"
+            ],
+            "lab_host": [
+              "Escherichia coli DH10B"
+            ],
+            "note": [
+              "Vector: pCMV SPORT6; Site_1: NotI; Site_2: SalI; Library made from pooled tissue from testis, thymus, semitendonosus muscle, longissimus muscle, pancreas, adrenal, and endometrium."
+            ]
+          },
+          "sha256": "293325c24ef5962148237ec686186b39fe72971ef1e323c6e33de188c32f44e7"
+        },
+        {
+          "accession": "AF191490.1",
+          "description": "Bos taurus beta actin mRNA, partial cds",
+          "organism": "Bos taurus",
+          "taxid": 9913,
+          "feature_location": "full transcript; verified CDS [<0:>244](+)",
+          "source_qualifiers": {
+            "organism": [
+              "Bos taurus"
+            ],
+            "mol_type": [
+              "mRNA"
+            ],
+            "db_xref": [
+              "taxon:9913"
+            ],
+            "dev_stage": [
+              "blastocysts"
+            ]
+          },
+          "sha256": "2f6eba7ac2de73e70c68e1674983df894dc5cb3ba789407c836b4fca19f1a765"
+        },
+        {
+          "accession": "AY152693.1",
+          "description": "Bos taurus beta-actin binding protein betaCAP73 mRNA, complete cds",
+          "organism": "Bos taurus",
+          "taxid": 9913,
+          "feature_location": "full transcript; verified CDS [390:4596](+)",
+          "source_qualifiers": {
+            "organism": [
+              "Bos taurus"
+            ],
+            "mol_type": [
+              "mRNA"
+            ],
+            "db_xref": [
+              "taxon:9913"
+            ],
+            "cell_type": [
+              "endothelial cell"
+            ]
+          },
+          "sha256": "79478c608b38d59ad41ffd28d8a651c7ebba08f7c61588b2594e4a3abad41cc9"
+        },
+        {
+          "accession": "AB098930.1",
+          "description": "Bos taurus mRNA for similar to beta actin, partial cds, clone: ORCS10586",
+          "organism": "Bos taurus",
+          "taxid": 9913,
+          "feature_location": "full transcript; verified CDS [<0:>566](+)",
+          "source_qualifiers": {
+            "organism": [
+              "Bos taurus"
+            ],
+            "mol_type": [
+              "mRNA"
+            ],
+            "db_xref": [
+              "taxon:9913"
+            ],
+            "clone": [
+              "ORCS10586"
+            ],
+            "clone_lib": [
+              "ORCS bovine utero-placenta cDNA"
+            ],
+            "dev_stage": [
+              "adult"
+            ],
+            "note": [
+              "mixture of uterus and placenta"
+            ]
+          },
+          "sha256": "d67442415c25b75bba80dfbcacab2b379b013080095fbf3750957183e4506beb"
+        }
+      ],
+      "status": "READY",
+      "fasta_sha256": "7a765f0ab9bc3de228d3a54ca02b4cac410f094db63d0cc7bac4900e4addb3a5",
+      "relative_path": "cattle/ACTB/sequences.fasta",
+      "template_scope": "DEPOSITED_SEQUENCES_WITH_INCOMPLETE_SHARED_COVERAGE",
+      "reference_interval": null,
+      "source_coordinates": [],
+      "selected_accessions": [
+        "NM_173979.3",
+        "BC142413.1",
+        "BT030480.1",
+        "AF191490.1",
+        "AY152693.1",
+        "AB098930.1"
+      ],
+      "unique_sequence_count": 6,
+      "conservation": 0.348429,
+      "conservation_status": "FAIL",
+      "source_fasta": "/data/internal-controls-20261012-r01/cattle/ACTB/sequences.fasta"
+    },
+    "internal:cattle:GAPDH:sequences": {
+      "reference_accession": "NM_001034034.2",
+      "query": "((GAPDH[Gene Name] OR GAPDH[Title] OR GAPD[Title] OR G3PDH[Title] OR (glyceraldehyde[Title] AND dehydrogenase[Title]))) AND txid9913[Organism:exp] AND 80:10000[SLEN] NOT \"whole genome shotgun\"[Title] NOT intron[Title] NOT EST[filter] NOT PREDICTED[Title]",
+      "sequence_count": 5,
+      "records": [
+        {
+          "accession": "NM_001034034.2",
+          "description": "Bos taurus glyceraldehyde-3-phosphate dehydrogenase (GAPDH), mRNA",
+          "organism": "Bos taurus",
+          "taxid": 9913,
+          "feature_location": "full transcript; verified CDS [71:1073](+)",
+          "source_qualifiers": {
+            "organism": [
+              "Bos taurus"
+            ],
+            "mol_type": [
+              "mRNA"
+            ],
+            "db_xref": [
+              "taxon:9913"
+            ],
+            "chromosome": [
+              "5"
+            ],
+            "map": [
+              "5"
+            ],
+            "breed": [
+              "mixed"
+            ]
+          },
+          "sha256": "193fd572fd2f797b47451aa1d1bd34e028906bc9b660d5f88bce378e1c5baae6"
+        },
+        {
+          "accession": "AJ786261.1",
+          "description": "Bos taurus partial gapdh gene for glyceraldehyde phosphate dehydrogenase, exons 5-8",
+          "organism": "Bos taurus",
+          "taxid": 9913,
+          "feature_location": "join{[<0:67](+), [172:288](+), [380:462](+), [641:>691](+)}",
+          "source_qualifiers": {
+            "organism": [
+              "Bos taurus"
+            ],
+            "mol_type": [
+              "genomic DNA"
+            ],
+            "db_xref": [
+              "taxon:9913"
+            ],
+            "sex": [
+              "female"
+            ],
+            "note": [
+              "breed: Holstein Friesian"
+            ]
+          },
+          "sha256": "3c5c05e10c12f416172210082196a71bd44db52637e398d6165b5aa72d936c37"
+        },
+        {
+          "accession": "AJ000039.1",
+          "description": "Bos taurus mRNA for glyceraldehyde 3-phosphate dehydrogenase, partial",
+          "organism": "Bos taurus",
+          "taxid": 9913,
+          "feature_location": "full transcript; verified CDS [<0:>806](+)",
+          "source_qualifiers": {
+            "organism": [
+              "Bos taurus"
+            ],
+            "mol_type": [
+              "mRNA"
+            ],
+            "db_xref": [
+              "taxon:9913"
+            ],
+            "cell_type": [
+              "aortic endothelial"
+            ]
+          },
+          "sha256": "d4339e752f5e104b00bfc57f4b8affb446d86deef19bb8d46dd9c81b28642d0f"
+        },
+        {
+          "accession": "MK502177.1",
+          "description": "Bos taurus glyceraldehyde-3-phosphate dehydrogenase (GAPDH) mRNA, partial cds",
+          "organism": "Bos taurus",
+          "taxid": 9913,
+          "feature_location": "full transcript; verified CDS [<0:>200](+)",
+          "source_qualifiers": {
+            "organism": [
+              "Bos taurus"
+            ],
+            "mol_type": [
+              "mRNA"
+            ],
+            "db_xref": [
+              "taxon:9913"
+            ],
+            "tissue_type": [
+              "bovine pituitary"
+            ]
+          },
+          "sha256": "142b5e00b2954746902a24176c8f8ae17efdfbeabbd7b082fd97ef7cd7f7e6b2"
+        },
+        {
+          "accession": "GU817008.1",
+          "description": "Bos taurus glyceraldehyde-3-phosphate dehydrogenase (GAPDH) mRNA, partial cds",
+          "organism": "Bos taurus",
+          "taxid": 9913,
+          "feature_location": "full transcript; verified CDS [<0:>84](+)",
+          "source_qualifiers": {
+            "organism": [
+              "Bos taurus"
+            ],
+            "mol_type": [
+              "mRNA"
+            ],
+            "db_xref": [
+              "taxon:9913"
+            ]
+          },
+          "sha256": "8681f11564de622e977e58e36d44ff566124e3511867d9b458d0036bdb9a8a0f"
+        },
+        {
+          "accession": "U85042.1",
+          "description": "Bos taurus glyceraldehyde-phosphate-dehydrogenase (GAPDH) mRNA, partial cds",
+          "organism": "Bos taurus",
+          "taxid": 9913,
+          "feature_location": "full transcript; verified CDS [<0:>934](+)",
+          "source_qualifiers": {
+            "organism": [
+              "Bos taurus"
+            ],
+            "mol_type": [
+              "mRNA"
+            ],
+            "db_xref": [
+              "taxon:9913"
+            ],
+            "tissue_type": [
+              "blood lymphocytes"
+            ]
+          },
+          "sha256": "3cabe379111fba2a1b9818d84082dd96696e300455a7f734563aabcb54460507"
+        },
+        {
+          "accession": "AF077815.1",
+          "description": "Bos taurus glyceraldehyde 3-phosphate dehydrogenase (G3PDH) mRNA, partial cds",
+          "organism": "Bos taurus",
+          "taxid": 9913,
+          "feature_location": "full transcript; verified CDS [14:>294](+)",
+          "source_qualifiers": {
+            "organism": [
+              "Bos taurus"
+            ],
+            "mol_type": [
+              "mRNA"
+            ],
+            "db_xref": [
+              "taxon:9913"
+            ],
+            "cell_type": [
+              "peripheral blood mononuclear cells"
+            ]
+          },
+          "sha256": "d4c38834f4eab518b6b255625c077a5b7dfe7b5f5e2b959ed1775dc2e498065e"
+        },
+        {
+          "accession": "BC102589.1",
+          "description": "Bos taurus glyceraldehyde-3-phosphate dehydrogenase, mRNA (cDNA clone MGC:127711 IMAGE:7956315), complete cds",
+          "organism": "Bos taurus",
+          "taxid": 9913,
+          "feature_location": "full transcript; verified CDS [72:1074](+)",
+          "source_qualifiers": {
+            "organism": [
+              "Bos taurus"
+            ],
+            "mol_type": [
+              "mRNA"
+            ],
+            "strain": [
+              "Crossbred x Angus"
+            ],
+            "db_xref": [
+              "taxon:9913"
+            ],
+            "clone": [
+              "MGC:127711 IMAGE:7956315"
+            ],
+            "tissue_type": [
+              "Ileum, crossbred X Angus female calf, 6 months old."
+            ],
+            "clone_lib": [
+              "GC_BGC-02"
+            ],
+            "lab_host": [
+              "XL10-Gold"
+            ],
+            "note": [
+              "Vector: pCMV-SPORT6.0"
+            ]
+          },
+          "sha256": "2cfe13b3158be2aa61caa9b5bec4ca7ad63dacffb3c440ff59503d82b8c7c5f9"
+        },
+        {
+          "accession": "AB098985.1",
+          "description": "Bos taurus mRNA for similar to glyceraldehyde 3-phosphate dehydrogenase, partial cds, clone: ORCS11644",
+          "organism": "Bos taurus",
+          "taxid": 9913,
+          "feature_location": "full transcript; verified CDS [<319:>541](+)",
+          "source_qualifiers": {
+            "organism": [
+              "Bos taurus"
+            ],
+            "mol_type": [
+              "mRNA"
+            ],
+            "db_xref": [
+              "taxon:9913"
+            ],
+            "clone": [
+              "ORCS11644"
+            ],
+            "clone_lib": [
+              "ORCS bovine utero-placenta cDNA"
+            ],
+            "dev_stage": [
+              "adult"
+            ],
+            "note": [
+              "mixture of uterus and placenta"
+            ]
+          },
+          "sha256": "81e0b88b02e5425cfe613ad4cf60410270a26f914fed31087690dc0da819e0cd"
+        },
+        {
+          "accession": "AB098979.1",
+          "description": "Bos taurus mRNA for similar to glyceraldehyde 3-phosphate dehydrogenase, partial cds, clone: ORCS11581",
+          "organism": "Bos taurus",
+          "taxid": 9913,
+          "feature_location": "full transcript; verified CDS [<119:>551](+)",
+          "source_qualifiers": {
+            "organism": [
+              "Bos taurus"
+            ],
+            "mol_type": [
+              "mRNA"
+            ],
+            "db_xref": [
+              "taxon:9913"
+            ],
+            "clone": [
+              "ORCS11581"
+            ],
+            "clone_lib": [
+              "ORCS bovine utero-placenta cDNA"
+            ],
+            "dev_stage": [
+              "adult"
+            ],
+            "note": [
+              "mixture of uterus and placenta"
+            ]
+          },
+          "sha256": "5beac36d3d5ac3137a7af9711f0967f1edb1fe7034d8066e8ab382b9d2642f65"
+        },
+        {
+          "accession": "AB098934.1",
+          "description": "Bos taurus mRNA for similar to glyceraldehyde 3-phosphate dehydrogenase, partial cds, clone: ORCS10594",
+          "organism": "Bos taurus",
+          "taxid": 9913,
+          "feature_location": "full transcript; verified CDS [<57:>486](+)",
+          "source_qualifiers": {
+            "organism": [
+              "Bos taurus"
+            ],
+            "mol_type": [
+              "mRNA"
+            ],
+            "db_xref": [
+              "taxon:9913"
+            ],
+            "clone": [
+              "ORCS10594"
+            ],
+            "clone_lib": [
+              "ORCS bovine utero-placenta cDNA"
+            ],
+            "dev_stage": [
+              "adult"
+            ],
+            "note": [
+              "mixture of uterus and placenta"
+            ]
+          },
+          "sha256": "fa541da9747f1b49aaa113b3bb8d797289960e2563bf16e9e63f0b92b81e0865"
+        },
+        {
+          "accession": "AB098907.1",
+          "description": "Bos taurus mRNA for similar to glyceraldehyde 3-phosphate dehydrogenase, partial cds, clone: ORCS10274",
+          "organism": "Bos taurus",
+          "taxid": 9913,
+          "feature_location": "full transcript; verified CDS [<57:>525](+)",
+          "source_qualifiers": {
+            "organism": [
+              "Bos taurus"
+            ],
+            "mol_type": [
+              "mRNA"
+            ],
+            "db_xref": [
+              "taxon:9913"
+            ],
+            "clone": [
+              "ORCS10274"
+            ],
+            "clone_lib": [
+              "ORCS bovine utero-placenta cDNA"
+            ],
+            "dev_stage": [
+              "adult"
+            ],
+            "note": [
+              "mixture of uterus and placenta"
+            ]
+          },
+          "sha256": "c585d1154b5528a2b0e1faf7a84bd6df3b97e5efffa14614028a15be2f11c614"
+        }
+      ],
+      "status": "READY",
+      "fasta_sha256": "e72f19e7447dfd26b070473ed4b52f85b7d6594f40a57d6b9a475ebd41f3f7cf",
+      "relative_path": "cattle/GAPDH/sequences.fasta",
+      "template_scope": "SHARED_REFERENCE_INTERVAL",
+      "reference_interval": {
+        "reference_accession": "NM_001034034.2",
+        "start_1based": 327,
+        "end_1based": 640
+      },
+      "source_coordinates": [
+        {
+          "accession": "NM_001034034.2",
+          "start_1based": 327,
+          "end_1based": 640
+        },
+        {
+          "accession": "AJ786261.1",
+          "start_1based": 2,
+          "end_1based": 315
+        },
+        {
+          "accession": "AJ000039.1",
+          "start_1based": 226,
+          "end_1based": 539
+        },
+        {
+          "accession": "U85042.1",
+          "start_1based": 226,
+          "end_1based": 539
+        },
+        {
+          "accession": "BC102589.1",
+          "start_1based": 328,
+          "end_1based": 641
+        }
+      ],
+      "selected_accessions": [
+        "NM_001034034.2",
+        "AJ786261.1",
+        "AJ000039.1",
+        "U85042.1",
+        "BC102589.1"
+      ],
+      "unique_sequence_count": 3,
+      "conservation": 0.998726,
+      "conservation_status": "PASS",
+      "source_fasta": "/data/internal-controls-20261012-r01/cattle/GAPDH/sequences.fasta"
+    },
+    "internal:cattle:18S rRNA:sequences": {
+      "reference_accession": "NR_036642.1",
+      "query": "((\"18S ribosomal RNA\"[Title] OR \"18S rRNA\"[Title])) AND txid9913[Organism:exp] AND 80:10000[SLEN] NOT \"whole genome shotgun\"[Title] NOT intron[Title] NOT EST[filter] NOT PREDICTED[Title]",
+      "sequence_count": 5,
+      "records": [
+        {
+          "accession": "NR_036642.1",
+          "description": "Bos taurus 18S ribosomal RNA (RN18S1), ribosomal RNA",
+          "organism": "Bos taurus",
+          "taxid": 9913,
+          "feature_location": "[0:1873](+)",
+          "source_qualifiers": {
+            "organism": [
+              "Bos taurus"
+            ],
+            "mol_type": [
+              "rRNA"
+            ],
+            "db_xref": [
+              "taxon:9913"
+            ],
+            "chromosome": [
+              "27"
+            ],
+            "map": [
+              "27"
+            ]
+          },
+          "sha256": "7ed9860b959853f69e1914acaae1c18a00d5da93133954b94467c68add791759"
+        },
+        {
+          "accession": "EF469831.1",
+          "description": "Bos taurus 18S ribosomal RNA gene, partial sequence",
+          "organism": "Bos taurus",
+          "taxid": 9913,
+          "feature_location": "[<0:>100](+)",
+          "source_qualifiers": {
+            "organism": [
+              "Bos taurus"
+            ],
+            "mol_type": [
+              "genomic DNA"
+            ],
+            "db_xref": [
+              "taxon:9913"
+            ],
+            "PCR_primers": [
+              "fwd_seq: ccctgtaattggaatgagtccactt, rev_seq: acgctattggagctggaattacc"
+            ]
+          },
+          "sha256": "e0fc20049b4d04f6a23ed8533c4da6298b26f4637f5f1d5bb56de6ff820d0a06"
+        },
+        {
+          "accession": "DQ066896.1",
+          "description": "Bos taurus 18S ribosomal RNA, partial sequence",
+          "organism": "Bos taurus",
+          "taxid": 9913,
+          "feature_location": "[<0:>169](+)",
+          "source_qualifiers": {
+            "organism": [
+              "Bos taurus"
+            ],
+            "mol_type": [
+              "rRNA"
+            ],
+            "db_xref": [
+              "taxon:9913"
+            ],
+            "dev_stage": [
+              "blastocyst"
+            ]
+          },
+          "sha256": "36f36db418798195d1c6e90f928b554529e2451c52ebeffc6db0f09873205032"
+        },
+        {
+          "accession": "AF176811.1",
+          "description": "Bos taurus 18S ribosomal RNA gene, partial sequence",
+          "organism": "Bos taurus",
+          "taxid": 9913,
+          "feature_location": "[<0:>417](+)",
+          "source_qualifiers": {
+            "organism": [
+              "Bos taurus"
+            ],
+            "mol_type": [
+              "genomic DNA"
+            ],
+            "db_xref": [
+              "taxon:9913"
+            ],
+            "dev_stage": [
+              "one-cell embryo"
+            ]
+          },
+          "sha256": "b2e792e3d25249491a896ab85bf0ef9afc3ea4177bc0c77f553fadf71ff6de12"
+        },
+        {
+          "accession": "AB016657.1",
+          "description": "Bos taurus gene for 18S rRNA, partial sequence",
+          "organism": "Bos taurus",
+          "taxid": 9913,
+          "feature_location": "[<0:>241](+)",
+          "source_qualifiers": {
+            "organism": [
+              "Bos taurus"
+            ],
+            "mol_type": [
+              "genomic DNA"
+            ],
+            "db_xref": [
+              "taxon:9913"
+            ]
+          },
+          "sha256": "4e6f5b47823b869a1a4beead64259e918ec4a4d86a4f4b0fa7245843c514c3b8"
+        }
+      ],
+      "status": "READY",
+      "fasta_sha256": "7ceee9d5be208ca1db5a5f06e0a3259c4ac7f932163d754ef93c873e6ce55215",
+      "relative_path": "cattle/18S_rRNA/sequences.fasta",
+      "template_scope": "DEPOSITED_SEQUENCES_WITH_INCOMPLETE_SHARED_COVERAGE",
+      "reference_interval": null,
+      "source_coordinates": [],
+      "selected_accessions": [
+        "NR_036642.1",
+        "EF469831.1",
+        "DQ066896.1",
+        "AF176811.1",
+        "AB016657.1"
+      ],
+      "unique_sequence_count": 5,
+      "conservation": 0.298345,
+      "conservation_status": "FAIL",
+      "source_fasta": "/data/internal-controls-20261012-r01/cattle/18S_rRNA/sequences.fasta"
+    },
+    "internal:chicken:ACTB:sequences": {
+      "reference_accession": "NM_205518.2",
+      "query": "((ACTB[Gene Name] OR \"beta actin\"[Title] OR \"beta-actin\"[Title])) AND txid9031[Organism:exp] AND 80:10000[SLEN] NOT \"whole genome shotgun\"[Title] NOT intron[Title] NOT EST[filter] NOT PREDICTED[Title]",
+      "sequence_count": 5,
+      "records": [
+        {
+          "accession": "NM_205518.2",
+          "description": "Gallus gallus actin, beta (ACTB), mRNA",
+          "organism": "Gallus gallus",
+          "taxid": 9031,
+          "feature_location": "full transcript; verified CDS [100:1228](+)",
+          "source_qualifiers": {
+            "organism": [
+              "Gallus gallus"
+            ],
+            "mol_type": [
+              "mRNA"
+            ],
+            "db_xref": [
+              "taxon:9031"
+            ],
+            "chromosome": [
+              "14"
+            ],
+            "map": [
+              "14"
+            ]
+          },
+          "sha256": "9c66cf601d0d526313d32c4eac6320a4eae46c9f81216604a04606f4808707be"
+        },
+        {
+          "accession": "EU931581.1",
+          "description": "Gallus gallus clone ChBact1 beta-actin mRNA, partial cds",
+          "organism": "Gallus gallus",
+          "taxid": 9031,
+          "feature_location": "full transcript; verified CDS [<0:>273](+)",
+          "source_qualifiers": {
+            "organism": [
+              "Gallus gallus"
+            ],
+            "mol_type": [
+              "mRNA"
+            ],
+            "db_xref": [
+              "taxon:9031"
+            ],
+            "clone": [
+              "ChBact1"
+            ],
+            "PCR_primers": [
+              "fwd_name: DP3, fwd_seq: atgtgcaaggccggtttcgccgggga, rev_name: DP4, rev_seq: tgtgagcagcacagggtgctcctcag"
+            ]
+          },
+          "sha256": "bd2d0ddeaf3b76b0e9e25e4b2528071239d4c1927438af8bb7dd0f032db27784"
+        },
+        {
+          "accession": "JN639846.1",
+          "description": "Gallus gallus beta-actin (Bact) mRNA, partial cds",
+          "organism": "Gallus gallus",
+          "taxid": 9031,
+          "feature_location": "full transcript; verified CDS [<0:>273](+)",
+          "source_qualifiers": {
+            "organism": [
+              "Gallus gallus"
+            ],
+            "mol_type": [
+              "mRNA"
+            ],
+            "db_xref": [
+              "taxon:9031"
+            ]
+          },
+          "sha256": "81bf67541405f8e7f29515bbdc4540d2761bcdf110b22151f5b44615f186cb09"
+        },
+        {
+          "accession": "JF436880.1",
+          "description": "Gallus gallus beta-actin mRNA, partial cds",
+          "organism": "Gallus gallus",
+          "taxid": 9031,
+          "feature_location": "full transcript; verified CDS [<0:>437](+)",
+          "source_qualifiers": {
+            "organism": [
+              "Gallus gallus"
+            ],
+            "mol_type": [
+              "mRNA"
+            ],
+            "db_xref": [
+              "taxon:9031"
+            ],
+            "PCR_primers": [
+              "fwd_name: Beta-actin Sense, fwd_seq: cgatccacacagagtacttgcg, rev_name: Beta-actin antisense, rev_seq: cgagcgtggctacagttcacc"
+            ]
+          },
+          "sha256": "9e099e9f43bf8251eab81614c9ed28acab8856e540077e7da45751f336a1986f"
+        },
+        {
+          "accession": "DQ207609.1",
+          "description": "Gallus gallus beta-actin mRNA, partial cds",
+          "organism": "Gallus gallus",
+          "taxid": 9031,
+          "feature_location": "full transcript; verified CDS [<0:>269](+)",
+          "source_qualifiers": {
+            "organism": [
+              "Gallus gallus"
+            ],
+            "mol_type": [
+              "mRNA"
+            ],
+            "db_xref": [
+              "taxon:9031"
+            ],
+            "clone": [
+              "CEF; chicken embryo fibroblast"
+            ],
+            "cell_type": [
+              "primary embryo fibroblast"
+            ]
+          },
+          "sha256": "3ff830ef5d283b84a8e312946f04c505b7db8c0142919c4577558e244343be5f"
+        },
+        {
+          "accession": "FJ891060.1",
+          "description": "Gallus gallus beta-actin mRNA, partial cds",
+          "organism": "Gallus gallus",
+          "taxid": 9031,
+          "feature_location": "full transcript; verified CDS [<0:>125](+)",
+          "source_qualifiers": {
+            "organism": [
+              "Gallus gallus"
+            ],
+            "mol_type": [
+              "mRNA"
+            ],
+            "db_xref": [
+              "taxon:9031"
+            ],
+            "note": [
+              "breed: broiler"
+            ]
+          },
+          "sha256": "74412f5877b178aba391ba23f2959426e053db2c4e71527d84079efeef53b73b"
+        },
+        {
+          "accession": "EU309691.1",
+          "description": "Gallus gallus parathyroid gland beta-actin mRNA, partial cds",
+          "organism": "Gallus gallus",
+          "taxid": 9031,
+          "feature_location": "full transcript; verified CDS [<0:>261](+)",
+          "source_qualifiers": {
+            "organism": [
+              "Gallus gallus"
+            ],
+            "mol_type": [
+              "mRNA"
+            ],
+            "db_xref": [
+              "taxon:9031"
+            ],
+            "tissue_type": [
+              "parathyroid gland"
+            ],
+            "geo_loc_name": [
+              "China"
+            ],
+            "note": [
+              "breed: White Leghorn"
+            ]
+          },
+          "sha256": "63aa25b9759f800ff18f7a89c8456ccaeb7b98d339513b482b83fdeb1487ab3f"
+        },
+        {
+          "accession": "EU309690.1",
+          "description": "Gallus gallus lung beta-actin mRNA, partial cds",
+          "organism": "Gallus gallus",
+          "taxid": 9031,
+          "feature_location": "full transcript; verified CDS [<0:>261](+)",
+          "source_qualifiers": {
+            "organism": [
+              "Gallus gallus"
+            ],
+            "mol_type": [
+              "mRNA"
+            ],
+            "db_xref": [
+              "taxon:9031"
+            ],
+            "tissue_type": [
+              "lung"
+            ],
+            "geo_loc_name": [
+              "China"
+            ],
+            "note": [
+              "breed: White Leghorn"
+            ]
+          },
+          "sha256": "d6bef3c846d1c98f25552bd98565612f24cce5c1efb5359b72e8841a5fb49ae4"
+        },
+        {
+          "accession": "K02173.1",
+          "description": "Chicken embryonic cytoplasmic beta-actin mRNA",
+          "organism": "Gallus gallus",
+          "taxid": 9031,
+          "feature_location": "full transcript; verified CDS [6:>264](+)",
+          "source_qualifiers": {
+            "organism": [
+              "Gallus gallus"
+            ],
+            "mol_type": [
+              "mRNA"
+            ],
+            "db_xref": [
+              "taxon:9031"
+            ],
+            "clone": [
+              "pA-1"
+            ]
+          },
+          "sha256": "645c2ed0043cdd4473d73ecf5a17e4bafa6c4637710a230b3fba8fe55b361886"
+        },
+        {
+          "accession": "X00182.1",
+          "description": "Gallus gallus cytoplasmic beta-actin gene",
+          "organism": "Gallus gallus",
+          "taxid": 9031,
+          "feature_location": "join{[1542:1665](+), [1985:2225](+), [2749:3188](+), [3494:3676](+), [4031:4175](+)}",
+          "source_qualifiers": {
+            "organism": [
+              "Gallus gallus"
+            ],
+            "mol_type": [
+              "genomic DNA"
+            ],
+            "db_xref": [
+              "taxon:9031"
+            ]
+          },
+          "sha256": "24b3ac80277dbfa977fee88498b3e8dcbd4a1cbd1bcdb192ae5a6c3605ff24a3"
+        }
+      ],
+      "status": "READY",
+      "fasta_sha256": "1aaecab37a436d6552800cd3af138b442fa5bd6415e824b87418208317867606",
+      "relative_path": "chicken/ACTB/sequences.fasta",
+      "template_scope": "SHARED_REFERENCE_INTERVAL",
+      "reference_interval": {
+        "reference_accession": "NM_205518.2",
+        "start_1based": 383,
+        "end_1based": 577
+      },
+      "source_coordinates": [
+        {
+          "accession": "NM_205518.2",
+          "start_1based": 383,
+          "end_1based": 577
+        },
+        {
+          "accession": "JF436880.1",
+          "start_1based": 1,
+          "end_1based": 195
+        },
+        {
+          "accession": "EU309691.1",
+          "start_1based": 67,
+          "end_1based": 261
+        },
+        {
+          "accession": "EU309690.1",
+          "start_1based": 67,
+          "end_1based": 261
+        },
+        {
+          "accession": "X00182.1",
+          "start_1based": 283,
+          "end_1based": 477
+        }
+      ],
+      "selected_accessions": [
+        "NM_205518.2",
+        "JF436880.1",
+        "EU309691.1",
+        "EU309690.1",
+        "X00182.1"
+      ],
+      "unique_sequence_count": 3,
+      "conservation": 0.973333,
+      "conservation_status": "CAUTION",
+      "source_fasta": "/data/internal-controls-20261012-r01/chicken/ACTB/sequences.fasta"
+    },
+    "internal:chicken:GAPDH:sequences": {
+      "reference_accession": "NM_204305.1",
+      "query": "((GAPDH[Gene Name] OR GAPDH[Title] OR GAPD[Title] OR G3PDH[Title] OR (glyceraldehyde[Title] AND dehydrogenase[Title]))) AND txid9031[Organism:exp] AND 80:10000[SLEN] NOT \"whole genome shotgun\"[Title] NOT intron[Title] NOT EST[filter] NOT PREDICTED[Title]",
+      "sequence_count": 5,
+      "records": [
+        {
+          "accession": "NM_204305.1",
+          "description": "Gallus gallus glyceraldehyde-3-phosphate dehydrogenase (GAPDH), mRNA",
+          "organism": "Gallus gallus",
+          "taxid": 9031,
+          "feature_location": "full transcript; verified CDS [57:1059](+)",
+          "source_qualifiers": {
+            "organism": [
+              "Gallus gallus"
+            ],
+            "mol_type": [
+              "mRNA"
+            ],
+            "db_xref": [
+              "taxon:9031"
+            ],
+            "chromosome": [
+              "1"
+            ],
+            "map": [
+              "1"
+            ],
+            "breed": [
+              "Hubbard"
+            ]
+          },
+          "sha256": "a401cf7d07f8242230d543a17b46854bc46cd7cd5ec373c7c093ac74f9dad2f2"
+        },
+        {
+          "accession": "NM_204305.2",
+          "description": "Gallus gallus glyceraldehyde-3-phosphate dehydrogenase (GAPDH), mRNA",
+          "organism": "Gallus gallus",
+          "taxid": 9031,
+          "feature_location": "full transcript; verified CDS [57:1059](+)",
+          "source_qualifiers": {
+            "organism": [
+              "Gallus gallus"
+            ],
+            "mol_type": [
+              "mRNA"
+            ],
+            "db_xref": [
+              "taxon:9031"
+            ],
+            "chromosome": [
+              "1"
+            ],
+            "map": [
+              "1"
+            ]
+          },
+          "sha256": "a6c22596f1c5e042387e6625d45d3427bc005c64035b19de19f0f41c831e8a34"
+        },
+        {
+          "accession": "JQ280469.1",
+          "description": "Gallus gallus glyceraldehyde-3-phosphate dehydrogenase (GAPDH) mRNA, partial cds",
+          "organism": "Gallus gallus",
+          "taxid": 9031,
+          "feature_location": "full transcript; verified CDS [<0:>266](+)",
+          "source_qualifiers": {
+            "organism": [
+              "Gallus gallus"
+            ],
+            "mol_type": [
+              "mRNA"
+            ],
+            "db_xref": [
+              "taxon:9031"
+            ],
+            "tissue_type": [
+              "spleen"
+            ],
+            "collected_by": [
+              "Akshat Goel and Manish Mehra"
+            ]
+          },
+          "sha256": "c2468e8fbcfe1da60707e4974c8aec9a92313f7949245ad29021448e8474b72d"
+        },
+        {
+          "accession": "CB018343.1",
+          "description": "pgn1c.pk019.p14 Chicken lymphoid cDNA library (pgn1c) Gallus gallus cDNA clone pgn1c.pk019.p14 5' similar to sp|P00356|G3P_CHICK Glyceraldehyde 3-phosphate dehydrogenase (GAPDH) gb|AAD02474.1| glyceraldehyde-3-phosphate dehydrogenase [Gallus gallus], mRNA sequence",
+          "organism": "Gallus gallus",
+          "taxid": 9031,
+          "feature_location": "deposited transcript fragment; orientation normalized by BLAST",
+          "source_qualifiers": {
+            "organism": [
+              "Gallus gallus"
+            ],
+            "mol_type": [
+              "mRNA"
+            ],
+            "db_xref": [
+              "taxon:9031"
+            ],
+            "clone": [
+              "pgn1c.pk019.p14"
+            ],
+            "sex": [
+              "male and female"
+            ],
+            "tissue_type": [
+              "thymus, bursa, spleen, PBL, bone marrow"
+            ],
+            "clone_lib": [
+              "SAMN00171853 Chicken lymphoid cDNA library (pgn1c)"
+            ],
+            "lab_host": [
+              "E.coli EMDH10B"
+            ],
+            "note": [
+              "Vector: pCMVSPORT 6"
+            ]
+          },
+          "homology_evidence": {
+            "pident": 100.0,
+            "length": 628,
+            "qcovhsp": 100,
+            "sstrand": "plus"
+          },
+          "sha256": "66e91d34a4ec1ec3a3a261a206e8bc7ad8deee351e0570d1bddb210950cd8838"
+        },
+        {
+          "accession": "CB018230.1",
+          "description": "pgn1c.pk019.j10 Chicken lymphoid cDNA library (pgn1c) Gallus gallus cDNA clone pgn1c.pk019.j10 5' similar to sp|P00356|G3P_CHICK Glyceraldehyde 3-phosphate dehydrogenase (GAPDH) gb|AAD02474.1| glyceraldehyde-3-phosphate dehydrogenase [Gallus gallus], mRNA sequence",
+          "organism": "Gallus gallus",
+          "taxid": 9031,
+          "feature_location": "deposited transcript fragment; orientation normalized by BLAST",
+          "source_qualifiers": {
+            "organism": [
+              "Gallus gallus"
+            ],
+            "mol_type": [
+              "mRNA"
+            ],
+            "db_xref": [
+              "taxon:9031"
+            ],
+            "clone": [
+              "pgn1c.pk019.j10"
+            ],
+            "sex": [
+              "male and female"
+            ],
+            "tissue_type": [
+              "thymus, bursa, spleen, PBL, bone marrow"
+            ],
+            "clone_lib": [
+              "SAMN00171853 Chicken lymphoid cDNA library (pgn1c)"
+            ],
+            "lab_host": [
+              "E.coli EMDH10B"
+            ],
+            "note": [
+              "Vector: pCMVSPORT 6"
+            ]
+          },
+          "homology_evidence": {
+            "pident": 100.0,
+            "length": 603,
+            "qcovhsp": 100,
+            "sstrand": "plus"
+          },
+          "sha256": "a59558bac047c6c18329a3ae18cfaba2c217ed927190f20859fd4ea4b4731c33"
+        },
+        {
+          "accession": "BI390209.1",
+          "description": "pgp1c.pk003.i9 Primary Chicken Pituitary/Hypothalamus/Pineal Library Gallus gallus cDNA clone pgp1c.pk003.i9 5' similar to sp|P00356|G3P_CHICK GLYCERALDEHYDE 3-PHOSPHATE DEHYDROGENASE (GAPDH) gb|AAD02474.1| (AF047874) glyceraldehyde-3-phosphate dehydrogenase [Gallus gallus], mRNA sequence",
+          "organism": "Gallus gallus",
+          "taxid": 9031,
+          "feature_location": "deposited transcript fragment; orientation normalized by BLAST",
+          "source_qualifiers": {
+            "organism": [
+              "Gallus gallus"
+            ],
+            "mol_type": [
+              "mRNA"
+            ],
+            "strain": [
+              "Commercial broiler chicken"
+            ],
+            "db_xref": [
+              "taxon:9031"
+            ],
+            "clone": [
+              "pgp1c.pk003.i9"
+            ],
+            "sex": [
+              "male and female"
+            ],
+            "tissue_type": [
+              "Pituitary Gland/Hypothalamus/Pineal Gland"
+            ],
+            "clone_lib": [
+              "SAMN00164191 Primary Chicken Pituitary/Hypothalamus/Pineal Library"
+            ],
+            "dev_stage": [
+              "Embryonic (d12,d14,d19); post-hatch (w1,w3,w5,w7,w9)"
+            ],
+            "lab_host": [
+              "E. Coli EMDH10B"
+            ],
+            "note": [
+              "Vector: pCMVSPORT6; Library made from equivalent pools of total RNA isolated from each tissue at different ages. Single pass sequencing from 5'-end"
+            ]
+          },
+          "homology_evidence": {
+            "pident": 100.0,
+            "length": 598,
+            "qcovhsp": 100,
+            "sstrand": "plus"
+          },
+          "sha256": "00dc46ef8ca5aa4ff8ad11fb5a7f2d10c807c966a8e5eed8a24f66a2191944b4"
+        },
+        {
+          "accession": "CK608252.1",
+          "description": "IFN_C24 Interferon Stimulated Chicken PBL Macrophage Gallus gallus cDNA clone IFN_C24 5' similar to glyceraldehyde-3-phosphate dehydrogenase [Gallus gallus]; glyceraldehyde-3-phosphate dehydrogenase [Gallus gallus]; 36K chick brain protein showing homology to GAPDH, mRNA sequence",
+          "organism": "Gallus gallus",
+          "taxid": 9031,
+          "feature_location": "deposited transcript fragment; orientation normalized by BLAST",
+          "source_qualifiers": {
+            "organism": [
+              "Gallus gallus"
+            ],
+            "mol_type": [
+              "mRNA"
+            ],
+            "strain": [
+              "Broiler"
+            ],
+            "db_xref": [
+              "taxon:9031"
+            ],
+            "clone": [
+              "IFN_C24"
+            ],
+            "sex": [
+              "female and male combined"
+            ],
+            "cell_type": [
+              "Macrophage"
+            ],
+            "tissue_type": [
+              "Blood"
+            ],
+            "clone_lib": [
+              "SAMN00174566 Interferon Stimulated Chicken PBL Macrophage"
+            ],
+            "note": [
+              "Vector: pBluescript sk+; Site_1: EcoRI; Site_2: XhoI"
+            ]
+          },
+          "homology_evidence": {
+            "pident": 100.0,
+            "length": 454,
+            "qcovhsp": 99,
+            "sstrand": "minus"
+          },
+          "sha256": "47aadae2fb69f9f09105fcf11f5e8e61f99e0bc284feb3e32d9d67415314e4bd"
+        },
+        {
+          "accession": "K01458.1",
+          "description": "Chicken GAPDH (glyceraldehyde-3-phosphate dehydrogenase) mRNA, complete sequence",
+          "organism": "Gallus gallus",
+          "taxid": 9031,
+          "feature_location": "deposited transcript fragment; orientation normalized by BLAST",
+          "source_qualifiers": {
+            "organism": [
+              "Gallus gallus"
+            ],
+            "mol_type": [
+              "mRNA"
+            ],
+            "db_xref": [
+              "taxon:9031"
+            ]
+          },
+          "homology_evidence": {
+            "pident": 99.688,
+            "length": 1284,
+            "qcovhsp": 100,
+            "sstrand": "plus"
+          },
+          "sha256": "4bfe944e003e46080995c9657f7f6748734d2160f77be07a66b113cacb97fbad"
+        },
+        {
+          "accession": "X01578.1",
+          "description": "Gallus gallus partial mRNA homologous to glyceraldehyde-3-phosphate dehydrogenase (GAPDH)",
+          "organism": "Gallus gallus",
+          "taxid": 9031,
+          "feature_location": "deposited transcript fragment; orientation normalized by BLAST",
+          "source_qualifiers": {
+            "organism": [
+              "Gallus gallus"
+            ],
+            "mol_type": [
+              "mRNA"
+            ],
+            "db_xref": [
+              "taxon:9031"
+            ]
+          },
+          "homology_evidence": {
+            "pident": 99.851,
+            "length": 670,
+            "qcovhsp": 99,
+            "sstrand": "plus"
+          },
+          "sha256": "77f6a9ed782a59efd7fae707aa4f2e1425bf8b7a56ea141353deb2ffdbd366b2"
+        }
+      ],
+      "status": "READY",
+      "fasta_sha256": "c6034d92bd5c7d76a7e12903e27610f7567d4241f6b6c6b7147745e30c417bfe",
+      "relative_path": "chicken/GAPDH/sequences.fasta",
+      "template_scope": "SHARED_REFERENCE_INTERVAL",
+      "reference_interval": {
+        "reference_accession": "NM_204305.1",
+        "start_1based": 834,
+        "end_1based": 1186
+      },
+      "source_coordinates": [
+        {
+          "accession": "NM_204305.1",
+          "start_1based": 834,
+          "end_1based": 1186
+        },
+        {
+          "accession": "CB018343.1",
+          "start_1based": 276,
+          "end_1based": 628
+        },
+        {
+          "accession": "CB018230.1",
+          "start_1based": 228,
+          "end_1based": 580
+        },
+        {
+          "accession": "CK608252.1",
+          "start_1based": 1,
+          "end_1based": 353
+        },
+        {
+          "accession": "K01458.1",
+          "start_1based": 833,
+          "end_1based": 1185
+        }
+      ],
+      "selected_accessions": [
+        "NM_204305.1",
+        "CB018343.1",
+        "CB018230.1",
+        "CK608252.1",
+        "K01458.1"
+      ],
+      "unique_sequence_count": 2,
+      "conservation": 0.998867,
+      "conservation_status": "PASS",
+      "source_fasta": "/data/internal-controls-20261012-r01/chicken/GAPDH/sequences.fasta"
+    },
+    "internal:chicken:18S rRNA:sequences": {
+      "reference_accession": "AF173612.1",
+      "query": "((\"18S ribosomal RNA\"[Title] OR \"18S rRNA\"[Title])) AND txid9031[Organism:exp] AND 80:10000[SLEN] NOT \"whole genome shotgun\"[Title] NOT intron[Title] NOT EST[filter] NOT PREDICTED[Title]",
+      "sequence_count": 5,
+      "records": [
+        {
+          "accession": "AF173612.1",
+          "description": "Gallus gallus 18S ribosomal RNA gene, complete sequence",
+          "organism": "Gallus gallus",
+          "taxid": 9031,
+          "feature_location": "[0:1737](+)",
+          "source_qualifiers": {
+            "organism": [
+              "Gallus gallus"
+            ],
+            "mol_type": [
+              "genomic DNA"
+            ],
+            "db_xref": [
+              "taxon:9031"
+            ]
+          },
+          "sha256": "c918042c08ffcada3aa16c45b822f3aa9748f080e55d12877249760be7fbd97f"
+        },
+        {
+          "accession": "MK279380.1",
+          "description": "Gallus gallus breed Sasso 18S ribosomal RNA gene, partial sequence",
+          "organism": "Gallus gallus",
+          "taxid": 9031,
+          "feature_location": "[<0:>981](+)",
+          "source_qualifiers": {
+            "organism": [
+              "Gallus gallus"
+            ],
+            "mol_type": [
+              "genomic DNA"
+            ],
+            "db_xref": [
+              "taxon:9031"
+            ],
+            "note": [
+              "breed: Sasso"
+            ]
+          },
+          "sha256": "25984760d38eaa82237da6312772205980e2a59179037ca439e7fa8338a170f9"
+        },
+        {
+          "accession": "MK279379.1",
+          "description": "Gallus gallus breed Fayoumi 18S ribosomal RNA gene, partial sequence",
+          "organism": "Gallus gallus",
+          "taxid": 9031,
+          "feature_location": "[<0:>962](+)",
+          "source_qualifiers": {
+            "organism": [
+              "Gallus gallus"
+            ],
+            "mol_type": [
+              "genomic DNA"
+            ],
+            "db_xref": [
+              "taxon:9031"
+            ],
+            "note": [
+              "breed: Fayoumi"
+            ]
+          },
+          "sha256": "1c675132b8873522a349fa8a9307a4d44266acabad0b75cdab02ad64aa5626d5"
+        },
+        {
+          "accession": "MK279378.1",
+          "description": "Gallus gallus breed Alexandria 18S ribosomal RNA gene, partial sequence",
+          "organism": "Gallus gallus",
+          "taxid": 9031,
+          "feature_location": "[<0:>967](+)",
+          "source_qualifiers": {
+            "organism": [
+              "Gallus gallus"
+            ],
+            "mol_type": [
+              "genomic DNA"
+            ],
+            "db_xref": [
+              "taxon:9031"
+            ],
+            "note": [
+              "breed: Alexandria"
+            ]
+          },
+          "sha256": "29ea1dba3adbc65389ae2d0a35858240dad53476e1fd232153687fedb9103d46"
+        },
+        {
+          "accession": "KU939387.1",
+          "description": "Gallus gallus 18S ribosomal RNA gene, partial sequence",
+          "organism": "Gallus gallus",
+          "taxid": 9031,
+          "feature_location": "[<0:>133](+)",
+          "source_qualifiers": {
+            "organism": [
+              "Gallus gallus"
+            ],
+            "mol_type": [
+              "genomic DNA"
+            ],
+            "bio_material": [
+              "BioChain D1C34999-G02"
+            ],
+            "db_xref": [
+              "taxon:9031"
+            ]
+          },
+          "sha256": "319f165b35da11a1b36f913f89767fcbb37debe14925f43831aa1be12e237b80"
+        },
+        {
+          "accession": "KU939310.1",
+          "description": "Gallus gallus 18S ribosomal RNA gene, partial sequence",
+          "organism": "Gallus gallus",
+          "taxid": 9031,
+          "feature_location": "[<0:>384](+)",
+          "source_qualifiers": {
+            "organism": [
+              "Gallus gallus"
+            ],
+            "mol_type": [
+              "genomic DNA"
+            ],
+            "bio_material": [
+              "BioChain D1C34999-G02"
+            ],
+            "db_xref": [
+              "taxon:9031"
+            ]
+          },
+          "sha256": "5dfe10a560970d9b08a012e5249261367bc065cdbe64a9423c780d89e27852a5"
+        },
+        {
+          "accession": "HQ873432.1",
+          "description": "Gallus gallus isolate ML48 18S ribosomal RNA gene, partial sequence",
+          "organism": "Gallus gallus",
+          "taxid": 9031,
+          "feature_location": "[<0:>1807](+)",
+          "source_qualifiers": {
+            "organism": [
+              "Gallus gallus"
+            ],
+            "mol_type": [
+              "genomic DNA"
+            ],
+            "isolate": [
+              "ML48"
+            ],
+            "db_xref": [
+              "taxon:9031"
+            ],
+            "PCR_primers": [
+              "fwd_name: 18sFW, fwd_seq: cgcgtgcatttatca, rev_name: 18sREV, rev_seq: acccgtggtcaccatggta"
+            ]
+          },
+          "sha256": "5bebb874df2c979e14b61d622ca9fef70465566e51cb3d052a8fc0baadad0490"
+        },
+        {
+          "accession": "DQ018754.1",
+          "description": "Gallus gallus clone AY002 18S ribosomal RNA gene, partial sequence; internal transcribed spacer 1, complete sequence; and 5.8S ribosomal RNA gene, partial sequence",
+          "organism": "Gallus gallus",
+          "taxid": 9031,
+          "feature_location": "[<0:165](+)",
+          "source_qualifiers": {
+            "organism": [
+              "Gallus gallus"
+            ],
+            "mol_type": [
+              "genomic DNA"
+            ],
+            "db_xref": [
+              "taxon:9031"
+            ],
+            "clone": [
+              "AY002"
+            ],
+            "note": [
+              "breed: White Leghorn"
+            ]
+          },
+          "sha256": "021730963ae57ff399b612ca105fe7f076b79285b7b6559bf0b58c003238d0d2"
+        },
+        {
+          "accession": "DQ018752.1",
+          "description": "Gallus gallus clone AY001 18S ribosomal RNA gene and internal transcribed spacer 1, partial sequence",
+          "organism": "Gallus gallus",
+          "taxid": 9031,
+          "feature_location": "[<0:1671](+)",
+          "source_qualifiers": {
+            "organism": [
+              "Gallus gallus"
+            ],
+            "mol_type": [
+              "genomic DNA"
+            ],
+            "db_xref": [
+              "taxon:9031"
+            ],
+            "clone": [
+              "AY001"
+            ],
+            "note": [
+              "breed: White Leghorn"
+            ]
+          },
+          "sha256": "8c662764240d777ba9d8c6631fb7db42a59b3095b3d355f49434e0cf390b8140"
+        },
+        {
+          "accession": "FM165414.1",
+          "description": "Gallus gallus 18S rRNA gene, clone GgSSU-1",
+          "organism": "Gallus gallus",
+          "taxid": 9031,
+          "feature_location": "[0:1809](+)",
+          "source_qualifiers": {
+            "organism": [
+              "Gallus gallus"
+            ],
+            "mol_type": [
+              "genomic DNA"
+            ],
+            "db_xref": [
+              "taxon:9031"
+            ],
+            "clone": [
+              "GgSSU-1"
+            ]
+          },
+          "sha256": "e807415e93bb8db5d2380185a651318ca76ce4d96217305a9fd247b832111cdb"
+        },
+        {
+          "accession": "D38360.1",
+          "description": "Gallus gallus gene for 18S rRNA, partial sequence",
+          "organism": "Gallus gallus",
+          "taxid": 9031,
+          "feature_location": "[<0:>293](+)",
+          "source_qualifiers": {
+            "organism": [
+              "Gallus gallus"
+            ],
+            "mol_type": [
+              "genomic DNA"
+            ],
+            "db_xref": [
+              "taxon:9031"
+            ],
+            "tissue_type": [
+              "muscle"
+            ]
+          },
+          "sha256": "fc6857a1df6964ac0d1df6a81edb43c0cc1925667212400772681a8d0435d2ce"
+        }
+      ],
+      "status": "READY",
+      "fasta_sha256": "ff53112b6b0742df42d202d699efdf5677e866d6b7981fdfdc51fe3b24130453",
+      "relative_path": "chicken/18S_rRNA/sequences.fasta",
+      "template_scope": "SHARED_REFERENCE_INTERVAL",
+      "reference_interval": {
+        "reference_accession": "AF173612.1",
+        "start_1based": 62,
+        "end_1based": 704
+      },
+      "source_coordinates": [
+        {
+          "accession": "AF173612.1",
+          "start_1based": 62,
+          "end_1based": 704
+        },
+        {
+          "accession": "MK279380.1",
+          "start_1based": 47,
+          "end_1based": 689
+        },
+        {
+          "accession": "MK279379.1",
+          "start_1based": 37,
+          "end_1based": 679
+        },
+        {
+          "accession": "MK279378.1",
+          "start_1based": 31,
+          "end_1based": 673
+        },
+        {
+          "accession": "FM165414.1",
+          "start_1based": 92,
+          "end_1based": 734
+        }
+      ],
+      "selected_accessions": [
+        "AF173612.1",
+        "MK279380.1",
+        "MK279379.1",
+        "MK279378.1",
+        "FM165414.1"
+      ],
+      "unique_sequence_count": 3,
+      "conservation": 0.999067,
+      "conservation_status": "PASS",
+      "source_fasta": "/data/internal-controls-20261012-r01/chicken/18S_rRNA/sequences.fasta"
+    }
+  },
+  "curation_method": "longest shared gap-free reference interval; coverage selection only, no identity filter"
+}

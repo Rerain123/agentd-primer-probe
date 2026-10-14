@@ -333,7 +333,7 @@ class WF01V02PreflightTests(unittest.TestCase):
                             "target_id": "confirmation",
                             "template": {"record_name": "confirmation", "sequence": sequence},
                             "target_organism": {"name": "Synthetic test virus"},
-                            "hosts": [{"name": "sheep"}],
+                            "hosts": [{"name": "unconfigured_test_host"}],
                         },
                         {
                             "target_id": "blocked",
@@ -375,7 +375,7 @@ class WF01V02PreflightTests(unittest.TestCase):
                 "target_overrides": {
                     "keep": {
                         "target_organism": {"name": "Synthetic test virus"},
-                        "hosts": [{"name": "sheep"}],
+                        "hosts": [{"name": "unconfigured_test_host"}],
                     }
                 },
             }
@@ -445,7 +445,7 @@ class WF01V02PreflightTests(unittest.TestCase):
     def test_unsupported_host_and_iupac_are_confirmation_items(self) -> None:
         payload = valid_payload()
         payload["fasta_text"] = ">ambiguous\n" + "ACGT" * 20 + "N"
-        payload["batch_defaults"]["hosts"] = [{"name": "sheep"}]
+        payload["batch_defaults"]["hosts"] = [{"name": "unconfigured_test_host"}]
         result = self.service.preflight_wf01_v02(payload)
         issues = {item["code"]: item for item in result["issues"]}
         self.assertEqual(issues["AMBIGUOUS_BASES_REQUIRE_CONFIRMATION"]["severity"], "CONFIRMATION")
@@ -453,7 +453,7 @@ class WF01V02PreflightTests(unittest.TestCase):
 
     def test_direct_mode_continues_when_host_database_is_not_configured(self) -> None:
         payload = valid_payload()
-        payload["batch_defaults"]["hosts"] = [{"name": "sheep"}]
+        payload["batch_defaults"]["hosts"] = [{"name": "unconfigured_test_host"}]
 
         batch = self.service.create_wf01_v02_batch(
             payload,
@@ -541,15 +541,15 @@ class WF01V02ApiTests(unittest.TestCase):
 
                 with patch.object(
                     api.service,
-                    "run_wf01_v02_until_blocked",
-                    return_value={"batch_id": created.json()["batch_id"], "next_action": "COMPLETE"},
+                    "run_wf01_v02_background",
+                    return_value={"batch_id": created.json()["batch_id"], "next_action": "WAIT_FOR_BACKGROUND"},
                 ):
                     advanced = client.post(
                         f"/v1/wf01/tasks/{created.json()['batch_id']}/run-until-blocked",
                         json={},
                     )
                 self.assertEqual(advanced.status_code, 200, advanced.text)
-                self.assertEqual(advanced.json()["next_action"], "COMPLETE")
+                self.assertEqual(advanced.json()["next_action"], "WAIT_FOR_BACKGROUND")
 
 
 if __name__ == "__main__":

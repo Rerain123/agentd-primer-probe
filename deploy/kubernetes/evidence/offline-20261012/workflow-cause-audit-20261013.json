@@ -1,0 +1,94 @@
+{
+  "wf01-single-full-nt": {
+    "status": "PARTIALLY_SUCCEEDED",
+    "seconds": 3678.98,
+    "technical_search_complete": true,
+    "search_complete": false,
+    "incomplete_reason_codes": [
+      "DEC_01_DEC_02_POLICY_APPROVAL_PENDING"
+    ],
+    "candidate_counts": {
+      "deliverable_candidate_count": 30,
+      "qualified_candidate_count": 30,
+      "incomplete_candidate_count": 0
+    },
+    "report_completeness": "COMPLETE",
+    "top10_check_states": {
+      "target_hit": {
+        "PASS": 10
+      },
+      "host_exclusion": {
+        "PASS": 10
+      },
+      "related_background_nt": {
+        "PASS": 10
+      }
+    }
+  },
+  "wf01-single-full-nt-repeat": {
+    "status": "PARTIALLY_SUCCEEDED",
+    "seconds": 9.47,
+    "technical_search_complete": true,
+    "search_complete": false,
+    "incomplete_reason_codes": [
+      "DEC_01_DEC_02_POLICY_APPROVAL_PENDING"
+    ],
+    "candidate_counts": {
+      "deliverable_candidate_count": 30,
+      "qualified_candidate_count": 30,
+      "incomplete_candidate_count": 0
+    },
+    "report_completeness": "COMPLETE",
+    "top10_check_states": {
+      "target_hit": {
+        "PASS": 10
+      },
+      "host_exclusion": {
+        "PASS": 10
+      },
+      "related_background_nt": {
+        "PASS": 10
+      }
+    }
+  },
+  "wf02": {
+    "status": "READY_FOR_RELAXATION",
+    "stage": "N20",
+    "next_action": "RUN_RELAXATION",
+    "seconds": 10160.11,
+    "target_execution": {
+      "status": "COMPLETED",
+      "requested_targets": 2,
+      "succeeded_targets": 2,
+      "failed_targets": 0,
+      "blocked_targets": 0,
+      "waiting_targets": 0,
+      "tool_retry_targets": 0
+    },
+    "candidate_counts": [
+      5,
+      5
+    ],
+    "internal_status": "COMPLETED_WITH_CAUTION",
+    "internal_candidate_count": 1,
+    "internal_included": true,
+    "screening": {
+      "status": "COMPLETED",
+      "total_combinations": 25,
+      "strict_count": 0,
+      "risk_count": 0,
+      "incompatible_count": 25,
+      "invalid_count": 0,
+      "tool_failure": null
+    },
+    "length_rule_failure_count": 25,
+    "p4_incompatible_count": 25,
+    "p4_tool_completed_count": 25,
+    "hard_compatibility_failure_count": 25,
+    "spectral_pass_count": 25,
+    "relaxation_executed": false,
+    "terminal_report_ready": false,
+    "failure_cause": "STRICT_COMPATIBILITY_FAILED",
+    "stopped_cause": "ACCEPTANCE_DRIVER_SINGLE_ADVANCE"
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "image": "harbor-core.base.svc.cluster.local/qcyz/oligosmith@sha256:527a4bbbf8c8ae56a022e506246fcecdd6cda3f41f93b6564ae4f1cd51b56c8f",
+  "replicas": 1,
+  "ready_replicas": 1,
+  "updated_replicas": 1,
+  "observed_generation": 27,
+  "generation": 27,
+  "resources": {
+    "limits": {
+      "cpu": "16",
+      "memory": "32Gi"
+    },
+    "requests": {
+      "cpu": "16",
+      "memory": "16Gi"
+    }
+  },
+  "strategy": "Recreate",
+  "server_transport_status": "PASS"
+}

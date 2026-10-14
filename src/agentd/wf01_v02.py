@@ -45,9 +45,11 @@ IUPAC_BASES = frozenset("ACGTRYSWKMBDHVN")
 # This is an intake-level alias catalogue, not a genome database.  M4 replaces
 # ``NORMALIZED`` objects with authoritative database resolution and provenance.
 SUPPORTED_HOSTS = {
-    "pig": {"canonical_name": "pig", "scientific_name": "Sus scrofa", "aliases": {"pig", "猪", "sus scrofa"}},
-    "cattle": {"canonical_name": "cattle", "scientific_name": "Bos taurus", "aliases": {"cattle", "cow", "牛", "bos taurus"}},
-    "chicken": {"canonical_name": "chicken", "scientific_name": "Gallus gallus", "aliases": {"chicken", "鸡", "gallus gallus"}},
+    "pig": {"canonical_name": "pig", "scientific_name": "Sus scrofa", "aliases": {"pig", "猪", "sus scrofa", "9823"}},
+    "cattle": {"canonical_name": "cattle", "scientific_name": "Bos taurus", "aliases": {"cattle", "cow", "牛", "bos taurus", "9913"}},
+    "chicken": {"canonical_name": "chicken", "scientific_name": "Gallus gallus", "aliases": {"chicken", "鸡", "gallus gallus", "9031"}},
+    "sheep": {"canonical_name": "sheep", "scientific_name": "Ovis aries", "aliases": {"sheep", "绵羊", "羊", "ovis aries", "9940"}},
+    "goat": {"canonical_name": "goat", "scientific_name": "Capra hircus", "aliases": {"goat", "山羊", "capra hircus", "9925"}},
     "duck": {"canonical_name": "duck", "scientific_name": None, "aliases": {"duck", "鸭"}},
     "goose": {"canonical_name": "goose", "scientific_name": None, "aliases": {"goose", "鹅"}},
     "pigeon": {"canonical_name": "pigeon", "scientific_name": None, "aliases": {"pigeon", "鸽", "鸽子"}},
@@ -1085,7 +1087,7 @@ class WF01V02Preflight:
         host_info = None
         target_info = None
         if role == "HOST":
-            lowered = name.casefold() if name else ""
+            lowered = (name or taxid).casefold()
             host_info = next((item for item in SUPPORTED_HOSTS.values() if lowered in {alias.casefold() for alias in item["aliases"]}), None)
             if host_info is None:
                 continue_without_popup = self.interaction_mode == "NO_POPUPS"
@@ -1093,9 +1095,9 @@ class WF01V02Preflight:
                     "UNSUPPORTED_HOST_DATABASE",
                     "WARNING" if continue_without_popup else "CONFIRMATION",
                     (
-                        "该宿主数据库尚未配置；任务将继续执行，其宿主排除结果会标记为未评估"
+                        "未识别该宿主名称；任务继续到 M4 核对实际数据库，无法解析时宿主排除标记为未评估"
                         if continue_without_popup
-                        else "该宿主不在本期可完成宿主排除的猪、牛、鸡、鸭、鹅、鸽范围内"
+                        else "未识别该宿主名称；请使用规范物种名或 taxid，实际数据库可用性由 M4 核对"
                     ),
                     scope="TARGET",
                     target_id=target_id,

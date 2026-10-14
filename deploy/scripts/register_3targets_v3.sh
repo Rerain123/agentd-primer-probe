@@ -41,7 +41,7 @@ RUNNING_VERSION="$("${COMPOSE[@]}" exec -T agentd python -c 'import agentd; prin
 echo "[INFO] agentd 运行版本: $RUNNING_VERSION"
 
 # 镜像名（与 build_blast_db.sh 的 agentd_image_name 同逻辑）
-IMAGE="$(read_env AGENTD_IMAGE_TAG 1.2.13)"
+IMAGE="$(read_env AGENTD_IMAGE_TAG 1.2.15)"
 IMAGE="agentd-primer-probe:${IMAGE}"
 echo "[INFO] 构建镜像: $IMAGE"
 

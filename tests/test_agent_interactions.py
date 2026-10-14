@@ -26,7 +26,7 @@ class AgentInteractionTests(unittest.TestCase):
             "fasta_text": ">target_001\n" + "ACGT" * 30,
             "batch_defaults": {
                 "target_organism": {"name": "Synthetic test virus"},
-                "hosts": [{"name": "sheep"}],
+                "hosts": [{"name": "unconfigured_test_host"}],
             },
         }
 

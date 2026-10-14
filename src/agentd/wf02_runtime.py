@@ -239,8 +239,9 @@ def wf02_p4_cache_namespace(
 class WF02BackgroundExecutor:
     """Drain persisted WF-02 state on daemon workers after HTTP disconnects."""
 
-    def __init__(self, workflow_service: Any, *, max_workers: int | None = None) -> None:
+    def __init__(self, workflow_service: Any, *, max_workers: int | None = None, execution_lock: Any = None) -> None:
         self.workflow_service = workflow_service
+        self.execution_lock = execution_lock or threading.RLock()
         configured_workers = max_workers
         if configured_workers is None:
             try:
@@ -318,15 +319,16 @@ class WF02BackgroundExecutor:
             batch_id = self._queue.get()
             event: threading.Event | None = None
             try:
-                self.workflow_service.set_background_execution(
-                    batch_id,
-                    "RUNNING",
-                    increment_attempt=True,
-                    clear_error=True,
-                )
-                summary = self._drain(batch_id)
-                state = self.workflow_service.background_state_for_summary(summary)
-                self.workflow_service.set_background_execution(batch_id, state)
+                with self.execution_lock:
+                    self.workflow_service.set_background_execution(
+                        batch_id,
+                        "RUNNING",
+                        increment_attempt=True,
+                        clear_error=True,
+                    )
+                    summary = self._drain(batch_id)
+                    state = self.workflow_service.background_state_for_summary(summary)
+                    self.workflow_service.set_background_execution(batch_id, state)
             except Exception as exc:  # pragma: no cover - defensive worker boundary
                 LOGGER.exception(
                     "WF-02 后台任务执行失败", extra={"batch_id": batch_id}

@@ -2,25 +2,28 @@
 
 本文汇总 Agent D（`agentd-primer-probe`）的服务器请求方式、访问地址、鉴权要求、网络链路、Docker 容器配置、数据挂载及部署状态检查方法。
 
-> 文档对应项目版本：`1.2.13`
-> 文档更新日期：2026-08-27（Asia/Shanghai）
+> 文档对应项目版本：`1.2.15`
+> 文档更新日期：2026-09-15（Asia/Shanghai）
+
+当前新服务器运行在 Rancher/Kubernetes，AI 通过 HiMat 后端和集群内 Service DNS 访问。
+权威环境信息、Codeup 自动部署和验收命令见
+[Kubernetes 与 HiMat 部署](KUBERNETES_HIMAT_DEPLOYMENT.md)。本文后半部分的 Docker Compose
+内容保留为源码包手工部署参考，不代表当前集群运行形态。
 
 ## 1. 服务访问地址
 
-| 用途 | 地址 | 请求方式 | 鉴权要求 |
+| 用途 | 当前地址 | 请求方式 | 鉴权要求 |
 |---|---|---|---|
-| MCP 兼容入口 | `https://oligosmith.ne.scqcyz.cn/mcp` | Streamable HTTP，支持 `POST`、`GET`、`DELETE` | Bearer JWT |
-| WF-01 MCP | `https://oligosmith.ne.scqcyz.cn/mcp/wf01/` | Streamable HTTP，只暴露 WF-01 工具 | Bearer JWT |
-| WF-02 MCP | `https://oligosmith.ne.scqcyz.cn/mcp/wf02/` | Streamable HTTP，只暴露 WF-02 工具 | Bearer JWT |
-| WF-03 MCP | `https://oligosmith.ne.scqcyz.cn/mcp/wf03/` | Streamable HTTP，只暴露 WF-03 工具 | Bearer JWT |
-| WF-04 MCP | `https://oligosmith.ne.scqcyz.cn/mcp/wf04/` | Streamable HTTP，只暴露 WF-04 工具 | Bearer JWT |
-| WF-05 MCP | `https://oligosmith.ne.scqcyz.cn/mcp/wf05/` | Streamable HTTP，只暴露 WF-05 工具 | Bearer JWT |
-| REST API | `https://oligosmith.ne.scqcyz.cn/v1/...` | HTTP JSON API | Bearer JWT |
-| 存活检查 | `https://oligosmith.ne.scqcyz.cn/health` | `GET` | 公开 |
-| 科学就绪检查 | `https://oligosmith.ne.scqcyz.cn/ready` | `GET` | 公开 |
-| 内置 Web UI | `https://oligosmith.ne.scqcyz.cn/` 或 `/ui` | `GET` | 默认受 Bearer JWT 保护 |
+| HiMat 用户入口 | `https://himat.ws.scqcyz.cn` | HTTPS | HiMat 登录 |
+| MCP 兼容入口 | `http://oligosmith.him-ws.svc.cluster.local:8000/mcp` | 集群内 Streamable HTTP | Bearer JWT |
+| WF-01～WF-05 MCP | 上述基址加 `/mcp/wf01/` 至 `/mcp/wf05/` | 集群内受限工具目录 | Bearer JWT |
+| REST API | 上述基址加 `/v1/...` | 集群内 HTTP JSON API | Bearer JWT |
+| 存活检查 | 上述基址加 `/health` | `GET` | 公开 |
+| 科学就绪检查 | 上述基址加 `/ready` | `GET` | 公开 |
+| RustFS 附件 | `https://rustfs.ne.scqcyz.cn/oligosmith/data/...` | HTTPS 只读下载 | bucket 公网只读 |
 
-公网域名由 OpenResty/1Panel 反向代理到宿主机的 `http://127.0.0.1:8020`，再由 Docker 端口映射转发到 Agent D 容器的 `8000` 端口。
+旧地址 `oligosmith.ne.scqcyz.cn` 已停用。当前 OligoSmith 没有单独公网 Ingress；浏览器访问
+HiMat，HiMat `api` Pod 再通过 Kubernetes Service DNS 调用 OligoSmith。
 
 ## 2. 请求方式
 
@@ -35,7 +38,7 @@ MCP 客户端配置示例：
   "name": "OligoSmith",
   "type": "streamableHttp",
   "description": "引物与探针设计、验证、优化和报告生成",
-    "baseUrl": "https://oligosmith.ne.scqcyz.cn/mcp/wf01/",
+  "baseUrl": "http://oligosmith.him-ws.svc.cluster.local:8000/mcp/wf01/",
   "headers": {
     "Content-Type": "application/json",
     "Authorization": "Bearer YOUR_JWT"
@@ -60,7 +63,7 @@ WF-01 建单示例：
 
 ```bash
 curl -X POST \
-  "https://oligosmith.ne.scqcyz.cn/v1/wf01/tasks" \
+  "http://oligosmith.him-ws.svc.cluster.local:8000/v1/wf01/tasks" \
   -H "Authorization: Bearer YOUR_JWT" \
   -H "Content-Type: application/json" \
   -d '{
@@ -78,8 +81,16 @@ curl -X POST \
 ### 2.3 健康检查
 
 ```bash
-curl https://oligosmith.ne.scqcyz.cn/health
-curl https://oligosmith.ne.scqcyz.cn/ready
+kubectl -n him-ws exec deployment/api -- \
+  wget -qO- http://oligosmith.him-ws.svc.cluster.local:8000/health
+
+kubectl -n him-ws port-forward svc/oligosmith 18020:8000 \
+  >/tmp/oligosmith-portforward.log 2>&1 &
+PF_PID=$!
+sleep 2
+curl -i http://127.0.0.1:18020/ready
+kill "$PF_PID" 2>/dev/null || true
+wait "$PF_PID" 2>/dev/null || true
 ```
 
 - `/health` 只表示进程存活。
@@ -104,9 +115,10 @@ Authorization: Bearer GENERATED_JWT
 
 注意事项：
 
-- `JWT_SECRET` 是服务器端签名密钥，不是客户端 Bearer Token。
-- 不得把 `deploy/.env`、`JWT_SECRET` 或实际 JWT 提交到代码仓库。
-- 轮换 `JWT_SECRET` 后，之前签发的全部令牌会立即失效。
+- `MCP_JWT_SECRET` 是当前 Kubernetes 服务器端签名密钥，不是客户端 Bearer Token；代码兼容旧名
+  `JWT_SECRET`。
+- 不得把 `deploy/.env`、Kubernetes Secret、签名密钥或实际 JWT 提交到代码仓库。
+- 轮换签名密钥后，之前签发的全部令牌会立即失效。
 - `MCP_JWT_REQUIRE_EXP=true` 时，客户端令牌必须包含有效的过期时间。
 - 当前配置使用 `HS256`，代码也支持 `HS384` 和 `HS512`。
 
@@ -115,14 +127,14 @@ Authorization: Bearer GENERATED_JWT
 ## 4. 网络与反向代理链路
 
 ```text
-客户端
-  -> HTTPS / OpenResty（1Panel 反向代理）
-  -> http://127.0.0.1:8020（宿主机）
-  -> agentd:8000（Docker 容器）
+用户浏览器 -> HiMat Ingress -> HiMat api Pod
+  -> oligosmith.him-ws.svc.cluster.local:8000
   -> Uvicorn + FastMCP + FastAPI
+  -> RustFS 公网只读附件
 ```
 
-推荐让 1Panel/OpenResty 将整个域名转发到 `http://127.0.0.1:8020`。全量及按工作流 MCP 地址、`/v1`、报告下载和健康检查使用同一个服务进程，不需要为每个 MCP 地址单独创建端口或子应用。
+当前 `himat-ws` Ingress 的 `/mcp` 指向 `sandbox:8000`，并不指向 OligoSmith；OligoSmith
+由 HiMat 后端直接通过 Service DNS 调用。Compose 场景才使用下面的宿主机回环端口和独立反向代理。
 
 默认仅监听宿主机回环地址：
 
@@ -133,7 +145,13 @@ AGENTD_PORT=8020
 
 只有在防火墙、TLS、认证、限流和访问控制均已配置后，才应将 `AGENTD_BIND_ADDRESS` 改为 `0.0.0.0`。
 
-## 5. Docker 容器信息
+## 5. Kubernetes 当前信息与 Docker Compose 参考
+
+当前 Kubernetes 资源为 `him-ws/oligosmith` Deployment 和同名 ClusterIP Service，容器监听
+`8000`。镜像当前为 `harbor-core.base.svc.cluster.local/qcyz/oligosmith:latest`；由于 `latest`
+不能证明实际代码版本，上线后必须进入容器读取 `agentd.__version__` 并记录 `imageID`。
+
+以下表格描述仓库自带的 Compose 手工部署方案，不是当前 Rancher 工作负载。
 
 当前 Compose 只定义一个业务容器。
 
@@ -141,7 +159,7 @@ AGENTD_PORT=8020
 |---|---|
 | Compose 项目名 | `agentd-primer-probe` |
 | 服务名 | `agentd` |
-| 镜像名 | `agentd-primer-probe:1.2.13` |
+| 镜像名 | `agentd-primer-probe:1.2.15` |
 | 基础镜像 | `python:3.12-slim` |
 | 容器工作目录 | `/app` |
 | 容器监听地址 | `0.0.0.0:8000` |
@@ -262,7 +280,7 @@ RustFS 用于发布 WF-01 与 WF-02 报告附件，模板默认关闭：
 ```dotenv
 RUSTFS_ENABLED=false
 RUSTFS_ENDPOINT_URL=https://rustfs.ne.scqcyz.cn
-RUSTFS_BUCKET=wens
+RUSTFS_BUCKET=oligosmith
 RUSTFS_OBJECT_PREFIX=data
 RUSTFS_PUBLIC_BASE_URL=https://rustfs.ne.scqcyz.cn
 ```
@@ -332,7 +350,7 @@ NCBI_ENTREZ_API_KEY=
 - `GET /v1/wf05/variation/{job_id}/report`
 - `POST /v1/workflows/{workflow}/run`
 
-## 10. 构建、启动和运维
+## 10. Compose 手工构建、启动和运维
 
 复制并修改环境变量：
 
@@ -365,29 +383,29 @@ docker compose --env-file deploy/.env -f deploy/docker-compose.yml restart agent
 docker compose --env-file deploy/.env -f deploy/docker-compose.yml stop
 ```
 
-## 11. 当前线上状态
+## 11. 当前新服务器状态
 
-2026-08-20 对公网地址进行只读检查，结果如下：
+2026-09-14 至 2026-09-15 对 `him-ws/oligosmith` 进行检查，结果如下：
 
 | 检查项 | 结果 |
 |---|---|
-| `GET /health` | `200 OK` |
-| `GET /ready` | `200 OK` |
-| 未带 JWT 请求 `/mcp` | `401 Unauthorized`，符合预期 |
-| 服务名称 | `agentd-primer-probe` |
-| 运行阶段 | Phase 3 |
-| 运行 Profile | `server-production` |
-| 核心科学工具 | 就绪，无缺失工具 |
-| 数据库目录 | 已配置，共登记 19 个资源 |
-| 宿主猪 BLAST 库 | 可用 |
-| 部分靶标 BLAST 库 | 可用 |
-| 本地综合背景库 | 当前不可用 |
-| 宿主机远程背景 BLAST | 已配置且健康 |
+| Deployment/Service/EndpointSlice | Ready，Service 端口和端点均为 `8000` |
+| `GET /health` | `200 OK`，服务 `agentd-primer-probe`，Phase 3 |
+| `GET /ready` | `200 OK`，核心工具就绪 |
+| HiMat `api` 到 OligoSmith | `200 OK` |
+| WF-01 `tools/list` | `200 OK`，受限工具列表可见 |
+| MCP Host 校验 | 已加入 `oligosmith.him-ws.svc.cluster.local:8000`，解决 `421` |
+| RustFS 写入验收 | `write_verified=true`，测试对象已删除 |
+| RustFS bucket/prefix | `oligosmith/data` |
+| 数据库目录 | 已配置 4 个资源，当前未准备完成 |
+| 必需缺失资源 | `cross:default:blast`、`host:pig:blast` |
+| 发布目标 | Codeup `test`，OligoSmith `1.2.15` |
 
 当前线上响应同时显示：
 
 ```text
 databases_required=false
+databases_ready=false
 ```
 
 这意味着当前服务允许数据库不完整时进入 `ready` 状态，更接近交互链路或流程验收配置。它不等同于完整生产科学就绪。
@@ -408,6 +426,7 @@ databases_required=false
 - `deploy/server-config/production.json`：生产运行配置。
 - `deploy/server-config/database-catalog.json`：数据库资源目录模板。
 - `docs/operations/MCP_SERVER.md`：MCP、JWT 和智能体接入说明。
+- `docs/operations/KUBERNETES_HIMAT_DEPLOYMENT.md`：当前新服务器、自动部署与验收说明。
 - `docs/operations/SERVER_INSTALL.md`：服务器安装、升级、回滚和运维说明。
 - `deploy/DATA_LAYOUT.md`：服务器数据目录规范。
 - `src/agentd/mcp_server.py`：MCP 工具和服务装配入口。

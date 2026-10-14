@@ -1,19 +1,9 @@
-# 原始设计输入
+# 原始设计资料范围
 
-本目录保存项目开始时的 Agent D、P1～P6 和跨智能体 Skills 设计资料。它们是“原始输入”，不是当前代码的最终说明。
+GitHub 版本只同步项目代码、测试、部署脚本和项目文档，不包含专家原稿、专家要求对照审查或原稿归档包。
 
-## 保存规则
+专家资料和完整交接附件仅在经授权的 Codeup 完整交接版本中维护。这里保留目录说明以维持导航，不存放原稿或原稿校验清单。
 
-- 原文不删除、不静默改写；迁移后的 SHA-256 记录在 [MANIFEST.sha256](MANIFEST.sha256)。
-- 如需修正现行行为，修改代码、Schema、测试和 `docs/workflows/` 中的当前文档，不回写原稿。
-- 原稿与当前实现冲突时，将差异记入变更或决策说明，不让两套文档并列为现行权威源。
+开发时请使用 [工程交接文档](../architecture/PROJECT_ENGINEERING_GUIDE.md)、[工作流导航](../workflows/README.md) 和代码/Schema/测试。
 
-## 资料组
-
-`legacy-agentd-design/` 中包含：
-
-- Agent D 规则与简并版设计；
-- P1 Primer3、P2 BLAST、P3 MGB、P4 Multiplex、P5 Internal Control、P6 ViennaRNA 原始工具说明；
-- v12.3 跨智能体 Skills 开发清单。
-
-与原文同源的 ZIP 备份保留在工作区外层 `_archive/source-packages/`，不进入应用发布包。
+此范围仅描述当前 GitHub 文件树；过去提交中已经存在的资料未通过改写历史清除。

@@ -1,0 +1,132 @@
+# Resume archive download on the existing PVC; no application changes.
+# Stop the read-only inspection Pod before applying, to release the RWO volume.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: oligosmith-nt-download-r02
+  namespace: him-ws
+spec:
+  backoffLimit: 2
+  activeDeadlineSeconds: 1209600
+  template:
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      nodeSelector:
+        kubernetes.io/arch: amd64
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        fsGroupChangePolicy: OnRootMismatch
+      containers:
+        - name: download
+          image: ncbi/blast@sha256:81f118d2e4f7e11494d27fdbb99c9430423105afff50c4ae158db41d58a3fc57
+          command: ["/bin/bash", "-euo", "pipefail", "-c"]
+          args:
+            - |
+              root=/data/nt-download-20260929-r01
+              run="$root/recovery-r02/$HOSTNAME"
+              mkdir -p "$run/checksums" "$root/raw" "$run/curl"
+              export CURL_HOME="$run/curl"
+              printf '%s\n' 'connect-timeout = 30' 'max-time = 21600' 'speed-time = 300' 'speed-limit = 1024' 'retry = 5' 'retry-delay = 10' 'fail' 'location' > "$CURL_HOME/.curlrc"
+              (
+                trap 'rc=$?; echo "RUN_EXIT=$rc $(date -u +%FT%TZ)"; exit "$rc"' EXIT
+                base=https://ftp.ncbi.nlm.nih.gov/blast/db
+                get_metadata() {
+                  curl -fLsS --max-time 120 "$base/blastdb-metadata-1-1.json" |
+                    perl -MJSON::PP -0777 -e '
+                      my $a=decode_json(<>);
+                      my @n=grep {$_->{dbname} eq "nt"} @$a;
+                      die "Expected one nucleotide nt entry\n" unless @n==1 && $n[0]->{dbtype} eq "Nucleotide";
+                      print JSON::PP->new->canonical->encode($n[0]);'
+                }
+                echo "START $(date -u +%FT%TZ)"
+                get_metadata > "$run/metadata.before.json"
+                perl -MJSON::PP -0777 -e '
+                  my $m=decode_json(<>); my %seen;
+                  die "Volume count mismatch" unless @{$m->{files}} == $m->{"number-of-volumes"};
+                  for (@{$m->{files}}) {
+                    m{/(nt\.[0-9]+\.tar\.gz)$} or die "Unexpected archive: $_";
+                    die "Duplicate archive" if $seen{$1}++; print "$1\n";
+                  }' "$run/metadata.before.json" > "$run/files.txt"
+                cat "$run/metadata.before.json"
+                echo
+                df -h /data
+                cd "$root/raw"
+                # Do not trust file counts or preserved remote modification times.
+                for archive in nt.*.tar.gz; do
+                  [ -f "$archive" ] || continue
+                  if [ -f "$archive.md5" ]; then
+                    if ! md5sum -c "$archive.md5"; then
+                      mv "$archive.md5" "$run/checksums/$archive.old-md5"
+                      echo "REPAIR_REQUIRED $archive"
+                    fi
+                  fi
+                done
+                # Without --decompress, retain all archives for explicit verification.
+                update_blastdb.pl --source ncbi --verbose nt
+                while IFS= read -r archive; do
+                  echo "VERIFY $archive $(date -u +%FT%TZ)"
+                  curl -fLsS --max-time 120 "$base/$archive.md5" -o "$run/checksums/$archive.md5"
+                  expected=$(awk 'NR==1 {print $1}' "$run/checksums/$archive.md5")
+                  [[ "$expected" =~ ^[0-9a-fA-F]{32}$ ]] || exit 1
+                  if ! printf '%s  %s\n' "$expected" "$archive" | md5sum -c -; then
+                    if [ -f "$archive.md5" ]; then
+                      mv "$archive.md5" "$run/checksums/$archive.rejected-md5"
+                    fi
+                    echo "CHECKSUM_MISMATCH $archive; next attempt must refresh it"
+                    exit 1
+                  fi
+                done < "$run/files.txt"
+                get_metadata > "$run/metadata.after.json"
+                if ! cmp -s "$run/metadata.before.json" "$run/metadata.after.json"; then
+                  echo 'SOURCE_CHANGED: retry will reconcile archives against the current release'
+                  exit 1
+                fi
+                # This attempt has its own extraction directory, never an active database.
+                required=$(perl -MJSON::PP -0777 -e 'my $m=decode_json(<>); print $m->{"bytes-total"}+50*1024**3' "$run/metadata.after.json")
+                available=$(df -PB1 /data | awk 'NR==2 {print $4}')
+                if [ "$available" -lt "$required" ]; then
+                  echo "INSUFFICIENT_EXTRACTION_SPACE available=$available required=$required; preserve data and inspect older attempts"
+                  exit 1
+                fi
+                mkdir -p "$run/db"
+                while IFS= read -r archive; do
+                  echo "EXTRACT $archive $(date -u +%FT%TZ)"
+                  tar -xzf "$archive" --no-same-owner -C "$run/db"
+                done < "$run/files.txt"
+                blastdbcmd -db "$run/db/nt" -dbtype nucl -info | tee "$run/blastdb-info.txt"
+                blastdbcheck -db "$run/db/nt" -dbtype nucl 2>&1 | tee "$run/blastdbcheck.log"
+                printf '%s\n' "$run/db/nt" > "$run/database-prefix.txt"
+                date -u '+DOWNLOAD_COMPLETE %Y-%m-%dT%H:%M:%SZ' > "$run/DOWNLOAD_COMPLETE"
+                cat "$run/DOWNLOAD_COMPLETE" "$run/database-prefix.txt"
+              ) 2>&1 | tee -a "$run/run.log"
+          env:
+            - name: BLAST_USAGE_REPORT
+              value: "false"
+          resources:
+            requests:
+              cpu: 500m
+              memory: 512Mi
+            limits:
+              cpu: "2"
+              memory: 8Gi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - name: database
+              mountPath: /data
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: database
+          persistentVolumeClaim:
+            claimName: oligosmith-blast-nt
+        - name: tmp
+          emptyDir:
+            sizeLimit: 1Gi

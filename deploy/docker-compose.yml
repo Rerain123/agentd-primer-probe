@@ -5,7 +5,7 @@ services:
     build:
       context: ..
       dockerfile: Dockerfile
-    image: agentd-primer-probe:${AGENTD_IMAGE_TAG:-1.2.13}
+    image: agentd-primer-probe:${AGENTD_IMAGE_TAG:-1.2.15}
     restart: unless-stopped
     init: true
     ports:

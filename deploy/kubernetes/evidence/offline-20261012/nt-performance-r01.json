@@ -1,0 +1,9 @@
+{
+  "timeout_seconds": 600,
+  "query_count": 3,
+  "scientific_scope": "performance only; not an accepted primer design",
+  "status": "TIMED_OUT",
+  "elapsed_seconds": 600.41,
+  "max_rss_kib": 8393792,
+  "output_bytes": 0
+}

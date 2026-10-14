@@ -1,0 +1,36 @@
+{
+  "scope": "read_only_live_interfaces",
+  "status": "PASS",
+  "queries": {
+    "wf01": {
+      "rest_seconds": 0.3726,
+      "mcp_seconds": 0.369,
+      "scientific_state_unchanged": true,
+      "status": "PARTIALLY_SUCCEEDED",
+      "background_state": null
+    },
+    "wf02": {
+      "rest_seconds": 0.0079,
+      "mcp_seconds": 0.011,
+      "scientific_state_unchanged": true,
+      "status": "WAITING_TARGET_RESOURCES",
+      "background_state": "WAITING_EXTERNAL"
+    }
+  },
+  "/health": {
+    "http_status": 200,
+    "seconds": 0.0138
+  },
+  "/ready": {
+    "http_status": 200,
+    "seconds": 0.0227
+  },
+  "mcp_async_instructions": true,
+  "mcp_submit_and_query_tools_present": true,
+  "blast_runtime": {
+    "num_threads": 16,
+    "timeout_seconds": null,
+    "mode_timeouts": {}
+  },
+  "blast_cache_enabled": true
+}

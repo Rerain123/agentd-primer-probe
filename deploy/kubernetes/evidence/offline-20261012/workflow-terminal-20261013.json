@@ -1,0 +1,35 @@
+{
+  "execution_status": "TERMINAL_VERIFIED",
+  "workflow_status": "FAILED_NO_COMPATIBLE_PANEL",
+  "stage": "N26",
+  "terminal_report_ready": true,
+  "elapsed_seconds": 0.48,
+  "relaxation_status": "FAILED",
+  "exports": [
+    {
+      "format": "html",
+      "bytes": 12321,
+      "sha256": "7ddde7a9e4dcc877a70c2d410dd0ab2ff0945431fe73ccad9e685bbc92ce93da"
+    },
+    {
+      "format": "csv",
+      "bytes": 1349,
+      "sha256": "ad10153230c63d85c1692147184bff897e7a8f3c6169f0729ba44aa55a987fda"
+    },
+    {
+      "format": "pdf",
+      "bytes": 3378,
+      "sha256": "5d2b5be6202294f434f40145e5410307ddd4b12524ce4e82ca56fec1f71966fc"
+    }
+  ],
+  "reload_idempotence_verified": true,
+  "steps": [
+    {
+      "status": "FAILED_NO_COMPATIBLE_PANEL",
+      "stage": "N26",
+      "next_action": "REVIEW_FAILURE_GUIDANCE",
+      "terminal_report_ready": true,
+      "elapsed_seconds": 0.16
+    }
+  ]
+}

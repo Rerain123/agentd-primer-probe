@@ -144,9 +144,9 @@ def submit_wf02_v01_input_response(
     summary="推进 WF-02 普通多重面板流程",
 )
 def run_wf02_v01_until_blocked(batch_id: str) -> dict:
-    """启动后台执行；最多同步等待235秒，之后任务继续运行。"""
+    """启动后台执行；提交后立即返回，任务独立于请求连接运行。"""
     try:
-        return service.run_wf02_v01_background(batch_id, wait_seconds=235.0)
+        return service.run_wf02_v01_background(batch_id, wait_seconds=0.0)
     except AgentDError as exc:
         raise HTTPException(status_code=422, detail=exc.to_dict()) from exc
 
@@ -251,10 +251,12 @@ def submit_wf02_v01_internal_control_response(
 ) -> dict:
     """补充 P5 输入、重试或明确不含内标继续，并恢复 WF-02。"""
     try:
-        return service.submit_wf02_v01_internal_control_response(
+        service.wf02_v01.submit_internal_control_response(
             batch_id,
             response,
+            auto_resume=False,
         )
+        return service.run_wf02_v01_background(batch_id)
     except AgentDError as exc:
         raise HTTPException(status_code=422, detail=exc.to_dict()) from exc
 
@@ -270,11 +272,13 @@ def submit_wf02_v01_child_response(
 ) -> dict:
     """补充模板或代理 WF-01 交互回复，然后恢复该 WF-02 任务。"""
     try:
-        return service.submit_wf02_v01_child_response(
+        service.wf02_v01.submit_child_response(
             batch_id,
             target_id,
             response,
+            auto_resume=False,
         )
+        return service.run_wf02_v01_background(batch_id)
     except AgentDError as exc:
         raise HTTPException(status_code=422, detail=exc.to_dict()) from exc
 
@@ -336,7 +340,7 @@ def confirm_wf01_v02_target_manifest(batch_id: str) -> dict:
 def run_wf01_v02_until_blocked(batch_id: str, payload: dict | None = None) -> dict:
     """运行确定性阶段，直到需要用户输入或 M6 完成。"""
     try:
-        return service.run_wf01_v02_until_blocked(batch_id, payload or {})
+        return service.run_wf01_v02_background(batch_id, payload or {})
     except AgentDError as exc:
         raise HTTPException(status_code=422, detail=exc.to_dict()) from exc
 
@@ -715,3 +719,19 @@ def run_workflow(workflow: str, payload: dict) -> dict:
         return service.run(workflow, payload)
     except AgentDError as exc:
         raise HTTPException(status_code=422, detail=exc.to_dict()) from exc
+
+
+@app.get("/v1/wf01/tasks/{batch_id}/progress", summary="只读查询 WF-01 后台进度")
+def get_wf01_progress(batch_id: str) -> dict:
+    try:
+        return service.get_wf01_v02_agent_summary(batch_id)
+    except AgentDError as exc:
+        raise HTTPException(status_code=404, detail=exc.to_dict()) from exc
+
+
+@app.get("/v1/wf02/tasks/{batch_id}/progress", summary="只读查询 WF-02 后台进度")
+def get_wf02_progress(batch_id: str) -> dict:
+    try:
+        return service.get_wf02_v01_agent_summary(batch_id)
+    except AgentDError as exc:
+        raise HTTPException(status_code=404, detail=exc.to_dict()) from exc

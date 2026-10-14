@@ -73,7 +73,7 @@ class DeploymentPackageTests(unittest.TestCase):
         package_version = tomllib.loads(
             (ROOT / "pyproject.toml").read_text(encoding="utf-8")
         )["project"]["version"]
-        self.assertEqual(package_version, "1.2.13")
+        self.assertEqual(package_version, "1.2.15")
         self.assertEqual(release["version"], package_version)
         self.assertEqual(release["schema_version"], "3.0.0-phase3")
         self.assertEqual(release["mcp_endpoint"], "/mcp")

@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://wens.example/schemas/primer-design-output-v1.json",
+  "$id": "urn:oligosmith:schema:primer-design-output:v1",
   "title": "引物设计输出",
   "description": "仅在引物设计工作流完成后发出的面向用户报告消息。",
   "type": "object",
@@ -24,7 +24,7 @@
           "type": "string",
           "oneOf": [
             {
-              "pattern": "^https://rustfs\\.ne\\.scqcyz\\.cn/wens/data/[^/?#]+$"
+              "pattern": "^https?://[^\\s]+$"
             },
             {
               "pattern": "^/data/[^/]+$"

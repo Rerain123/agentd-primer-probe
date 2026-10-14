@@ -59,10 +59,10 @@ MCP_INSTRUCTIONS = """\
 终态总则：收到 primer_design_output 时，终态结果已由工具直接交付；不得生成助手文本、不得重建或解释 JSON、不得再次调用工具，并立即结束本轮。
 1. WF-01：FULL_SPECIFICITY 完整路线；缺少 target_organism 先询问。create_wf01_batch接文本，附件先download_himat_file，run_wf01_until_blocked恢复。保留 batch_id；只有用户后续明确要求才用get_wf01_report/get_wf01_export获取下载地址或create_wf01_version。
 2. WF-02：download_himat_file→downstream.wf02.target→create_wf02_batch。复用对话已有的靶标、文件映射和宿主。缺字段由 N04 返回 agent_interaction；省略 include_internal_control、省略 runtime_config。
-3. WF-02建单后由后端持久化任务执行，run_wf02_until_blocked首次最多同步等待235秒；WAIT_FOR_BACKGROUND时只回复user_message并结束本轮，不轮询、不重复输出阶段文字。create_wf02_batch请求失败不得同轮重试；用户后续明确继续时可用原参数重试并接回近期任务。明确查询时调用get_wf02_batch；交互用submit_wf02_input_response/submit_wf02_child_response。
+3. WF-01/WF-02提交后立即返回任务编号和后台状态；后端持久化任务执行，无需保持连接。WAIT_FOR_BACKGROUND只回复user_message并结束本轮。“查询进度”按workflow和batch_id调用一次get_wf01_batch或get_wf02_batch；不明确则询问编号。不轮询、不重复输出阶段文字，查询时不建单或启动计算。run_wf02_until_blocked仅恢复任务。create_wf02_batch请求失败不得同轮重试；后续继续用原参数接回任务。交互用submit_wf02_input_response/submit_wf02_child_response。
 4. WF-03：有附件/file_id时先 download_himat_file→取顶层 input_artifact_id→run_wf03_internal_control；无附件且 host_species已知时直接调用。缺少 host_species 时只询问该字段并停止。禁止先分析或用文本模拟结果，P5 采用后端结果；补证用 retry_wf03_internal_control，查询用 get_wf03_report。
-5. WF-04：附件/file_id先 download_himat_file→取顶层 input_artifact_id→run_wf04_validation；无附件且 forward_primer、reverse_primer齐全时直接调用，缺字段只询问。按 retryable_steps 调 retry_wf04_validation，查询用 get_wf04_report。执行状态和最终判定是两个独立字段，禁止模型执行或重算。
-6. WF-05：附件download_himat_file→input_artifact_id→run_wf05_variation；否则传sequences。缺forward_primer、reverse_primer或序列集询问缺项。重试/查询用retry_wf05_variation/get_wf05_report；不自动调用其他工作流
+5. WF-04：附件/file_id先 download_himat_file→取顶层 input_artifact_id→run_wf04_validation；无附件且 forward_primer、reverse_primer齐全时直接调用，缺字段只询问。按 retryable_steps 调 retry_wf04_validation，查询用 get_wf04_report。执行状态和最终判定是两个独立字段，禁止模型重算。
+6. WF-05：附件download_himat_file→run_wf05_variation；否则传sequences。缺forward_primer、reverse_primer或序列集询问缺项。重试/查询用retry_wf05_variation/get_wf05_report；不自动调用其他工作流
 """
 
 _TERMINAL_OUTPUT_SCHEMA_DESCRIPTION = (
@@ -512,20 +512,15 @@ def _wf02_query_control(result: dict[str, Any]) -> dict[str, Any]:
 
 
 def _wf02_sync_wait_seconds() -> float:
-    try:
-        return max(
-            0.0,
-            min(float(os.environ.get("MCP_WF02_SYNC_WAIT_SECONDS", "235")), 235.0),
-        )
-    except ValueError:
-        return 235.0
+    # Submission must never depend on keeping a HiMat connection open.
+    return 0.0
 
 
 def _run_wf02_execution_window(
     batch_id: str,
     resume_token: str | None,
 ) -> dict[str, Any]:
-    """Start durable execution and wait inside HiMat's 300-second envelope."""
+    """Queue durable execution without waiting for scientific work."""
 
     current = service.run_wf02_v01_background(
         batch_id,
@@ -1102,9 +1097,9 @@ def _host_ui_result(
                 structuredContent=ui_message,
             )
     tool_control = result.get("tool_control")
-    if result.get("workflow") == "WF-02" and isinstance(tool_control, dict):
+    if result.get("workflow") in {"WF-01", "WF-02"} and isinstance(tool_control, dict):
         workflow_state = {
-            "workflow": "WF-02",
+            "workflow": result.get("workflow"),
             "batchId": result.get("batch_id"),
             "batchCode": result.get("batch_code"),
             "nextAction": result.get("next_action"),
@@ -1304,7 +1299,7 @@ def create_wf01_batch(
                 },
             )
         if batch.get("status") == "QUEUED":
-            result = service.run_wf01_v02_until_blocked(str(batch["batch_id"]))
+            result = service.run_wf01_v02_background(str(batch["batch_id"]))
         else:
             result = summarize_wf01_batch(batch, top_candidates_per_target=0)
         result["mcp_input_mapping"] = mapping
@@ -1559,7 +1554,7 @@ def get_wf02_batch(
 
 @mcp.tool(
     description=(
-        "启动或恢复 WF-02 持久化后台任务；首次最多同步等待235秒，"
+        "启动或恢复 WF-02 持久化后台任务；提交后立即返回任务编号和后台状态，"
         "到时仍运行则停止当前轮次且后台继续；旧令牌安全校验；"
         + _TERMINAL_OUTPUT_SCHEMA_DESCRIPTION
     )
@@ -1596,14 +1591,11 @@ def submit_wf02_child_response(
             batch_id,
             target_id,
             response,
-            bounded=True,
+            auto_resume=False,
         )
-        if _wf02_continuation_allowed(current):
-            return _run_wf02_execution_window(
-                batch_id,
-                str(current.get("resume_token") or "") or None,
-            )
-        return _wf02_tool_control(current)
+        return _run_wf02_execution_window(
+            batch_id, str(current.get("resume_token") or "") or None,
+        )
 
     return _host_ui_result(
         _invoke(
@@ -1633,14 +1625,11 @@ def submit_wf02_internal_control_response(
         current = service.wf02_v01.submit_internal_control_response(
             batch_id,
             response,
-            bounded=True,
+            auto_resume=False,
         )
-        if _wf02_continuation_allowed(current):
-            return _run_wf02_execution_window(
-                batch_id,
-                str(current.get("resume_token") or "") or None,
-            )
-        return _wf02_tool_control(current)
+        return _run_wf02_execution_window(
+            batch_id, str(current.get("resume_token") or "") or None,
+        )
 
     return _host_ui_result(
         _invoke(
@@ -2363,7 +2352,7 @@ def get_wf05_report(job_id: str) -> dict[str, Any]:
 
 @mcp.tool(
     description=(
-        "读取当前 WF-01 摘要；已完成时重新返回最终 primer_design_output 报告卡片。"
+        "用户说“查询进度”时只读当前 WF-01 的后台状态和阶段，不启动计算；已完成时重新返回最终 primer_design_output 报告卡片。"
         "用户要求查看、下载、下载地址或再次显示卡片时调用；"
         + _TERMINAL_OUTPUT_SCHEMA_DESCRIPTION
     )
@@ -2420,7 +2409,7 @@ def submit_wf01_interaction_response(
             "RUN_M2",
             "RUN_M6",
         }:
-            result = service.run_wf01_v02_until_blocked(routed_batch_id)
+            result = service.run_wf01_v02_background(routed_batch_id)
         else:
             batch = routed.get("batch")
             if not isinstance(batch, dict):
@@ -2462,7 +2451,7 @@ def run_wf01_until_blocked(
     return _host_ui_result(
         _invoke(
             "wf01_run_until_blocked",
-            lambda: service.run_wf01_v02_until_blocked(
+            lambda: service.run_wf01_v02_background(
                 batch_id,
                 stage_options or {},
             ),

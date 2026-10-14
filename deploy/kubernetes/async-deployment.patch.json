@@ -1,0 +1,24 @@
+{
+  "spec": {
+    "template": {
+      "spec": {
+        "containers": [
+          {
+            "name": "oligosmith",
+            "image": "harbor-core.base.svc.cluster.local/qcyz/oligosmith@sha256:527a4bbbf8c8ae56a022e506246fcecdd6cda3f41f93b6564ae4f1cd51b56c8f",
+            "resources": {
+              "limits": {
+                "cpu": "16",
+                "memory": "32Gi"
+              },
+              "requests": {
+                "cpu": "16",
+                "memory": "16Gi"
+              }
+            }
+          }
+        ]
+      }
+    }
+  }
+}

@@ -81,10 +81,19 @@ class InternalControlDesigner:
             "NCBI_ENTREZ": self.entrez.status(),
             "C0": self.catalog.status(),
         }
+        settings = self.config["internal_control"]
+        local_sequences = {}
+        for species in settings["supported_species"]:
+            local_sequences[species] = {}
+            for gene in settings["gene_priority"].get(species, []):
+                records, _ = self.catalog.housekeeping_records({}, species, gene)
+                local_sequences[species][gene] = len(records) >= int(settings["minimum_homolog_sequences"])
+        local_available = bool(local_sequences) and all(any(genes.values()) for genes in local_sequences.values())
+        dependencies["OFFLINE_SEQUENCES"] = {"available": local_available, "species": local_sequences}
         full_dependencies_available = all(
             dependencies[key]["available"]
-            for key in ("P1", "C5", "P2_C6", "NCBI_ENTREZ")
-        )
+            for key in ("P1", "C5", "P2_C6")
+        ) and (local_available or dependencies["NCBI_ENTREZ"]["available"])
         return {
             "tool": "P5_Internal_Control",
             "available": full_dependencies_available,
@@ -378,6 +387,9 @@ class InternalControlDesigner:
             records, source = self.catalog.housekeeping_records(
                 payload, host_species, gene_name
             )
+            if source.get("method") == "database_catalog":
+                resource = self.catalog.resolve(source["resource_key"]) or {}
+                source["sequence_provenance"] = copy.deepcopy(resource.get("sequence_provenance") or {})
             minimum_sequences = int(settings["minimum_homolog_sequences"])
             if not records:
                 try:
@@ -435,9 +447,14 @@ class InternalControlDesigner:
                 "gene_attempts": attempts,
                 "candidates": [],
                 "warnings": warnings + ["未获得满足保守性要求的管家基因序列"],
-                "recommendation": "检查服务器到NCBI Entrez的网络与RefSeq配置；仍失败时考虑外源性异源内标",
+                "recommendation": "检查内标序列目录、物种来源和保守性证据；数据不足时补充同源序列或考虑外源性异源内标",
             }
 
+        provenance = selected["data_source"].get("sequence_provenance") or {}
+        if provenance.get("template_scope") == "SHARED_REFERENCE_INTERVAL":
+            warnings.append("P5_REFERENCE_INTERVAL_TEMPLATE")
+        if provenance.get("breed_coverage") == "NOT_ESTABLISHED":
+            warnings.append("P5_BREED_COVERAGE_NOT_ESTABLISHED")
         gene = selected["gene"]
         refseq = selected.get("refseq_accession")
         design_config = copy.deepcopy(self.config)
@@ -465,6 +482,7 @@ class InternalControlDesigner:
             candidate.metadata.update(
                 {
                     "role": "internal_control",
+                    "sequence_provenance": copy.deepcopy(provenance),
                     "gene": gene,
                     "refseq_accession": refseq,
                     "fluorophore": settings["default_fluorophore"],

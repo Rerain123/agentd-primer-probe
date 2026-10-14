@@ -1,0 +1,180 @@
+{
+  "apiVersion": "batch/v1",
+  "kind": "Job",
+  "metadata": {
+    "name": "oligosmith-runtime-acceptance-r02",
+    "namespace": "him-ws"
+  },
+  "spec": {
+    "backoffLimit": 0,
+    "activeDeadlineSeconds": 21600,
+    "template": {
+      "spec": {
+        "restartPolicy": "Never",
+        "automountServiceAccountToken": false,
+        "nodeSelector": {
+          "kubernetes.io/hostname": "k8s-a100-02"
+        },
+        "securityContext": {
+          "fsGroup": 10001,
+          "fsGroupChangePolicy": "OnRootMismatch"
+        },
+        "imagePullSecrets": [
+          {
+            "name": "harbor"
+          }
+        ],
+        "containers": [
+          {
+            "name": "acceptance",
+            "image": "harbor-core.base.svc.cluster.local/qcyz/oligosmith@sha256:a2e0fd535201b4851f30e164db087548e52b97ee5d2becb2469cfd082c4a13c1",
+            "command": [
+              "python",
+              "/scripts/accept-runtime-workflows.py"
+            ],
+            "env": [
+              {
+                "name": "AGENTD_CONFIG",
+                "value": "/config/production.json"
+              },
+              {
+                "name": "AGENTD_DATABASE_CATALOG",
+                "value": "/config/database-catalog.json"
+              },
+              {
+                "name": "BLASTDB",
+                "value": "/data/blastdb/hosts-20261012/taxonomy:/data/blastdb/nt-20261006:/data/blastdb"
+              },
+              {
+                "name": "BLAST_USAGE_REPORT",
+                "value": "false"
+              }
+            ],
+            "resources": {
+              "requests": {
+                "cpu": "16",
+                "memory": "16Gi"
+              },
+              "limits": {
+                "cpu": "16",
+                "memory": "32Gi"
+              }
+            },
+            "volumeMounts": [
+              {
+                "mountPath": "/data/blastdb/hosts-20261012",
+                "name": "blast-hosts",
+                "readOnly": true,
+                "subPath": "hosts-20261012-r01"
+              },
+              {
+                "mountPath": "/data/blastdb/nt-20261006",
+                "name": "blast-nt",
+                "readOnly": true,
+                "subPath": "nt-download-20260929-r01/recovery-r02/oligosmith-nt-download-r02-5c6r4/db"
+              },
+              {
+                "mountPath": "/config",
+                "name": "server-config",
+                "readOnly": true
+              },
+              {
+                "mountPath": "/tmp",
+                "name": "tmp"
+              },
+              {
+                "name": "blast-hosts",
+                "mountPath": "/data/internal-controls",
+                "subPath": "internal-controls-20261012-curated-r01",
+                "readOnly": true
+              },
+              {
+                "name": "evidence",
+                "mountPath": "/evidence"
+              },
+              {
+                "name": "scripts",
+                "mountPath": "/scripts",
+                "readOnly": true
+              }
+            ]
+          }
+        ],
+        "volumes": [
+          {
+            "name": "blast-hosts",
+            "persistentVolumeClaim": {
+              "claimName": "oligosmith-blast-hosts",
+              "readOnly": true
+            }
+          },
+          {
+            "name": "blast-nt",
+            "persistentVolumeClaim": {
+              "claimName": "oligosmith-blast-nt",
+              "readOnly": true
+            }
+          },
+          {
+            "configMap": {
+              "defaultMode": 420,
+              "name": "oligosmith-runtime-acceptance-config-r02",
+              "optional": false
+            },
+            "name": "server-config"
+          },
+          {
+            "emptyDir": {
+              "sizeLimit": "512Mi"
+            },
+            "name": "tmp"
+          },
+          {
+            "name": "evidence",
+            "persistentVolumeClaim": {
+              "claimName": "oligosmith-blast-hosts"
+            }
+          },
+          {
+            "name": "scripts",
+            "configMap": {
+              "name": "oligosmith-runtime-acceptance-r02"
+            }
+          }
+        ],
+        "initContainers": [
+          {
+            "name": "wait-nt-profile",
+            "image": "harbor-core.base.svc.cluster.local/qcyz/oligosmith@sha256:a2e0fd535201b4851f30e164db087548e52b97ee5d2becb2469cfd082c4a13c1",
+            "command": [
+              "python",
+              "/scripts/wait-nt-profile.py"
+            ],
+            "resources": {
+              "requests": {
+                "cpu": "10m",
+                "memory": "64Mi"
+              },
+              "limits": {
+                "cpu": "100m",
+                "memory": "128Mi"
+              }
+            },
+            "volumeMounts": [
+              {
+                "name": "scripts",
+                "mountPath": "/scripts",
+                "readOnly": true
+              },
+              {
+                "name": "evidence",
+                "mountPath": "/evidence",
+                "readOnly": true
+              }
+            ]
+          }
+        ]
+      }
+    }
+  }
+}

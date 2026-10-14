@@ -2316,7 +2316,7 @@ def summarize_wf02_batch(
                 background_execution.get("attempt_count") or 0
             ),
             "synchronous_wait_seconds": int(
-                background_execution.get("synchronous_wait_seconds") or 235
+                background_execution.get("synchronous_wait_seconds") or 0
             ),
             "requested_at": background_execution.get("requested_at"),
             "started_at": background_execution.get("started_at"),
@@ -2405,8 +2405,8 @@ def summarize_wf02_batch(
         if background_state in WF02_BACKGROUND_ACTIVE_STATES:
             result["user_message"] = (
                 f"WF-02 任务 {batch.get('batch_code')} 正在后台运行。"
-                "为避免 HiMAT 请求超时，本轮已停止等待；"
-                "稍后发送“查询刚才的任务”即可获取状态或最终报告。"
+                "任务独立于 HiMat 连接运行；"
+                "稍后输入“查询进度”即可获取状态或最终报告。"
             )
             result["flowControl"] = {
                 "action": "WAIT_FOR_BACKGROUND",
@@ -2524,7 +2524,7 @@ class WF02V01BatchService:
                 {
                     "schema_version": WF02_BACKGROUND_EXECUTION_VERSION,
                     "state": selected,
-                    "synchronous_wait_seconds": 235,
+                    "synchronous_wait_seconds": 0,
                 }
             )
             value.setdefault("attempt_count", 0)
@@ -2682,7 +2682,7 @@ class WF02V01BatchService:
                 "schema_version": WF02_BACKGROUND_EXECUTION_VERSION,
                 "state": "IDLE",
                 "attempt_count": 0,
-                "synchronous_wait_seconds": 235,
+                "synchronous_wait_seconds": 0,
                 "requested_at": None,
                 "started_at": None,
                 "heartbeat_at": None,
@@ -3063,11 +3063,13 @@ class WF02V01BatchService:
             "batch": batch,
         }
 
-    def _require_gateway(self) -> WF02ServiceGateway:
+    def _require_gateway(self, batch: dict | None = None) -> WF02ServiceGateway:
         if self.gateway is None:
             raise InputValidationError(
                 "WF-02 执行服务未配置 WF-01/P5 公共服务网关"
             )
+        if batch is not None and hasattr(self.gateway, "for_batch"):
+            return self.gateway.for_batch(batch)
         return self.gateway
 
     @staticmethod
@@ -3233,6 +3235,7 @@ class WF02V01BatchService:
     def _assess_candidates_with_p6(
         self,
         candidates: list[dict[str, Any]],
+        batch: dict | None = None,
     ) -> dict[str, Any]:
         """Attach P6 evidence to retained candidates without making it a blocker."""
         summary = _empty_p6_summary()
@@ -3241,7 +3244,7 @@ class WF02V01BatchService:
             summary["status"] = "NOT_APPLICABLE"
             return summary
 
-        gateway = self._require_gateway()
+        gateway = self._require_gateway(batch)
         for candidate in candidates:
             sequence = _candidate_amplicon_sequence(candidate)
             if not sequence:
@@ -3344,7 +3347,7 @@ class WF02V01BatchService:
         *,
         source_target: dict[str, Any] | None = None,
     ) -> None:
-        gateway = self._require_gateway()
+        gateway = self._require_gateway(batch)
         target_id = str(result["target_id"])
         if source_target is None:
             source_target = self._target_source_for_result(batch, result)
@@ -3441,7 +3444,7 @@ class WF02V01BatchService:
 
         report = gateway.get_wf01_v02_report(str(child_batch_id))
         candidates, evidence = self._collect_wf01_candidates(report)
-        p6_summary = self._assess_candidates_with_p6(candidates)
+        p6_summary = self._assess_candidates_with_p6(candidates, batch)
         result["child_target_id"] = evidence.get("child_target_id")
         result["wf01_result"] = evidence
         result["candidates"] = candidates
@@ -4348,8 +4351,8 @@ class WF02V01BatchService:
 
     def execute_internal_control(self, batch_id: str) -> dict[str, Any]:
         """Execute N10-N14 by calling P5 directly through the service gateway."""
-        gateway = self._require_gateway()
         batch = self.store.get_batch(batch_id)
+        gateway = self._require_gateway(batch)
         internal = batch.get("internal_control") or {}
         if internal.get("status") in {
             "COMPLETED",
@@ -4690,6 +4693,7 @@ class WF02V01BatchService:
         response: dict[str, Any],
         *,
         bounded: bool = False,
+        auto_resume: bool = True,
     ) -> dict[str, Any]:
         """Resolve an N12/N13 internal-control interaction and resume WF-02."""
         batch = self.store.get_batch(batch_id)
@@ -4711,7 +4715,8 @@ class WF02V01BatchService:
                 status="SKIPPED_AFTER_FAILURE",
                 reason="用户在内标设计或通道阻塞后明确选择不含内标继续",
             )
-            return self.run_until_blocked(batch_id, bounded=bounded)
+            return (self.run_until_blocked(batch_id, bounded=bounded) if auto_resume
+                    else summarize_wf02_batch(self.store.get_batch(batch_id)))
         if action not in {"PROVIDE_INTERNAL_CONTROL_DATA", "RETRY_INTERNAL_CONTROL"}:
             raise InputValidationError(
                 "内标交互动作无效",
@@ -4750,7 +4755,8 @@ class WF02V01BatchService:
             interaction_id=expected_id,
         )
         self._save_batch(batch)
-        return self.run_until_blocked(batch_id, bounded=bounded)
+        return (self.run_until_blocked(batch_id, bounded=bounded) if auto_resume
+                    else summarize_wf02_batch(self.store.get_batch(batch_id)))
 
     @staticmethod
     def _panel_pool_specs(batch: dict[str, Any]) -> tuple[list[dict[str, Any]], list[str]]:
@@ -5158,8 +5164,8 @@ class WF02V01BatchService:
         max_combinations: int | None = None,
     ) -> dict[str, Any]:
         """Execute one resumable N15-N20 P4 screening batch."""
-        gateway = self._require_gateway()
         batch = self.store.get_batch(batch_id)
+        gateway = self._require_gateway(batch)
         if (batch.get("target_design") or {}).get("status") != "COMPLETED":
             raise InputValidationError("WF-02 必须先完成 N06-N09 才能组合面板")
         internal = batch.get("internal_control") or {}
@@ -5433,7 +5439,7 @@ class WF02V01BatchService:
     ) -> dict[str, Any]:
         runtime = batch.get("runtime_config_snapshot") or {}
         options = batch.get("execution_options_snapshot") or {}
-        gateway = self._require_gateway()
+        gateway = self._require_gateway(batch)
         try:
             returned = gateway.check_p4_panel(
                 {
@@ -6545,7 +6551,7 @@ class WF02V01BatchService:
         balance: dict[str, Any],
         assessment: dict[str, Any],
     ) -> None:
-        gateway = self._require_gateway()
+        gateway = self._require_gateway(batch)
         center = float(assessment["redesign_primer_tm_center_celsius"])
         constraints = {
             "primer_min_tm": round(center - 1.0, 2),
@@ -6651,7 +6657,7 @@ class WF02V01BatchService:
         batch: dict[str, Any],
         balance: dict[str, Any],
     ) -> bool:
-        gateway = self._require_gateway()
+        gateway = self._require_gateway(batch)
         waiting = False
         for job in balance.get("active_redesign_jobs") or []:
             if job.get("status") == "COMPLETED":
@@ -6695,7 +6701,7 @@ class WF02V01BatchService:
             try:
                 report = gateway.get_wf01_v02_report(str(job["wf01_batch_id"]))
                 candidates, evidence = self._collect_wf01_candidates(report)
-                p6_summary = self._assess_candidates_with_p6(candidates)
+                p6_summary = self._assess_candidates_with_p6(candidates, batch)
             except Exception as exc:
                 job.update({"status": "FAILED", "failure": _error_payload(exc)})
                 continue
@@ -8297,10 +8303,11 @@ class WF02V01BatchService:
         response: dict[str, Any],
         *,
         bounded: bool = False,
+        auto_resume: bool = True,
     ) -> dict[str, Any]:
         """Resolve a local template request or proxy a WF-01 interaction."""
-        gateway = self._require_gateway()
         batch = self.store.get_batch(batch_id)
+        gateway = self._require_gateway(batch)
         target_result = next(
             (
                 item
@@ -8436,7 +8443,8 @@ class WF02V01BatchService:
             child_batch_id=child_batch_id,
         )
         self._save_batch(batch)
-        return self.run_until_blocked(batch_id, bounded=bounded)
+        return (self.run_until_blocked(batch_id, bounded=bounded) if auto_resume
+                    else summarize_wf02_batch(self.store.get_batch(batch_id)))
 
     def run_until_blocked(
         self,

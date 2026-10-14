@@ -36,7 +36,7 @@ RUNNING_VERSION="$("${COMPOSE[@]}" exec -T agentd python -c 'import agentd; prin
 [[ -z "$RUNNING_VERSION" ]] && { echo "[STOP] 无法连接 agentd 容器"; exit 1; }
 echo "[INFO] agentd 运行版本: $RUNNING_VERSION"
 
-IMAGE="$(read_env AGENTD_IMAGE_TAG 1.2.13)"
+IMAGE="$(read_env AGENTD_IMAGE_TAG 1.2.15)"
 IMAGE="agentd-primer-probe:${IMAGE}"
 
 BACKUP=""; COMPLETED=false

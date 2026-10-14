@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 import re
 import unittest
 from pathlib import Path
@@ -110,16 +109,15 @@ class RepositoryLayoutTests(unittest.TestCase):
                     failures.append(f"{source} -> {target}")
         self.assertEqual(failures, [], "Broken local links:\n" + "\n".join(failures))
 
-    def test_original_design_manifest(self) -> None:
-        manifest = SOURCE_MATERIALS / "MANIFEST.sha256"
-        entries = [line for line in manifest.read_text(encoding="utf-8").splitlines() if line]
-        self.assertEqual(len(entries), 8)
-        for entry in entries:
-            expected_hash, relative_path = entry.split(maxsplit=1)
-            source_file = SOURCE_MATERIALS / relative_path
-            self.assertTrue(source_file.is_file(), relative_path)
-            actual_hash = hashlib.sha256(source_file.read_bytes()).hexdigest()
-            self.assertEqual(actual_hash, expected_hash, relative_path)
+    def test_expert_materials_are_excluded_from_github(self) -> None:
+        self.assertEqual(
+            sorted(path.relative_to(SOURCE_MATERIALS).as_posix()
+                   for path in SOURCE_MATERIALS.rglob("*") if path.is_file()),
+            ["README.md"],
+        )
+        self.assertFalse(
+            (DOCS / "history" / "WF01_WF02_EXPERT_REVIEW_20261013.md").exists()
+        )
 
 
 if __name__ == "__main__":

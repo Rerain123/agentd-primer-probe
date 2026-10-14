@@ -1,0 +1,76 @@
+# Verify the existing extraction; do not download, extract, or delete database files.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: oligosmith-nt-verify-r04
+  namespace: him-ws
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: 86400
+  template:
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      nodeSelector:
+        kubernetes.io/hostname: k8s-a100-02
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+      containers:
+        - name: verify
+          image: ncbi/blast@sha256:81f118d2e4f7e11494d27fdbb99c9430423105afff50c4ae158db41d58a3fc57
+          command: ["/bin/bash", "-euo", "pipefail", "-c"]
+          args:
+            - |
+              root=/data/nt-download-20260929-r01
+              source_run="$root/recovery-r02/oligosmith-nt-download-r02-5c6r4"
+              run="$root/validation-r04/$HOSTNAME"
+              export BLASTDB="$source_run/db"
+              mkdir -p "$run"
+              (
+                trap 'rc=$?; echo "VERIFY_EXIT=$rc $(date -u +%FT%TZ)"; exit "$rc"' EXIT
+                echo "START $(date -u +%FT%TZ)"
+                blastdbcheck -version
+                cmp "$source_run/metadata.before.json" "$source_run/metadata.after.json"
+                cp "$source_run/metadata.before.json" "$run/metadata.before.json"
+                cp "$source_run/metadata.after.json" "$run/metadata.after.json"
+                expected=$(perl -MJSON::PP -0777 -e 'my $m=decode_json(<>); die "Invalid metadata" unless $m->{dbname} eq "nt" && $m->{dbtype} eq "Nucleotide" && $m->{"number-of-volumes"} > 0; print $m->{"number-of-volumes"}' "$run/metadata.after.json")
+                actual=$(find "$BLASTDB" -maxdepth 1 -type f -name 'nt.*.nsq' | wc -l)
+                echo "VOLUMES expected=$expected actual=$actual"
+                [ "$actual" -eq "$expected" ]
+                blastdbcmd -db "$BLASTDB/nt" -dbtype nucl -info > "$run/blastdb-info.txt"
+                head -n 10 "$run/blastdb-info.txt"
+                echo "CHECK_ALL_VOLUMES $(date -u +%FT%TZ)"
+                blastdbcheck -db "$BLASTDB/nt" -dbtype nucl -verbosity 3 2>&1 | tee "$run/blastdbcheck.log"
+                printf '%s\n' "$BLASTDB/nt" > "$run/database-prefix.txt"
+                date -u '+VALIDATION_COMPLETE %Y-%m-%dT%H:%M:%SZ' > "$run/VALIDATION_COMPLETE"
+                cat "$run/VALIDATION_COMPLETE" "$run/database-prefix.txt"
+              ) 2>&1 | tee "$run/run.log"
+          env:
+            - name: BLAST_USAGE_REPORT
+              value: "false"
+          resources:
+            requests:
+              cpu: 500m
+              memory: 512Mi
+            limits:
+              cpu: "2"
+              memory: 8Gi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - name: database
+              mountPath: /data
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: database
+          persistentVolumeClaim:
+            claimName: oligosmith-blast-nt
+        - name: tmp
+          emptyDir:
+            sizeLimit: 1Gi

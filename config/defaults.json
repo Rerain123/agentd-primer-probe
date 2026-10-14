@@ -67,15 +67,27 @@
     }
   ],
   "conservation_rounds": [
-    {"minimum_conservation": 0.95, "minimum_length": 150, "label": "standard"},
-    {"minimum_conservation": 0.92, "minimum_length": 120, "label": "relaxed_1"},
-    {"minimum_conservation": 0.90, "minimum_length": 90, "label": "relaxed_2"}
+    {
+      "minimum_conservation": 0.95,
+      "minimum_length": 150,
+      "label": "standard"
+    },
+    {
+      "minimum_conservation": 0.92,
+      "minimum_length": 120,
+      "label": "relaxed_1"
+    },
+    {
+      "minimum_conservation": 0.9,
+      "minimum_length": 90,
+      "label": "relaxed_2"
+    }
   ],
   "scoring": {
-    "conservation_weight": 0.30,
+    "conservation_weight": 0.3,
     "thermodynamics_weight": 0.25,
     "specificity_weight": 0.25,
-    "amplicon_weight": 0.20,
+    "amplicon_weight": 0.2,
     "warning_penalties_percent": {
       "R-01b": 5,
       "R-03b": 2,
@@ -135,7 +147,11 @@
     "default_instrument": "CFX96"
   },
   "internal_control": {
-    "supported_species": ["pig", "cattle", "chicken"],
+    "supported_species": [
+      "pig",
+      "cattle",
+      "chicken"
+    ],
     "minimum_homolog_sequences": 5,
     "pass_conservation": 0.99,
     "caution_conservation": 0.97,
@@ -151,14 +167,38 @@
       "sleep_between_tries_seconds": 1.0
     },
     "gene_priority": {
-      "pig": ["ACTB", "GAPDH", "18S rRNA"],
-      "cattle": ["ACTB", "GAPDH", "18S rRNA"],
-      "chicken": ["ACTB", "GAPDH", "18S rRNA"]
+      "pig": [
+        "ACTB",
+        "GAPDH",
+        "18S rRNA"
+      ],
+      "cattle": [
+        "ACTB",
+        "GAPDH",
+        "18S rRNA"
+      ],
+      "chicken": [
+        "ACTB",
+        "GAPDH",
+        "18S rRNA"
+      ]
     },
     "refseq": {
-      "pig": {"ACTB": "NM_001444420.1", "GAPDH": "NM_001206359.1", "18S rRNA": "NR_046261"},
-      "cattle": {"ACTB": "NM_173979.3", "GAPDH": "NM_001034034.2", "18S rRNA": "NR_036642"},
-      "chicken": {"ACTB": "NM_205518.1", "GAPDH": "NM_204305.1", "18S rRNA": "NR_046237"}
+      "pig": {
+        "ACTB": "NM_001444420.1",
+        "GAPDH": "NM_001206359.1",
+        "18S rRNA": "NR_046261"
+      },
+      "cattle": {
+        "ACTB": "NM_173979.3",
+        "GAPDH": "NM_001034034.2",
+        "18S rRNA": "NR_036642"
+      },
+      "chicken": {
+        "ACTB": "NM_205518.2",
+        "GAPDH": "NM_204305.1",
+        "18S rRNA": "AF173612.1"
+      }
     }
   },
   "runtime": {
@@ -169,13 +209,27 @@
     "catalog_path": null,
     "selector_aliases": {
       "host": {
-        "pig": ["猪"]
+        "pig": [
+          "猪"
+        ]
       }
     }
   },
   "tools": {
     "blastn_executable": "blastn",
+    "blast_runtime": {
+      "num_threads": 1,
+      "timeout_seconds": 600,
+      "mode_timeouts": {}
+    },
     "mafft_executable": "mafft",
-    "allow_development_fallback": false
+    "allow_development_fallback": false,
+    "blast_cache": {
+      "enabled": false,
+      "directory": null,
+      "max_bytes": 2147483648,
+      "max_entry_bytes": 134217728,
+      "ttl_seconds": 604800
+    }
   }
 }

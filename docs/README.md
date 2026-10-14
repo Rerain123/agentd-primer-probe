@@ -10,7 +10,7 @@
 | [workflows/](workflows/README.md) | WF-01～WF-05 现行实现与施工台账 | 修改或排查某一个工作流 |
 | [operations/](operations/README.md) | MCP、鉴权、服务器、发布、存储与审计 | 接入、部署或排查运行环境 |
 | [reference/](reference/README.md) | Skill 等稳定参考入口 | 查找工具与机器可读契约 |
-| [source-materials/](source-materials/README.md) | 项目原始设计输入 | 追溯早期需求，不作现行契约 |
+| [source-materials/](source-materials/README.md) | 原始资料分发范围说明 | GitHub 不包含专家原稿或原稿归档 |
 | [history/](history/README.md) | 变更记录、阶段历史和整理台账 | 回答“为什么会变成这样” |
 
 ## 按工作目的选路
@@ -29,6 +29,6 @@
 1. 代码、Schema 与测试是可执行的当前事实。
 2. `workflows/` 中的现行文档说明某个工作流的施工边界。
 3. `architecture/` 和 `operations/` 解释跨模块与运行环境。
-4. `source-materials/` 和 `history/` 只用于追溯。
+4. `source-materials/` 仅说明 GitHub 资料排除范围；`history/` 用于追溯项目历史。
 
 新增文档前先确认不能扩展现有主题。新文档必须登记到最近的分类 `README.md`，并通过 `tests.test_repository_layout`。

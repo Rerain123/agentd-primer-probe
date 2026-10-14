@@ -1,0 +1,78 @@
+{
+  "metadata": {
+    "namespace": "him-ws",
+    "name": "oligosmith-nt-summary-r06"
+  },
+  "kind": "Job",
+  "apiVersion": "batch/v1",
+  "spec": {
+    "template": {
+      "spec": {
+        "volumes": [
+          {
+            "configMap": {
+              "name": "oligosmith-nt-summary-r06"
+            },
+            "name": "scripts"
+          },
+          {
+            "persistentVolumeClaim": {
+              "claimName": "oligosmith-blast-hosts",
+              "readOnly": true
+            },
+            "name": "evidence"
+          }
+        ],
+        "restartPolicy": "Never",
+        "securityContext": {
+          "runAsGroup": 10001,
+          "fsGroup": 10001,
+          "runAsUser": 10001
+        },
+        "imagePullSecrets": [
+          {
+            "name": "harbor"
+          }
+        ],
+        "automountServiceAccountToken": false,
+        "containers": [
+          {
+            "volumeMounts": [
+              {
+                "name": "scripts",
+                "readOnly": true,
+                "mountPath": "/scripts"
+              },
+              {
+                "name": "evidence",
+                "mountPath": "/evidence",
+                "subPath": "internal-controls-20261012-r01",
+                "readOnly": true
+              }
+            ],
+            "command": [
+              "python",
+              "/scripts/summarize-nt-profile.py"
+            ],
+            "name": "summary",
+            "image": "harbor-core.base.svc.cluster.local/qcyz/oligosmith@sha256:a4654140604d08a9b0d60e05a13471375a61ed8600d935a997966c8740df1eec",
+            "resources": {
+              "requests": {
+                "cpu": "100m",
+                "memory": "128Mi"
+              },
+              "limits": {
+                "cpu": "1",
+                "memory": "256Mi"
+              }
+            }
+          }
+        ],
+        "nodeSelector": {
+          "kubernetes.io/hostname": "k8s-a100-02"
+        }
+      }
+    },
+    "backoffLimit": 0
+  }
+}

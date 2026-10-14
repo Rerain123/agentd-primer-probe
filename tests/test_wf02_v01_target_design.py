@@ -1186,7 +1186,8 @@ class WF02V01TargetDesignTests(unittest.TestCase):
                         200,
                         waiting_response.text,
                     )
-                    waiting = waiting_response.json()
+                    service.wf02_background._queue.join()
+                    waiting = client.get(f"/v1/wf02/tasks/{batch_id}/progress").json()
                     self.assertEqual(waiting["status"], "WAITING_CHILD_INPUT")
                     self.assertEqual(waiting["pending_child_count"], 1)
 
@@ -1207,8 +1208,9 @@ class WF02V01TargetDesignTests(unittest.TestCase):
                         200,
                         resumed_response.text,
                     )
-                    resumed = resumed_response.json()
-                    self.assertEqual(resumed["stage"], "N20")
+                    service.wf02_background._queue.join()
+                    resumed = client.get(f"/v1/wf02/tasks/{batch_id}/progress").json()
+                    self.assertEqual(resumed["stage"], "N26")
                     self.assertEqual(resumed["target_design"]["succeeded"], 2)
 
     def test_n10_n13_calls_p5_directly_and_assigns_default_cy5(self) -> None:
@@ -1531,7 +1533,8 @@ class WF02V01TargetDesignTests(unittest.TestCase):
                         f"/v1/wf02/tasks/{created['batch_id']}/run-until-blocked"
                     )
                     self.assertEqual(waiting_response.status_code, 200)
-                    completed = waiting_response.json()
+                    service.wf02_background._queue.join()
+                    completed = client.get(f"/v1/wf02/tasks/{created['batch_id']}/progress").json()
                     self.assertEqual(completed["stage"], "N26")
                     self.assertEqual(
                         completed["status"],

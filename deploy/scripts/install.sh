@@ -90,5 +90,5 @@ if [[ "${SKIP_VERIFY}" == false ]]; then
   bash "${SCRIPT_DIR}/verify.sh"
 fi
 
-printf '[PASS] OligoSmith 1.2.13 MCP 部署完成\n'
+printf '[PASS] OligoSmith 1.2.15 MCP 部署完成\n'
 printf '[INFO] 查看日志: docker compose --env-file %q -f %q logs -f agentd\n' "${AGENTD_ENV_FILE}" "${AGENTD_COMPOSE_FILE}"

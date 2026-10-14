@@ -1,0 +1,19 @@
+# Strategic merge: mount the five validated host databases without changing nt.
+spec:
+  template:
+    spec:
+      containers:
+        - name: oligosmith
+          env:
+            - name: BLASTDB
+              value: /data/blastdb/hosts-20261012/taxonomy:/data/blastdb/nt-20261006:/data/blastdb
+          volumeMounts:
+            - name: blast-hosts
+              mountPath: /data/blastdb/hosts-20261012
+              subPath: hosts-20261012-r01
+              readOnly: true
+      volumes:
+        - name: blast-hosts
+          persistentVolumeClaim:
+            claimName: oligosmith-blast-hosts
+            readOnly: true

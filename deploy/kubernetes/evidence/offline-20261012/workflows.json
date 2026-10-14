@@ -1,0 +1,140 @@
+{
+  "wf01-single-design": {
+    "status": "PARTIALLY_SUCCEEDED",
+    "batch_id": "8cf34388-8ddd-430f-af2e-018d14c4e657",
+    "elapsed_seconds": 8.38
+  },
+  "wf01-multiple-template-design": {
+    "status": "PARTIALLY_SUCCEEDED",
+    "batch_id": "fcfc5767-8230-4bdb-a1b0-938c1e077dc7",
+    "elapsed_seconds": 19.79
+  },
+  "wf01-single-full-nt": {
+    "status": "PARTIALLY_SUCCEEDED",
+    "batch_id": "bb5b8970-8849-4c8e-9ff8-14bdb9b0f2fb",
+    "elapsed_seconds": 640.51
+  },
+  "wf02-two-target-internal": {
+    "status": "WAITING_TARGET_RESOURCES",
+    "batch_id": "5f66223c-de27-43d1-8b7f-2cd288f70b5f",
+    "elapsed_seconds": 1324.2,
+    "stage": "N08",
+    "terminal_report_ready": false,
+    "targets": [
+      {
+        "target_id": "csfv",
+        "status": "BLOCKED_RESOURCE",
+        "failure": {
+          "code": "TARGET_EVALUATION_BLOCKED_RESOURCE",
+          "message": "WF-01 必需资源尚不可用，当前目标暂停并等待资源恢复",
+          "retryable": true,
+          "reason_codes": [
+            "TARGET_EVALUATION_BLOCKED_RESOURCE",
+            "NT_SEARCH_TOOL_ERROR",
+            "DELIVERABLE_CANDIDATES_WITH_INCOMPLETE_SEARCH",
+            "TOOL_UNAVAILABLE",
+            "SPECIFICITY_OR_PRIMER3_INCOMPLETE"
+          ],
+          "full_details_available": true
+        },
+        "candidate_count": 0
+      },
+      {
+        "target_id": "prrsv",
+        "status": "BLOCKED_RESOURCE",
+        "failure": {
+          "code": "TARGET_EVALUATION_BLOCKED_RESOURCE",
+          "message": "WF-01 必需资源尚不可用，当前目标暂停并等待资源恢复",
+          "retryable": true,
+          "reason_codes": [
+            "TARGET_EVALUATION_BLOCKED_RESOURCE",
+            "NT_SEARCH_TOOL_ERROR",
+            "DELIVERABLE_CANDIDATES_WITH_INCOMPLETE_SEARCH",
+            "TOOL_UNAVAILABLE",
+            "SPECIFICITY_OR_PRIMER3_INCOMPLETE"
+          ],
+          "full_details_available": true
+        },
+        "candidate_count": 0
+      }
+    ],
+    "multiplex": {
+      "panel_size": 2,
+      "targets_order": [
+        "csfv",
+        "prrsv"
+      ],
+      "failed_targets": [],
+      "screening": {
+        "status": "NOT_STARTED",
+        "complete_panel_possible": false,
+        "total_combinations": 0,
+        "processed_combinations": 0,
+        "strict_count": 0,
+        "risk_count": 0,
+        "incompatible_count": 0,
+        "invalid_count": 0,
+        "channel_assignment": [],
+        "instrument_evidence": {},
+        "tool_failure": null
+      },
+      "relaxation": {
+        "status": "NOT_STARTED",
+        "active_step": null,
+        "full_risk_count": 0,
+        "partial_count": 0,
+        "maximum_partial_target_count": null,
+        "relaxation_log": [],
+        "relaxation_log_total": 0,
+        "failure_suggestions": [],
+        "tool_failure": null
+      },
+      "balance": {
+        "status": "NOT_STARTED",
+        "policy_version": null,
+        "redesign_attempt_count": 0,
+        "maximum_redesign_attempts": null,
+        "selected_panel_count": 0,
+        "tm_warning_fallback": false
+      },
+      "scoring": {
+        "status": "NOT_STARTED",
+        "policy_version": null,
+        "scored_panel_count": 0
+      },
+      "deduplication": {
+        "status": "NOT_STARTED",
+        "policy_version": null,
+        "unique_panel_count": 0,
+        "duplicate_panel_count": 0
+      },
+      "selection": {
+        "status": "NOT_STARTED",
+        "selection_mode": null,
+        "top3_count": 0,
+        "strict_candidate_count": 0,
+        "risk_candidate_count": 0
+      }
+    },
+    "internal_control": {
+      "requested": true,
+      "status": "NOT_STARTED",
+      "p5_status": null,
+      "p5_verdict": null,
+      "selected_gene": null,
+      "candidate_gene_count": 0,
+      "primer_scheme_count": 0,
+      "quantity_verdict": null,
+      "combination_pool_member": false,
+      "channel_reservation": {},
+      "failure": null
+    }
+  },
+  "wf02-reload": {
+    "status": "VERIFIED",
+    "batch_id": "5f66223c-de27-43d1-8b7f-2cd288f70b5f",
+    "elapsed_seconds": 0.0,
+    "snapshot_version": "wf02-wf01-execution-snapshot-v2",
+    "persisted_status": "WAITING_TARGET_RESOURCES"
+  }
+}

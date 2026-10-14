@@ -15,6 +15,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from .blast_cache import BlastResultCache
 from .errors import AgentDError, InputValidationError, ToolUnavailableError
 from .models import Oligo, SequenceRecord, SpecificityModeResult, SpecificityResult
 from .primer3_tool import Primer3Adapter
@@ -108,9 +109,36 @@ def _accession_forms(value: Any) -> set[str]:
 
 
 class BlastAdapter:
-    def __init__(self, executable: str = "blastn", *, allow_fallback: bool = False) -> None:
+    def __init__(
+        self, executable: str = "blastn", *, allow_fallback: bool = False,
+        runtime_config: dict | None = None,
+    ) -> None:
         self.executable = executable
         self.allow_fallback = allow_fallback
+        settings = runtime_config if runtime_config is not None else {}
+        if not isinstance(settings, dict):
+            raise InputValidationError("tools.blast_runtime 必须是对象")
+        unknown = set(settings) - {"num_threads", "timeout_seconds", "mode_timeouts"}
+        if unknown:
+            raise InputValidationError("未知 BLAST 运行配置", details={"keys": sorted(unknown)})
+
+        def positive_integer(value: Any, name: str, maximum: int) -> int:
+            if type(value) is not int or not 1 <= value <= maximum:
+                raise InputValidationError(f"BLAST {name} 必须是 1 到 {maximum} 的整数")
+            return value
+
+        self.num_threads = positive_integer(settings.get("num_threads", 1), "num_threads", 256)
+        self.timeout_seconds = (None if settings.get("timeout_seconds", 600) is None else
+                                positive_integer(settings.get("timeout_seconds", 600), "timeout_seconds", 86400))
+        timeouts = settings.get("mode_timeouts", {})
+        if not isinstance(timeouts, dict):
+            raise InputValidationError("BLAST mode_timeouts 必须是对象")
+        self.mode_timeouts = {}
+        for mode, value in timeouts.items():
+            if not isinstance(mode, str) or not mode.strip():
+                raise InputValidationError("BLAST mode_timeouts 的模式名必须是非空字符串")
+            self.mode_timeouts[mode.upper()] = (None if value is None else
+                                              positive_integer(value, f"mode_timeouts.{mode}", 86400))
         self.last_search_evidence: dict = {}
 
     @property
@@ -123,6 +151,7 @@ class BlastAdapter:
             "available": self.available,
             "executable": shutil.which(self.executable),
             "fallback_enabled": self.allow_fallback,
+            "runtime_limits": {"num_threads": self.num_threads, "timeout_seconds": self.timeout_seconds, "mode_timeouts": dict(self.mode_timeouts)},
             "fallback_method": "exact_fasta_match" if self.allow_fallback else None,
         }
 
@@ -202,13 +231,18 @@ class BlastAdapter:
                 command.extend(["-subject", str(database)])
             else:
                 command.extend(["-db", str(database)])
+                if self.num_threads > 1:
+                    command.extend(["-num_threads", str(self.num_threads)])
+            timeout_seconds = self.mode_timeouts.get(mode.upper(), self.timeout_seconds)
+            runtime_limits = {"timeout_seconds": timeout_seconds,
+                              "num_threads": self.num_threads if "-db" in command else 1}
             try:
                 completed = subprocess.run(
                     command,
                     capture_output=True,
                     text=True,
                     encoding="utf-8",
-                    timeout=600,
+                    timeout=timeout_seconds,
                     check=False,
                 )
             except (OSError, subprocess.TimeoutExpired) as exc:
@@ -223,6 +257,7 @@ class BlastAdapter:
                     "database": str(database),
                     "evalue": evalue,
                     "command": command,
+                    "runtime_limits": runtime_limits,
                     "returncode": None,
                     "query_fasta": query_path.read_text(encoding="utf-8"),
                     "stdout": getattr(exc, "stdout", None),
@@ -239,6 +274,7 @@ class BlastAdapter:
             self.last_search_evidence = {
                 "tool": "BLAST+",
                 "status": "COMPLETED" if completed.returncode == 0 else "FAILED",
+                "runtime_limits": runtime_limits,
                 "mode": mode,
                 "database": str(database),
                 "evalue": evalue,
@@ -1030,7 +1066,9 @@ class P2BatchSearchProvider:
         self.blast = blast_adapter or BlastAdapter(
             executable,
             allow_fallback=allow_development_fallback,
+            runtime_config=config.get("tools", {}).get("blast_runtime"),
         )
+        self.cache = BlastResultCache(config.get("tools", {}).get("blast_cache"))
         self.primer3 = primer3_adapter or Primer3Adapter(
             config,
             allow_fallback=allow_development_fallback,
@@ -1148,17 +1186,20 @@ class P2BatchSearchProvider:
         evalue: float,
         temporary_materialization: bool,
     ) -> dict[str, Any]:
-        hits, method = self.blast.search(
-            queries,
-            str(database_path),
-            evalue=evalue,
-            mode=mode,
+        def compute():
+            hits, method = self.blast.search(
+                queries, str(database_path), evalue=evalue, mode=mode,
+            )
+            return {"hits": hits, "method": method,
+                    "evidence": copy.deepcopy(getattr(self.blast, "last_search_evidence", None)) or {}}
+
+        result = self.cache.run(
+            lambda: self.cache.identity(queries, resource, self.blast, mode, evalue), compute,
         )
-        # P2 owns the P1 duplex-strength evidence used by its decision table.
+        hits, method, evidence = result["hits"], result["method"], result["evidence"]
+        self.blast.last_search_evidence = copy.deepcopy(evidence)
+        # Recompute P1 evidence with this task's configuration, even on cache hits.
         self._add_thermodynamics(hits, queries)
-        evidence = copy.deepcopy(
-            getattr(self.blast, "last_search_evidence", None)
-        )
         if not isinstance(evidence, dict) or not evidence:
             evidence = {
                 "tool": "BLAST+",

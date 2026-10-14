@@ -1,7 +1,7 @@
 {
   "name": "agentd-primer-probe-server",
   "description": "OligoSmith 引物与探针设计、验证、优化和报告生成 MCP 服务",
-  "version": "1.2.13",
+  "version": "1.2.15",
   "phase": 3,
   "schema_version": "3.0.0-phase3",
   "package_type": "docker-compose-source-bundle",

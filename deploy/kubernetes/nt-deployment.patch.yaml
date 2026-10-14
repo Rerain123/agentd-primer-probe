@@ -1,0 +1,22 @@
+# Strategic-merge patch for the existing oligosmith Deployment.
+# Keep its single replica, Recreate strategy, scheduling, and existing volumes.
+spec:
+  template:
+    spec:
+      containers:
+        - name: oligosmith
+          env:
+            - name: BLASTDB
+              value: /data/blastdb/nt-20261006:/data/blastdb
+            - name: BLAST_USAGE_REPORT
+              value: "false"
+          volumeMounts:
+            - name: blast-nt
+              mountPath: /data/blastdb/nt-20261006
+              subPath: nt-download-20260929-r01/recovery-r02/oligosmith-nt-download-r02-5c6r4/db
+              readOnly: true
+      volumes:
+        - name: blast-nt
+          persistentVolumeClaim:
+            claimName: oligosmith-blast-nt
+            readOnly: true

@@ -223,7 +223,7 @@
           ]
         },
         "attempt_count": {"type": "integer", "minimum": 0},
-        "synchronous_wait_seconds": {"type": "integer", "const": 235},
+        "synchronous_wait_seconds": {"type": "integer", "enum": [0, 235]},
         "requested_at": {"type": ["string", "null"], "format": "date-time"},
         "started_at": {"type": ["string", "null"], "format": "date-time"},
         "heartbeat_at": {"type": ["string", "null"], "format": "date-time"},

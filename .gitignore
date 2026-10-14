@@ -32,3 +32,8 @@ dist/
 # Operating-system metadata
 .DS_Store
 Thumbs.db
+
+# GitHub distribution: exclude expert materials and internal handoff archives
+/docs/source-materials/*
+!/docs/source-materials/README.md
+/docs/history/WF01_WF02_EXPERT_REVIEW_20261013.md

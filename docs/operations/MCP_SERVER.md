@@ -1,5 +1,9 @@
 # OligoSmith MCP 服务器部署
 
+当前 Rancher/Kubernetes 新服务器由 HiMat 后端通过集群内 Service DNS 访问，不再使用
+`oligosmith.ne.scqcyz.cn`。实际资源、Codeup `test` 自动部署、Host 校验和单终端验收命令见
+[Kubernetes 与 HiMat 部署](KUBERNETES_HIMAT_DEPLOYMENT.md)。
+
 OligoSmith 在 `/mcp` 保留兼容的全量无状态 MCP 可流式传输 HTTP 接口，并新增
 `/mcp/wf01/` 至 `/mcp/wf05/` 五个按工作流限制工具目录的入口。同一服务进程还保留
 `/health`、`/ready`、REST 兼容接口和报告下载接口。健康检查与就绪检查公开访问；
@@ -16,29 +20,33 @@ MCP 初始化说明、工具说明、参数说明和资源说明统一使用中�
 
 ## 必需环境变量
 
-将 `deploy/.env.example` 复制为 `deploy/.env`，并至少设置以下变量：
+当前 Kubernetes 环境应在 Deployment 中配置非敏感变量，并通过 `oligosmith-secrets` 注入密钥。
+下面是新服务器基线；Compose 手工部署时才将 `deploy/.env.example` 复制为 `deploy/.env` 并设置
+等价变量：
 
 ```dotenv
-AGENTD_PORT=8020
+AGENTD_PORT=8000
 AGENTD_REQUIRE_DATABASES=false
-MCP_PUBLIC_BASE_URL=https://oligosmith.ne.scqcyz.cn
+MCP_PUBLIC_BASE_URL=http://oligosmith.him-ws.svc.cluster.local:8000
 WF02_ATTACHMENT_URL_TTL_SECONDS=86400
-MCP_ALLOWED_HOSTS=oligosmith.ne.scqcyz.cn,127.0.0.1:8000,127.0.0.1:*
-MCP_ALLOWED_ORIGINS=https://oligosmith.ne.scqcyz.cn
-JWT_SECRET=replace-with-a-long-random-secret
+MCP_ALLOWED_HOSTS=oligosmith,oligosmith:8000,oligosmith.him-ws.svc.cluster.local,oligosmith.him-ws.svc.cluster.local:8000,127.0.0.1:8000,127.0.0.1:*
+MCP_ALLOWED_ORIGINS=http://oligosmith.him-ws.svc.cluster.local:8000,https://himat.ws.scqcyz.cn
+MCP_JWT_SECRET=replace-with-a-long-random-secret
 MCP_PUBLIC_WF01_ARTIFACTS=true
 HIMAT_FILE_DOWNLOAD_BASE_URL=https://himat.ws.scqcyz.cn/api/files/download
 HIMAT_FILE_DOWNLOAD_TIMEOUT_SECONDS=300
 AGENTD_INPUT_FILE_MAX_BYTES=1073741824
 RUSTFS_ENABLED=true
 RUSTFS_ENDPOINT_URL=https://rustfs.ne.scqcyz.cn
-RUSTFS_BUCKET=wens
+RUSTFS_BUCKET=oligosmith
 RUSTFS_OBJECT_PREFIX=data
 RUSTFS_PUBLIC_BASE_URL=https://rustfs.ne.scqcyz.cn
 ```
 
-`JWT_SECRET` 用于签发令牌，它不是客户端 `Authorization` 请求头中填写的令牌。
-禁止提交 `deploy/.env`，也禁止在日志或终端中输出该密钥。
+`MCP_JWT_SECRET` 用于签发令牌，它不是客户端 `Authorization` 请求头中填写的令牌。
+禁止提交 `deploy/.env` 或 Kubernetes Secret，也禁止在日志或终端中输出该密钥。
+`oligosmith.him-ws.svc.cluster.local:8000` 必须按原样出现在 `MCP_ALLOWED_HOSTS`；缺少端口会使
+HiMat MCP initialize 返回 `421 Invalid Host header`。
 
 MCP HTTP 响应层会固定转换终态 `primer_design_output`：将内部
 `CallToolResult.structuredContent` 提升为 JSON-RPC `result`，使 `result` 严格只包含
@@ -58,7 +66,8 @@ docker compose --env-file deploy/.env -f deploy/docker-compose.yml up -d
 bash deploy/scripts/verify.sh --wait 180
 ```
 
-1Panel 反向代理应将整个域名转发到 `http://127.0.0.1:8020`。全量和按工作流 MCP 地址都不需要单独配置端口或子应用。
+以上 Compose 命令只用于源码包手工部署。当前 Kubernetes 环境由 Codeup 流水线和 Rancher
+Deployment 管理，不需要为 OligoSmith 配置独立 1Panel 反向代理。
 
 ## 创建客户端令牌
 
@@ -75,7 +84,7 @@ bash deploy/scripts/generate-jwt.sh 30 oligosmith-backend
   "name": "OligoSmith",
   "type": "streamableHttp",
   "description": "引物与探针设计、验证、优化和报告生成",
-  "baseUrl": "https://oligosmith.ne.scqcyz.cn/mcp",
+  "baseUrl": "http://oligosmith.him-ws.svc.cluster.local:8000/mcp",
   "headers": {
     "Content-Type": "application/json",
     "Authorization": "Bearer PASTE_GENERATED_JWT_HERE"
@@ -83,7 +92,7 @@ bash deploy/scripts/generate-jwt.sh 30 oligosmith-backend
 }
 ```
 
-轮换 `JWT_SECRET` 后，之前签发的全部令牌会立即失效。
+轮换 `MCP_JWT_SECRET`（兼容旧名 `JWT_SECRET`）后，之前签发的全部令牌会立即失效。
 
 ### 按工作流 Skill 与 MCP 入口
 
@@ -91,11 +100,11 @@ bash deploy/scripts/generate-jwt.sh 30 oligosmith-backend
 
 | Skill | MCP 地址 | 工具数 |
 |---|---|---:|
-| `oligosmith-wf01` | `https://oligosmith.ne.scqcyz.cn/mcp/wf01/` | 10 |
-| `oligosmith-wf02` | `https://oligosmith.ne.scqcyz.cn/mcp/wf02/` | 11 |
-| `oligosmith-wf03` | `https://oligosmith.ne.scqcyz.cn/mcp/wf03/` | 4 |
-| `oligosmith-wf04` | `https://oligosmith.ne.scqcyz.cn/mcp/wf04/` | 4 |
-| `oligosmith-wf05` | `https://oligosmith.ne.scqcyz.cn/mcp/wf05/` | 4 |
+| `oligosmith-wf01` | `/mcp/wf01/` | 10 |
+| `oligosmith-wf02` | `/mcp/wf02/` | 11 |
+| `oligosmith-wf03` | `/mcp/wf03/` | 4 |
+| `oligosmith-wf04` | `/mcp/wf04/` | 4 |
+| `oligosmith-wf05` | `/mcp/wf05/` | 4 |
 
 五份 Skill 位于 `skills/oligosmith-wf01` 至 `skills/oligosmith-wf05`。平时只需要暴露 Skill
 名称和简短描述；命中后加载对应 `SKILL.md`，并连接其 `agents/openai.yaml` 声明的唯一 MCP 依赖。
@@ -187,11 +196,16 @@ WF-02 通过 `AgentDService` 的 P6 服务操作，对每个保留候选执行 V
 P6 是软性规则，缺少扩增子序列、工具不可用或评估异常时明确写入 `not_evaluated`，不淘汰候选。
 WF-02 不直接调用 Primer3 或 BLAST，模型也不得自行生成候选。
 
-MCP 的 `run_wf02_until_blocked` 现在是持久化后台任务入口：后端立即接管执行，首个请求最多
-同步等待 235 秒。若任务在此期间完成，当前请求直接交付最终结果；若仍在运行，则返回
-`WAIT_FOR_BACKGROUND` 和一条 `user_message`，当前 HiMat 轮次必须结束，而后台任务继续执行。
-235 秒到达后，响应读取最近一次已原子提交的任务快照，不等待后台执行锁，因此后台正在处理一个
-长执行单元也不能延长前台请求。`create_wf02_batch` 在任务已持久化但响应链路失败时，禁止模型在
+WF-01 和 WF-02 的建单/恢复 MCP 工具均提交持久化后台任务后立即返回，不等待科学计算；
+HiMat 可以结束连接。返回任务编号、后台状态、当前阶段和 `WAIT_FOR_BACKGROUND`，并结束当前轮次。
+用户输入“查询进度”时，按会话保存的 workflow / batch_id 只调用一次 `get_wf01_batch` 或
+`get_wf02_batch`。查询读取最近一次原子持久化快照，不等待科学执行锁，不启动或重试任务。
+多个任务无法判断时先确认编号；运行中不估算虚假的完成百分比，终态交付报告。
+WF-01 的后台意图和每阶段恢复检查点位于 jobs 根目录 `wf01-background`，独立于科学批次；
+单工作线程和跨进程文件锁防止重复执行，重启重放尚未提交的阶段。失败保留检查点并等待明确恢复。
+REST 客户端通过已有 `POST /v1/wfXX/tasks/{batch_id}/run-until-blocked` 提交，
+通过 `GET /v1/wfXX/tasks/{batch_id}/progress` 只读查询；原始创建接口仍保留建单契约。
+`create_wf02_batch` 在任务已持久化但响应链路失败时，禁止模型在
 同一轮自动重试；用户后续明确继续后，可以用完全相同的参数再次调用。后端按已认证调用方隔离，
 在 15 分钟窗口内接回最近的同请求任务，不创建重复任务，也不在持久化记录中保存调用方明文。
 模型不得轮询、不得连续调用运行工具，也不得重复输出阶段过程文字。用户后续明确查询时只调用一次
@@ -296,8 +310,7 @@ Python 包和持久化状态机执行，模型不检查每个候选，也不对�
 MCP 批次与阶段工具返回 `wf01-agent-view-v1` 摘要。完整候选池保留在服务端批次或报告产物中。
 `get_wf01_report` 默认返回报告摘要；提供 `target_id` 时，每页最多返回 25 个紧凑候选。
 `get_wf01_candidate` 只展开一个明确选中的候选。`MCP_MAX_TOOL_RESULT_BYTES` 提供最终响应大小保护，
-默认值为 65536 字节。WF-02 首次同步等待通过 `MCP_WF02_SYNC_WAIT_SECONDS` 配置，默认且上限为
-235 秒；单进程后台工作线程数通过 `WF02_BACKGROUND_WORKERS` 配置，默认为 1，允许范围为 1–4。
+默认值为 65536 字节。MCP 提交同步等待固定为 0，旧 `MCP_WF02_SYNC_WAIT_SECONDS` 不再生效；WF-02 单进程后台工作线程数通过 `WF02_BACKGROUND_WORKERS` 配置，默认为 1，允许范围为 1–4。两个工作流共用科学执行锁，同一服务进程一次只计算一个后台任务，其他任务保持排队，避免完整 nt 检索争用内存；进度查询不占此锁。
 
 每个完成的 WF-01 科学阶段都会持久化一份面向专家、不可变的原始 JSON 快照。模型使用
 `get_wf01_export(format_name=scientific_data)` 下载科学工具数据包；后台客户端可通过

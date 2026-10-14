@@ -1,0 +1,82 @@
+{
+  "metadata": {
+    "namespace": "him-ws",
+    "name": "oligosmith-async-verify-r06"
+  },
+  "kind": "Job",
+  "apiVersion": "batch/v1",
+  "spec": {
+    "template": {
+      "spec": {
+        "volumes": [
+          {
+            "persistentVolumeClaim": {
+              "claimName": "oligosmith-blast-hosts"
+            },
+            "name": "data"
+          },
+          {
+            "configMap": {
+              "name": "oligosmith-offline-publish-async-r06"
+            },
+            "name": "scripts"
+          }
+        ],
+        "restartPolicy": "Never",
+        "securityContext": {
+          "runAsGroup": 10001,
+          "fsGroup": 10001,
+          "runAsUser": 10001
+        },
+        "imagePullSecrets": [
+          {
+            "name": "harbor"
+          }
+        ],
+        "automountServiceAccountToken": false,
+        "containers": [
+          {
+            "volumeMounts": [
+              {
+                "name": "data",
+                "mountPath": "/data"
+              },
+              {
+                "name": "scripts",
+                "mountPath": "/scripts",
+                "readOnly": true
+              }
+            ],
+            "command": [
+              "sh",
+              "-ec",
+              "mkdir -p /data/async-acceptance-20261013-r06; python /scripts/verify-async-transport.py /data/async-acceptance-20261013-r06/transport.json; python -m unittest discover -s /scripts -p test_wf01_runtime.py -v"
+            ],
+            "name": "download",
+            "image": "harbor-core.base.svc.cluster.local/qcyz/oligosmith@sha256:527a4bbbf8c8ae56a022e506246fcecdd6cda3f41f93b6564ae4f1cd51b56c8f",
+            "resources": {
+              "limits": {
+                "cpu": "1",
+                "memory": "1Gi"
+              },
+              "requests": {
+                "cpu": "100m",
+                "memory": "256Mi"
+              }
+            },
+            "env": [
+              {
+                "name": "AGENTD_STATE_DIR",
+                "value": "/tmp/async-verify-jobs"
+              }
+            ]
+          }
+        ],
+        "nodeSelector": {
+          "kubernetes.io/hostname": "k8s-a100-02"
+        }
+      }
+    },
+    "backoffLimit": 0
+  }
+}

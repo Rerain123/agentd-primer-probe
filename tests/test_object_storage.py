@@ -7,6 +7,7 @@ from urllib.parse import quote
 
 from agentd.errors import PersistenceError
 from agentd.object_storage import RustFSArtifactPublisher, RustFSSettings
+from agentd.service import AgentDService
 
 
 class FakeS3Client:
@@ -159,6 +160,35 @@ class RustFSArtifactPublisherTests(unittest.TestCase):
             "https://rustfs.ne.scqcyz.cn/wens/data/"
             "wf02-batch-fixture-multiplex-report.pdf",
         )
+
+    def test_capabilities_report_configured_attachment_location(self) -> None:
+        configured = RustFSSettings(
+            **{
+                **self.settings().__dict__,
+                "bucket": "oligosmith-v2",
+                "object_prefix": "reports/custom",
+                "public_base_url": "https://objects.example.test/storage",
+            }
+        )
+        publisher = RustFSArtifactPublisher(configured, client=FakeS3Client())
+
+        with tempfile.TemporaryDirectory(
+            prefix="agentd-rustfs-capabilities-"
+        ) as state_dir:
+            capabilities = AgentDService(
+                state_dir=state_dir,
+                artifact_publisher=publisher,
+            ).capabilities()
+
+        publication = capabilities["wf01_prd_v0_2"][
+            "attachment_publication"
+        ]
+        self.assertEqual(
+            publication["public_base_url"],
+            "https://objects.example.test/storage",
+        )
+        self.assertEqual(publication["bucket"], "oligosmith-v2")
+        self.assertEqual(publication["object_prefix"], "reports/custom")
 
 
 if __name__ == "__main__":

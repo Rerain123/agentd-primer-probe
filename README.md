@@ -79,12 +79,19 @@ python -B -m unittest discover -s tests -v
 | `tests/` / `testdata/` | 回归测试与可重复样例 |
 | `docs/` | 分层的架构、工作流、运维、参考与历史文档 |
 
+## GitHub 同步范围
+
+本仓库仅同步项目代码和项目文档；专家原稿、专家审查文档及原始资料归档不随 GitHub 版本分发。详见 [资料范围](docs/source-materials/README.md)。
+
 ## 继续阅读
 
 - [文档总导航](docs/README.md)
+- [同事接手与源码交接](docs/architecture/PROJECT_ENGINEERING_GUIDE.md)
 - [各工作流的当前状态](docs/workflows/README.md)
 - [服务器请求与容器部署](docs/operations/SERVER_REQUEST_AND_DEPLOYMENT.md)
 - [安装、升级和回滚](docs/operations/SERVER_INSTALL.md)
 - [发布变更](docs/history/CHANGELOG.md)
 
 智能体开发者从 [AGENTS.md](AGENTS.md) 开始；该文件只做路由，会引导到与当前任务相关的更深层文档。
+
+WF-01/WF-02 通过 HiMat 提交设计后立即返回任务编号，服务器后台运行，无需保持连接。用户输入“查询进度”即可读取当前阶段和状态；完成后查询返回报告。REST 客户端用 `run-until-blocked` 提交后台任务，使用 `/v1/wf01/tasks/{batch_id}/progress` 或 `/v1/wf02/tasks/{batch_id}/progress` 查询。

@@ -1,0 +1,20 @@
+[
+  {
+    "attachmentId": "attachment_html",
+    "http_status": 200,
+    "bytes": 100651,
+    "sha256": "4b94b548cb7c58436a9cdc945311f837f226ea790bacffdf4bce4b6cecc1a055"
+  },
+  {
+    "attachmentId": "attachment_process_html",
+    "http_status": 200,
+    "bytes": 1344351,
+    "sha256": "853b703514e5354f9c950fddb4a4170d4a6676df3137e9ef82d73bed7cb2b840"
+  },
+  {
+    "attachmentId": "attachment_scientific_data",
+    "http_status": 200,
+    "bytes": 35467,
+    "sha256": "f2ad59e48aa1c51d802b40cb72f132cb3af670c90495d654c264a9dbf3d33039"
+  }
+]

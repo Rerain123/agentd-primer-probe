@@ -6,3 +6,7 @@
 
 # Preserve archived design inputs byte-for-byte, including original whitespace.
 docs/source-materials/legacy-agentd-design/** -text -whitespace
+docs/source-materials/workspace-archive/** -text -whitespace
+
+# All released snapshots use byte-level integrity hashes; preserve original bytes.
+src/agentd_workflow_snapshots/** -text -whitespace

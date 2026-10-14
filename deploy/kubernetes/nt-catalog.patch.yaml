@@ -1,0 +1,38 @@
+# Merge-patch ONLY database-catalog.json in oligosmith-server-config.
+# Based on the catalog returned by the operator on 2026-10-12.
+data:
+  database-catalog.json: |
+    {
+      "resources": {
+        "nt:default:blast": {
+          "kind": "blast_database",
+          "path": "/data/blastdb/nt-20261006/nt",
+          "version": "nt-20261006",
+          "required": true
+        },
+        "cross:default:blast": {
+          "kind": "blast_database",
+          "path": "/data/blastdb/nt-20261006/nt",
+          "version": "nt-20261006",
+          "required": true
+        },
+        "host:pig:blast": {
+          "kind": "blast_database",
+          "path": "/data/blastdb/host/sus_scrofa/current/db",
+          "version": "SET_ON_SERVER",
+          "required": true
+        },
+        "host:cattle:blast": {
+          "kind": "blast_database",
+          "path": "/data/blastdb/host/bos_taurus/current/db",
+          "version": "SET_ON_SERVER",
+          "required": false
+        },
+        "host:chicken:blast": {
+          "kind": "blast_database",
+          "path": "/data/blastdb/host/gallus_gallus/current/db",
+          "version": "SET_ON_SERVER",
+          "required": false
+        }
+      }
+    }

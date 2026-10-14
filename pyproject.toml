@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "agentd-primer-probe"
-version = "1.2.13"
+version = "1.2.15"
 description = "Agent D 第三阶段引物与探针完整工作流框架"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -49,6 +49,9 @@ where = ["src"]
 [tool.setuptools.package-data]
 agentd = ["static/*.html", "static/*.css", "static/*.js"]
 "agentd_workflow_snapshots.wf02_wf01_v1.agentd" = ["static/*.html", "static/*.css", "static/*.js"]
+"agentd_workflow_snapshots.wf02_wf01_v2.agentd" = ["static/*.html", "static/*.css", "static/*.js"]
+"agentd_workflow_snapshots.wf02_wf01_v3.agentd" = ["static/*.html", "static/*.css", "static/*.js"]
+"agentd_workflow_snapshots.wf02_wf01_v4.agentd" = ["static/*.html", "static/*.css", "static/*.js"]
 "agentd_workflow_snapshots.wf03_v1.agentd" = ["static/*.html", "static/*.css", "static/*.js"]
 "agentd_workflow_snapshots.wf04_v1.agentd" = ["static/*.html", "static/*.css", "static/*.js"]
 

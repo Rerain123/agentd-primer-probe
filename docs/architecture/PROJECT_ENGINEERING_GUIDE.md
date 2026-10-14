@@ -1,12 +1,32 @@
 # OligoSmith Agent D 智能体开发交接文档
 
 > 读者：直接参与本仓库开发的智能体工程师
-> 文档版本：0.3
-> 对应代码版本：1.2.13
-> 更新日期：2026-08-30
+> 文档版本：0.4
+> 对应代码版本：1.2.15
+> 更新日期：2026-10-14
 > 范围：代码架构、工作流编排、MCP 契约、状态持久化、测试与部署
 
 本文只解释如何理解、修改和交付 Agent D。领域规则、参数依据和实验判断不在本文展开；需要修改具体工作流时，以代码、JSON Schema、测试和对应的工作流专题文档为准。
+
+## 2026-10-14 GitHub 代码与文档同步
+
+本仓库的 `main` 分支同步 OligoSmith 项目代码、工作流快照、测试、配置模板、部署脚本及项目文档。应用包版本为 `1.2.15`，同步基于 Codeup 交接提交 `a43f3e879815deab3cb58f9f58bd3a05ab66ca0f` 的项目文件，单独生成 GitHub 提交。
+
+专家原稿、专家要求对照审查、外层原始资料 ZIP 和完整交接归档均不纳入本次 GitHub 同步。完整资料由经授权的 Codeup 交接版本维护，详见 [资料范围](../source-materials/README.md)。
+
+```bash
+git clone --branch main https://github.com/Rerain123/agentd-primer-probe.git
+cd agentd-primer-probe
+python -m venv .venv
+```
+
+Windows 使用 `.venv\Scripts\python.exe -m pip install -e ".[api,mcp,dev,scientific]"`；Linux 使用 `.venv/bin/python -m pip install -e ".[api,mcp,dev,scientific]"`。测试前设置 `PYTHONPATH=src`，执行 `python -B -m pytest`。Windows 中文路径环境还应将 `AGENTD_ASCII_CACHE_DIR` 指向可写的纯英文目录，以便 Primer3 原生缓存正常工作。
+
+当前部署以 [Kubernetes / HiMat 部署文档](../operations/KUBERNETES_HIMAT_DEPLOYMENT.md) 为准。本文第 9 节保留早期 Compose 部署记录，不应直接将其中地址、bucket 或挂载位置用于现行集群。生产权限、Secret、RustFS、数据库、序列资源和任务数据须单独接管。
+
+完整交接版本已通过 580 项测试及 68 个子测试。测试通过不等同于所有专家要求或真实数据库科学验收已完成；各工作流当前状态和待办见 [工作流导航](../workflows/README.md)。
+
+GitHub 专用版本于 2026-10-14 独立验证：580 项测试及 68 个子测试通过，包含专家资料排除检查；依赖警告仍为 Starlette TestClient 弃用提示和 NCBI Entrez 未配置联系邮箱。
 
 ## 1. 项目现状
 
@@ -15,7 +35,7 @@ Agent D 是一个由后端确定性工作流驱动、通过 MCP 交给上层智�
 | 项目 | 当前值 |
 |---|---|
 | Python | 3.11 及以上；容器使用 Python 3.12 |
-| 包版本 | 1.2.13 |
+| 包版本 | 1.2.15 |
 | ASGI 入口 | `agentd.mcp_server:app` |
 | 主服务门面 | `AgentDService` |
 | 主要交付协议 | Streamable HTTP MCP |
@@ -561,13 +581,13 @@ vi deploy/.env
 
 #### 9.5.1 执行更新
 
-下面以 `1.2.14` 为示例。可以整段复制到服务器终端执行；如果安装包已经在 1Panel 中解压，脚本会直接验证现有目录，不会重复解压。
+下面以 `1.2.15` 为示例。可以整段复制到服务器终端执行；如果安装包已经在 1Panel 中解压，脚本会直接验证现有目录，不会重复解压。
 
 ```bash
 set -Eeuo pipefail
 
 # 每次更新只修改这一行
-VERSION=1.2.14
+VERSION=1.2.15
 
 BASE_DIR=/opt/oligosmith
 ZIP="$BASE_DIR/agentd-primer-probe-server-$VERSION.zip"

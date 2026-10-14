@@ -1,0 +1,107 @@
+{
+  "metadata": {
+    "namespace": "him-ws",
+    "name": "oligosmith-nt-profile-r05"
+  },
+  "kind": "Job",
+  "apiVersion": "batch/v1",
+  "spec": {
+    "template": {
+      "spec": {
+        "volumes": [
+          {
+            "persistentVolumeClaim": {
+              "claimName": "oligosmith-blast-nt",
+              "readOnly": true
+            },
+            "name": "nt"
+          },
+          {
+            "configMap": {
+              "name": "oligosmith-nt-profile-r05"
+            },
+            "name": "scripts"
+          },
+          {
+            "persistentVolumeClaim": {
+              "claimName": "oligosmith-blast-hosts"
+            },
+            "name": "evidence"
+          }
+        ],
+        "restartPolicy": "Never",
+        "securityContext": {
+          "runAsGroup": 10001,
+          "fsGroup": 10001,
+          "runAsUser": 10001
+        },
+        "imagePullSecrets": [
+          {
+            "name": "harbor"
+          }
+        ],
+        "automountServiceAccountToken": false,
+        "containers": [
+          {
+            "volumeMounts": [
+              {
+                "name": "nt",
+                "readOnly": true,
+                "mountPath": "/data/blastdb/nt-20261006",
+                "subPath": "nt-download-20260929-r01/recovery-r02/oligosmith-nt-download-r02-5c6r4/db"
+              },
+              {
+                "name": "scripts",
+                "readOnly": true,
+                "mountPath": "/scripts"
+              },
+              {
+                "name": "evidence",
+                "mountPath": "/evidence",
+                "subPath": "internal-controls-20261012-r01"
+              }
+            ],
+            "command": [
+              "python",
+              "/scripts/profile-nt-search.py"
+            ],
+            "name": "verify",
+            "image": "harbor-core.base.svc.cluster.local/qcyz/oligosmith@sha256:a4654140604d08a9b0d60e05a13471375a61ed8600d935a997966c8740df1eec",
+            "resources": {
+              "requests": {
+                "cpu": "16",
+                "memory": "16Gi"
+              },
+              "limits": {
+                "cpu": "16",
+                "memory": "32Gi"
+              }
+            },
+            "env": [
+              {
+                "value": "false",
+                "name": "BLAST_USAGE_REPORT"
+              },
+              {
+                "value": "/data/blastdb/nt-20261006",
+                "name": "BLASTDB"
+              },
+              {
+                "name": "PROFILE_NAME",
+                "value": "nt-profile-r05"
+              },
+              {
+                "name": "PROFILE_THREADS",
+                "value": "16"
+              }
+            ]
+          }
+        ],
+        "nodeSelector": {
+          "kubernetes.io/hostname": "k8s-a100-02"
+        }
+      }
+    },
+    "backoffLimit": 0
+  }
+}

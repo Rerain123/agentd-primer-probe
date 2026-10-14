@@ -1,0 +1,154 @@
+{
+  "status": "COMPLETED",
+  "gene_selected": "ACTB",
+  "refseq_accession": "NM_001444420.1",
+  "conservation": 0.999531,
+  "conservation_status": "PASS",
+  "gene_attempts": [
+    {
+      "gene": "ACTB",
+      "status": "PASS",
+      "conservation": 0.999531,
+      "sequence_count": 5,
+      "alignment_method": "mafft_shannon",
+      "data_source": {
+        "method": "database_catalog",
+        "resource_key": "internal:pig:ACTB:sequences",
+        "resource_version": "internal-controls-20261012-curated-r01",
+        "sequence_provenance": {
+          "template_scope": "SHARED_REFERENCE_INTERVAL",
+          "reference_interval": {
+            "reference_accession": "NM_001444420.1",
+            "start_1based": 801,
+            "end_1based": 1226
+          },
+          "source_coordinates": [
+            {
+              "accession": "NM_001444420.1",
+              "start_1based": 801,
+              "end_1based": 1226
+            },
+            {
+              "accession": "GBZA01000018.1",
+              "start_1based": 804,
+              "end_1based": 1229
+            },
+            {
+              "accession": "ON164673.1",
+              "start_1based": 718,
+              "end_1based": 1143
+            },
+            {
+              "accession": "DQ845171.1",
+              "start_1based": 377,
+              "end_1based": 802
+            },
+            {
+              "accession": "AY550069.1",
+              "start_1based": 798,
+              "end_1based": 1223
+            }
+          ],
+          "accessions": [
+            "NM_001444420.1",
+            "GBZA01000018.1",
+            "ON164673.1",
+            "DQ845171.1",
+            "AY550069.1"
+          ],
+          "sequence_count": 5,
+          "unique_sequence_count": 2,
+          "fasta_sha256": "b90725b2eeba626beb521fb86d97c695396ef881e044978aaaeafc06f3373509",
+          "conservation": 0.999531,
+          "conservation_status": "PASS",
+          "breed_coverage": "NOT_ESTABLISHED",
+          "manifest": "/data/internal-controls/manifest.json"
+        }
+      }
+    }
+  ],
+  "data_source": {
+    "method": "database_catalog",
+    "resource_key": "internal:pig:ACTB:sequences",
+    "resource_version": "internal-controls-20261012-curated-r01",
+    "sequence_provenance": {
+      "template_scope": "SHARED_REFERENCE_INTERVAL",
+      "reference_interval": {
+        "reference_accession": "NM_001444420.1",
+        "start_1based": 801,
+        "end_1based": 1226
+      },
+      "source_coordinates": [
+        {
+          "accession": "NM_001444420.1",
+          "start_1based": 801,
+          "end_1based": 1226
+        },
+        {
+          "accession": "GBZA01000018.1",
+          "start_1based": 804,
+          "end_1based": 1229
+        },
+        {
+          "accession": "ON164673.1",
+          "start_1based": 718,
+          "end_1based": 1143
+        },
+        {
+          "accession": "DQ845171.1",
+          "start_1based": 377,
+          "end_1based": 802
+        },
+        {
+          "accession": "AY550069.1",
+          "start_1based": 798,
+          "end_1based": 1223
+        }
+      ],
+      "accessions": [
+        "NM_001444420.1",
+        "GBZA01000018.1",
+        "ON164673.1",
+        "DQ845171.1",
+        "AY550069.1"
+      ],
+      "sequence_count": 5,
+      "unique_sequence_count": 2,
+      "fasta_sha256": "b90725b2eeba626beb521fb86d97c695396ef881e044978aaaeafc06f3373509",
+      "conservation": 0.999531,
+      "conservation_status": "PASS",
+      "breed_coverage": "NOT_ESTABLISHED",
+      "manifest": "/data/internal-controls/manifest.json"
+    }
+  },
+  "specificity_check": {
+    "verdict": "CAUTION",
+    "modes": {
+      "reference_locus": {
+        "verdict": "PASS",
+        "hits": 3,
+        "method": "blastn"
+      },
+      "host_genome": {
+        "verdict": "CAUTION",
+        "hits": 10,
+        "method": "blastn"
+      },
+      "pathogen_cross": {
+        "verdict": "NOT_CHECKED",
+        "hits": 0,
+        "method": "not_run",
+        "reason": "BLAST internal_pathogen_cross执行异常"
+      }
+    },
+    "blast_verified": false
+  },
+  "evidence_level": "in_silico_only",
+  "verdict": "CAUTION",
+  "warnings": [
+    "P5_BREED_COVERAGE_NOT_ESTABLISHED",
+    "P5_REFERENCE_INTERVAL_TEMPLATE"
+  ],
+  "acceptance_elapsed_seconds": 604.33,
+  "candidate_count": 1
+}

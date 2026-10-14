@@ -1,0 +1,589 @@
+{
+  "scope": "four-volume benchmark; full nt and workflow acceptance still required",
+  "cases": {
+    "ceph-8gi": {
+      "status": "COMPLETED",
+      "modes": {
+        "single-4": {
+          "seconds": [
+            45.634,
+            33.979
+          ],
+          "positive_controls_hit": [
+            [
+              "CONTROL_000",
+              "CONTROL_100",
+              "CONTROL_200",
+              "CONTROL_398"
+            ],
+            [
+              "CONTROL_000",
+              "CONTROL_100",
+              "CONTROL_200",
+              "CONTROL_398"
+            ]
+          ],
+          "hashes": [
+            "68006bd65975f299a06b878f60b1b7d76453d96478bd53091ac68bb922618548",
+            "68006bd65975f299a06b878f60b1b7d76453d96478bd53091ac68bb922618548"
+          ],
+          "memory_peak_GiB": [
+            7.999,
+            7.999
+          ],
+          "io_GiB": [
+            10.497,
+            10.504
+          ],
+          "cpu_seconds": [
+            117.55,
+            118.7
+          ],
+          "median_seconds": 39.8065
+        },
+        "single-16": {
+          "seconds": [
+            16.894,
+            15.084
+          ],
+          "positive_controls_hit": [
+            [
+              "CONTROL_000",
+              "CONTROL_100",
+              "CONTROL_200",
+              "CONTROL_398"
+            ],
+            [
+              "CONTROL_000",
+              "CONTROL_100",
+              "CONTROL_200",
+              "CONTROL_398"
+            ]
+          ],
+          "hashes": [
+            "68006bd65975f299a06b878f60b1b7d76453d96478bd53091ac68bb922618548",
+            "68006bd65975f299a06b878f60b1b7d76453d96478bd53091ac68bb922618548"
+          ],
+          "memory_peak_GiB": [
+            7.999,
+            7.999
+          ],
+          "io_GiB": [
+            10.491,
+            10.494
+          ],
+          "cpu_seconds": [
+            122.92,
+            122.09
+          ],
+          "median_seconds": 15.988999999999999
+        },
+        "split-4x4": {
+          "seconds": [
+            10.671,
+            10.27
+          ],
+          "positive_controls_hit": [
+            [
+              "CONTROL_000",
+              "CONTROL_100",
+              "CONTROL_200",
+              "CONTROL_398"
+            ],
+            [
+              "CONTROL_000",
+              "CONTROL_100",
+              "CONTROL_200",
+              "CONTROL_398"
+            ]
+          ],
+          "hashes": [
+            "68006bd65975f299a06b878f60b1b7d76453d96478bd53091ac68bb922618548",
+            "68006bd65975f299a06b878f60b1b7d76453d96478bd53091ac68bb922618548"
+          ],
+          "memory_peak_GiB": [
+            7.999,
+            7.999
+          ],
+          "io_GiB": [
+            10.593,
+            10.594
+          ],
+          "cpu_seconds": [
+            121.65,
+            122.49
+          ],
+          "median_seconds": 10.4705
+        }
+      },
+      "direct_read": [
+        {
+          "volume": "000",
+          "seconds": 10.987774976994842,
+          "returncode": 0,
+          "MiB_per_second": 93.19448224449025,
+          "stderr": ""
+        },
+        {
+          "volume": "100",
+          "seconds": 8.641793340910226,
+          "returncode": 0,
+          "MiB_per_second": 118.49392361101565,
+          "stderr": ""
+        },
+        {
+          "volume": "200",
+          "seconds": 8.462290574098006,
+          "returncode": 0,
+          "MiB_per_second": 121.00742594851725,
+          "stderr": ""
+        },
+        {
+          "volume": "398",
+          "seconds": 7.679758405080065,
+          "returncode": 0,
+          "MiB_per_second": 133.33752782153104,
+          "stderr": ""
+        }
+      ]
+    },
+    "ceph-32gi": {
+      "status": "COMPLETED",
+      "modes": {
+        "single-4": {
+          "seconds": [
+            49.465,
+            33.78
+          ],
+          "positive_controls_hit": [
+            [
+              "CONTROL_000",
+              "CONTROL_100",
+              "CONTROL_200",
+              "CONTROL_398"
+            ],
+            [
+              "CONTROL_000",
+              "CONTROL_100",
+              "CONTROL_200",
+              "CONTROL_398"
+            ]
+          ],
+          "hashes": [
+            "68006bd65975f299a06b878f60b1b7d76453d96478bd53091ac68bb922618548",
+            "68006bd65975f299a06b878f60b1b7d76453d96478bd53091ac68bb922618548"
+          ],
+          "memory_peak_GiB": [
+            22.385,
+            22.384
+          ],
+          "io_GiB": [
+            10.459,
+            10.459
+          ],
+          "cpu_seconds": [
+            120.97,
+            117.83
+          ],
+          "median_seconds": 41.6225
+        },
+        "single-16": {
+          "seconds": [
+            19.102,
+            15.084
+          ],
+          "positive_controls_hit": [
+            [
+              "CONTROL_000",
+              "CONTROL_100",
+              "CONTROL_200",
+              "CONTROL_398"
+            ],
+            [
+              "CONTROL_000",
+              "CONTROL_100",
+              "CONTROL_200",
+              "CONTROL_398"
+            ]
+          ],
+          "hashes": [
+            "68006bd65975f299a06b878f60b1b7d76453d96478bd53091ac68bb922618548",
+            "68006bd65975f299a06b878f60b1b7d76453d96478bd53091ac68bb922618548"
+          ],
+          "memory_peak_GiB": [
+            22.388,
+            22.387
+          ],
+          "io_GiB": [
+            10.459,
+            10.459
+          ],
+          "cpu_seconds": [
+            120.28,
+            120.33
+          ],
+          "median_seconds": 17.093
+        },
+        "split-4x4": {
+          "seconds": [
+            10.269,
+            10.272
+          ],
+          "positive_controls_hit": [
+            [
+              "CONTROL_000",
+              "CONTROL_100",
+              "CONTROL_200",
+              "CONTROL_398"
+            ],
+            [
+              "CONTROL_000",
+              "CONTROL_100",
+              "CONTROL_200",
+              "CONTROL_398"
+            ]
+          ],
+          "hashes": [
+            "68006bd65975f299a06b878f60b1b7d76453d96478bd53091ac68bb922618548",
+            "68006bd65975f299a06b878f60b1b7d76453d96478bd53091ac68bb922618548"
+          ],
+          "memory_peak_GiB": [
+            22.385,
+            22.353
+          ],
+          "io_GiB": [
+            10.459,
+            10.459
+          ],
+          "cpu_seconds": [
+            121.51,
+            122.2
+          ],
+          "median_seconds": 10.2705
+        }
+      },
+      "direct_read": [
+        {
+          "volume": "000",
+          "seconds": 20.580897235078737,
+          "returncode": 0,
+          "MiB_per_second": 49.75487649074219,
+          "stderr": ""
+        },
+        {
+          "volume": "100",
+          "seconds": 9.717671419028193,
+          "returncode": 0,
+          "MiB_per_second": 105.37503850921564,
+          "stderr": ""
+        },
+        {
+          "volume": "200",
+          "seconds": 9.10967795480974,
+          "returncode": 0,
+          "MiB_per_second": 112.40792540414088,
+          "stderr": ""
+        },
+        {
+          "volume": "398",
+          "seconds": 8.754643239080906,
+          "returncode": 0,
+          "MiB_per_second": 116.96650246452569,
+          "stderr": ""
+        }
+      ]
+    },
+    "local-32gi": {
+      "status": "COMPLETED",
+      "modes": {
+        "single-4": {
+          "seconds": [
+            38.4,
+            32.968
+          ],
+          "positive_controls_hit": [
+            [
+              "CONTROL_000",
+              "CONTROL_100",
+              "CONTROL_200",
+              "CONTROL_398"
+            ],
+            [
+              "CONTROL_000",
+              "CONTROL_100",
+              "CONTROL_200",
+              "CONTROL_398"
+            ]
+          ],
+          "hashes": [
+            "68006bd65975f299a06b878f60b1b7d76453d96478bd53091ac68bb922618548",
+            "68006bd65975f299a06b878f60b1b7d76453d96478bd53091ac68bb922618548"
+          ],
+          "memory_peak_GiB": [
+            10.506,
+            10.512
+          ],
+          "io_GiB": [
+            10.459,
+            10.459
+          ],
+          "cpu_seconds": [
+            119.03,
+            119.0
+          ],
+          "median_seconds": 35.684
+        },
+        "single-16": {
+          "seconds": [
+            12.672,
+            12.672
+          ],
+          "positive_controls_hit": [
+            [
+              "CONTROL_000",
+              "CONTROL_100",
+              "CONTROL_200",
+              "CONTROL_398"
+            ],
+            [
+              "CONTROL_000",
+              "CONTROL_100",
+              "CONTROL_200",
+              "CONTROL_398"
+            ]
+          ],
+          "hashes": [
+            "68006bd65975f299a06b878f60b1b7d76453d96478bd53091ac68bb922618548",
+            "68006bd65975f299a06b878f60b1b7d76453d96478bd53091ac68bb922618548"
+          ],
+          "memory_peak_GiB": [
+            10.517,
+            10.519
+          ],
+          "io_GiB": [
+            10.459,
+            10.459
+          ],
+          "cpu_seconds": [
+            122.78,
+            122.77
+          ],
+          "median_seconds": 12.672
+        },
+        "split-4x4": {
+          "seconds": [
+            9.665,
+            9.869
+          ],
+          "positive_controls_hit": [
+            [
+              "CONTROL_000",
+              "CONTROL_100",
+              "CONTROL_200",
+              "CONTROL_398"
+            ],
+            [
+              "CONTROL_000",
+              "CONTROL_100",
+              "CONTROL_200",
+              "CONTROL_398"
+            ]
+          ],
+          "hashes": [
+            "68006bd65975f299a06b878f60b1b7d76453d96478bd53091ac68bb922618548",
+            "68006bd65975f299a06b878f60b1b7d76453d96478bd53091ac68bb922618548"
+          ],
+          "memory_peak_GiB": [
+            10.463,
+            10.464
+          ],
+          "io_GiB": [
+            10.459,
+            10.459
+          ],
+          "cpu_seconds": [
+            122.23,
+            121.77
+          ],
+          "median_seconds": 9.767
+        }
+      },
+      "direct_read": [
+        {
+          "volume": "000",
+          "seconds": 6.546390548814088,
+          "returncode": 0,
+          "MiB_per_second": 156.42207600728966,
+          "stderr": ""
+        },
+        {
+          "volume": "100",
+          "seconds": 7.465415176004171,
+          "returncode": 0,
+          "MiB_per_second": 137.16584755947775,
+          "stderr": ""
+        },
+        {
+          "volume": "200",
+          "seconds": 4.102362057892606,
+          "returncode": 0,
+          "MiB_per_second": 249.61229300322447,
+          "stderr": ""
+        },
+        {
+          "volume": "398",
+          "seconds": 3.7540617038030177,
+          "returncode": 0,
+          "MiB_per_second": 272.7712224236075,
+          "stderr": ""
+        }
+      ]
+    }
+  },
+  "comparisons": {
+    "ceph-8gi/r1-single-4": {
+      "exact_equal": true,
+      "baseline_rows": 42,
+      "rows": 42,
+      "missing_rows": 0,
+      "extra_rows": 0,
+      "equal_ignoring_evalue": true
+    },
+    "ceph-8gi/r1-single-16": {
+      "exact_equal": true,
+      "baseline_rows": 42,
+      "rows": 42,
+      "missing_rows": 0,
+      "extra_rows": 0,
+      "equal_ignoring_evalue": true
+    },
+    "ceph-8gi/r1-split-4x4": {
+      "exact_equal": true,
+      "baseline_rows": 42,
+      "rows": 42,
+      "missing_rows": 0,
+      "extra_rows": 0,
+      "equal_ignoring_evalue": true
+    },
+    "ceph-8gi/r2-split-4x4": {
+      "exact_equal": true,
+      "baseline_rows": 42,
+      "rows": 42,
+      "missing_rows": 0,
+      "extra_rows": 0,
+      "equal_ignoring_evalue": true
+    },
+    "ceph-8gi/r2-single-16": {
+      "exact_equal": true,
+      "baseline_rows": 42,
+      "rows": 42,
+      "missing_rows": 0,
+      "extra_rows": 0,
+      "equal_ignoring_evalue": true
+    },
+    "ceph-8gi/r2-single-4": {
+      "exact_equal": true,
+      "baseline_rows": 42,
+      "rows": 42,
+      "missing_rows": 0,
+      "extra_rows": 0,
+      "equal_ignoring_evalue": true
+    },
+    "ceph-32gi/r1-single-4": {
+      "exact_equal": true,
+      "baseline_rows": 42,
+      "rows": 42,
+      "missing_rows": 0,
+      "extra_rows": 0,
+      "equal_ignoring_evalue": true
+    },
+    "ceph-32gi/r1-single-16": {
+      "exact_equal": true,
+      "baseline_rows": 42,
+      "rows": 42,
+      "missing_rows": 0,
+      "extra_rows": 0,
+      "equal_ignoring_evalue": true
+    },
+    "ceph-32gi/r1-split-4x4": {
+      "exact_equal": true,
+      "baseline_rows": 42,
+      "rows": 42,
+      "missing_rows": 0,
+      "extra_rows": 0,
+      "equal_ignoring_evalue": true
+    },
+    "ceph-32gi/r2-split-4x4": {
+      "exact_equal": true,
+      "baseline_rows": 42,
+      "rows": 42,
+      "missing_rows": 0,
+      "extra_rows": 0,
+      "equal_ignoring_evalue": true
+    },
+    "ceph-32gi/r2-single-16": {
+      "exact_equal": true,
+      "baseline_rows": 42,
+      "rows": 42,
+      "missing_rows": 0,
+      "extra_rows": 0,
+      "equal_ignoring_evalue": true
+    },
+    "ceph-32gi/r2-single-4": {
+      "exact_equal": true,
+      "baseline_rows": 42,
+      "rows": 42,
+      "missing_rows": 0,
+      "extra_rows": 0,
+      "equal_ignoring_evalue": true
+    },
+    "local-32gi/r1-single-4": {
+      "exact_equal": true,
+      "baseline_rows": 42,
+      "rows": 42,
+      "missing_rows": 0,
+      "extra_rows": 0,
+      "equal_ignoring_evalue": true
+    },
+    "local-32gi/r1-single-16": {
+      "exact_equal": true,
+      "baseline_rows": 42,
+      "rows": 42,
+      "missing_rows": 0,
+      "extra_rows": 0,
+      "equal_ignoring_evalue": true
+    },
+    "local-32gi/r1-split-4x4": {
+      "exact_equal": true,
+      "baseline_rows": 42,
+      "rows": 42,
+      "missing_rows": 0,
+      "extra_rows": 0,
+      "equal_ignoring_evalue": true
+    },
+    "local-32gi/r2-split-4x4": {
+      "exact_equal": true,
+      "baseline_rows": 42,
+      "rows": 42,
+      "missing_rows": 0,
+      "extra_rows": 0,
+      "equal_ignoring_evalue": true
+    },
+    "local-32gi/r2-single-16": {
+      "exact_equal": true,
+      "baseline_rows": 42,
+      "rows": 42,
+      "missing_rows": 0,
+      "extra_rows": 0,
+      "equal_ignoring_evalue": true
+    },
+    "local-32gi/r2-single-4": {
+      "exact_equal": true,
+      "baseline_rows": 42,
+      "rows": 42,
+      "missing_rows": 0,
+      "extra_rows": 0,
+      "equal_ignoring_evalue": true
+    }
+  }
+}

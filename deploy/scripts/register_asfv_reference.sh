@@ -9,7 +9,7 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=common.sh
 source "${SCRIPT_DIR}/common.sh"
 
-EXPECTED_VERSION="1.2.13"
+EXPECTED_VERSION="1.2.15"
 CATALOG="${AGENTD_DEPLOY_DIR}/server-config/database-catalog.json"
 BLASTDB_ROOT="$(agentd_resolve_host_path "$(agentd_read_env AGENTD_BLASTDB_DIR ./server-data/blastdb)")"
 REFERENCE_DIR="${ASFV_REFERENCE_DIR:-${BLASTDB_ROOT}/target/asfv/NC_001659.2}"

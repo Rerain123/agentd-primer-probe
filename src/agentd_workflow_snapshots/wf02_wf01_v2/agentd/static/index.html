@@ -1,0 +1,251 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Agent D 本地引物探针设计界面">
+  <title>Agent D · 本地引物探针设计</title>
+  <link rel="stylesheet" href="/assets/app.css?v=6">
+</head>
+<body>
+  <div class="page-shell">
+    <header class="topbar">
+      <a class="brand" href="/" aria-label="Agent D 首页">
+        <span class="brand-mark">D</span>
+        <span>
+          <strong>Agent D</strong>
+          <small>Primer / Probe Studio</small>
+        </span>
+      </a>
+      <div class="local-badge"><span></span>本机运行</div>
+    </header>
+
+    <main>
+      <section class="intro">
+        <div>
+          <p class="eyebrow">温氏 AI4S · 单靶标设计</p>
+          <h1>把序列变成<br><em>可判断的候选方案</em></h1>
+          <p class="intro-copy">粘贴一段 DNA 序列，Agent D 将完成引物与探针设计、热力学检查、扩增子结构评估，并明确标出尚未完成的特异性证据。</p>
+        </div>
+        <div class="tool-panel" aria-label="本地能力状态">
+          <div class="tool-panel-head">
+            <span>本地能力</span>
+            <button id="refreshTools" class="text-button" type="button">刷新</button>
+          </div>
+          <div id="toolStatus" class="tool-grid" aria-live="polite">
+            <span class="tool-chip loading">正在检查…</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="workspace">
+        <form id="designForm" class="input-card">
+          <div class="section-heading">
+            <span class="step-number">01</span>
+            <div>
+              <h2>输入靶标</h2>
+              <p>当前界面运行 WF-01 单靶标 TaqMan 设计</p>
+            </div>
+          </div>
+
+          <div class="field-grid two-columns">
+            <label>
+              <span>方案名称</span>
+              <input id="assayId" name="assay_id" value="local_design_001" required>
+            </label>
+            <label>
+              <span>靶标编号 / 登录号</span>
+              <input id="targetId" name="target_id" value="target_001" placeholder="例如：NM_002046.7" required>
+            </label>
+            <label>
+              <span>目标物种 / 病原学名</span>
+              <input id="targetSpecies" name="target_species" placeholder="可选；填写后运行靶标特异性评估">
+              <small class="field-help">留空仍可运行 Primer3；靶标特异性将标记为未评估。</small>
+            </label>
+            <label>
+              <span>靶基因</span>
+              <input id="gene" name="gene" placeholder="例如：E2">
+            </label>
+            <label>
+              <span>宿主 / 背景物种</span>
+              <input id="hostSpecies" name="host_species" list="hostSpeciesOptions" placeholder="病原检测时填写；内源基因可留空">
+              <small class="field-help">用于本地版本化宿主数据库排除，不再默认设为猪。</small>
+              <datalist id="hostSpeciesOptions">
+                <option value="pig">Sus scrofa（猪）</option>
+                <option value="cattle">Bos taurus（牛）</option>
+                <option value="chicken">Gallus gallus（鸡）</option>
+                <option value="sheep">Ovis aries（羊）</option>
+                <option value="goat">Capra hircus（山羊）</option>
+                <option value="Homo sapiens">人</option>
+              </datalist>
+            </label>
+            <label>
+              <span>探针类型</span>
+              <select id="probeType" name="probe_type">
+                <option value="TAQMAN_BHQ" selected>TaqMan BHQ（普通探针）</option>
+                <option value="TAQMAN_MGB">TaqMan MGB（短探针）</option>
+              </select>
+            </label>
+          </div>
+
+          <div class="design-options">
+            <label for="topCandidates">
+              <span>显示候选数量</span>
+              <select id="topCandidates" name="top_candidates">
+                <option value="3" selected>前 3 组（快速）</option>
+                <option value="10">前 10 组</option>
+                <option value="20">前 20 组</option>
+              </select>
+            </label>
+            <p>候选越多，规则、结构和特异性检查耗时越长；不足所选数量时将返回全部合格候选。</p>
+          </div>
+
+          <details class="advanced-options">
+            <summary>
+              <span>高级设计参数</span>
+              <small>默认采用 Agent D 标准 TaqMan 条件；展开后可与 Primer3Web 对齐。</small>
+            </summary>
+            <div class="parameter-grid">
+              <fieldset>
+                <legend>扩增子长度（bp）</legend>
+                <div class="mini-grid two">
+                  <label><span>最小</span><input id="productMin" type="number" min="50" max="200" step="1" value="70" required></label>
+                  <label><span>最大</span><input id="productMax" type="number" min="50" max="200" step="1" value="150" required></label>
+                </div>
+              </fieldset>
+              <fieldset>
+                <legend>引物长度（nt）</legend>
+                <div class="mini-grid three">
+                  <label><span>最小</span><input id="primerSizeMin" type="number" min="18" max="28" step="1" value="18" required></label>
+                  <label><span>最适</span><input id="primerSizeOpt" type="number" min="18" max="28" step="1" value="20" required></label>
+                  <label><span>最大</span><input id="primerSizeMax" type="number" min="18" max="28" step="1" value="28" required></label>
+                </div>
+              </fieldset>
+              <fieldset>
+                <legend>引物 Tm（°C）</legend>
+                <div class="mini-grid three">
+                  <label><span>最小</span><input id="primerTmMin" type="number" min="50" max="65" step="0.1" value="58" required></label>
+                  <label><span>最适</span><input id="primerTmOpt" type="number" min="50" max="65" step="0.1" value="60" required></label>
+                  <label><span>最大</span><input id="primerTmMax" type="number" min="50" max="65" step="0.1" value="62" required></label>
+                </div>
+              </fieldset>
+              <fieldset>
+                <legend>引物 GC（%）</legend>
+                <div class="mini-grid two">
+                  <label><span>最小</span><input id="primerGcMin" type="number" min="0" max="100" step="0.1" value="35" required></label>
+                  <label><span>最大</span><input id="primerGcMax" type="number" min="0" max="100" step="0.1" value="65" required></label>
+                </div>
+              </fieldset>
+              <fieldset>
+                <legend>探针长度（nt）</legend>
+                <div class="mini-grid three">
+                  <label><span>最小</span><input id="probeSizeMin" type="number" min="18" max="30" step="1" value="18" required></label>
+                  <label><span>最适</span><input id="probeSizeOpt" type="number" min="18" max="30" step="1" value="25" required></label>
+                  <label><span>最大</span><input id="probeSizeMax" type="number" min="18" max="30" step="1" value="30" required></label>
+                </div>
+              </fieldset>
+              <fieldset>
+                <legend>探针 Tm（°C）</legend>
+                <div class="mini-grid three">
+                  <label><span>最小</span><input id="probeTmMin" type="number" min="50" max="80" step="0.1" value="68" required></label>
+                  <label><span>最适</span><input id="probeTmOpt" type="number" min="50" max="80" step="0.1" value="70" required></label>
+                  <label><span>最大</span><input id="probeTmMax" type="number" min="50" max="80" step="0.1" value="72" required></label>
+                </div>
+              </fieldset>
+            </div>
+            <p id="probeParameterNote" class="parameter-note">显式填写的参数会在标准轮和后续松弛轮中持续生效；候选仍须通过 Agent D 的硬性实验规则。</p>
+          </details>
+
+          <label class="sequence-field">
+            <span>DNA 序列（5′→3′）</span>
+            <textarea id="sequence" name="sequence" spellcheck="false" placeholder="在这里粘贴至少 80 nt 的 DNA 序列…" required></textarea>
+            <span class="sequence-meta">
+              <span id="sequenceHint">支持 A/C/G/T 和常见 IUPAC 简并碱基</span>
+              <strong id="sequenceCount">0 nt</strong>
+            </span>
+          </label>
+
+          <div class="form-footer">
+            <div class="check-stack">
+              <label class="check-row">
+                <input id="allowFallback" type="checkbox" checked>
+                <span>允许本地降级检查</span>
+              </label>
+            </div>
+            <button id="loadExample" class="secondary-button" type="button">载入示例</button>
+            <button id="submitButton" class="primary-button" type="submit">
+              <span class="button-label">开始设计</span>
+              <span class="button-loader" aria-hidden="true"></span>
+            </button>
+          </div>
+          <p class="privacy-note">设计与特异性评估仅使用本地工具和已配置的版本化数据库；序列不会发送到公共 BLAST 服务。</p>
+        </form>
+
+        <section id="resultArea" class="result-card empty" aria-live="polite">
+          <div id="emptyState" class="empty-state">
+            <span class="empty-glyph">ACGT</span>
+            <h2>等待设计任务</h2>
+            <p>完成输入后，候选方案和判断依据会显示在这里。</p>
+          </div>
+          <div id="errorState" class="error-state" hidden></div>
+          <div id="resultContent" hidden></div>
+        </section>
+      </section>
+
+      <section class="batch-workspace" aria-labelledby="batchTitle">
+        <div class="batch-intro">
+          <p class="eyebrow">WF-01 · 多靶标批量任务</p>
+          <h2 id="batchTitle">先建立靶标清单，再按靶标选择执行路径</h2>
+          <p>粘贴一条或多条 FASTA。仅提供合格序列时执行基础设计；提供靶标物种后自动进入完整特异性评估。宿主为可选项，提供时追加宿主专库排除。</p>
+        </div>
+        <form id="batchPreflightForm" class="batch-input-card">
+          <div class="field-grid two-columns">
+            <label>
+              <span>批次名称</span>
+              <input id="batchTaskName" value="batch_design_001" required>
+            </label>
+            <label>
+              <span>序列解释方式</span>
+              <select id="batchSequenceMode" disabled>
+                <option value="independent_targets" selected>每条 FASTA = 独立靶标</option>
+              </select>
+              <small class="field-help">当前批量入口固定按独立靶标处理；同靶标多序列保守区设计由后续专门入口承载。</small>
+            </label>
+            <label>
+              <span>整批默认靶标物种</span>
+              <input id="batchTargetSpecies" placeholder="可选；例如 Classical swine fever virus">
+            </label>
+            <label>
+              <span>整批默认宿主</span>
+              <input id="batchHostSpecies" placeholder="可选；例如 pig">
+            </label>
+          </div>
+          <label class="sequence-field">
+            <span>FASTA / DNA 序列</span>
+            <textarea id="batchFasta" spellcheck="false" placeholder=">target_001&#10;ACGT...&#10;>target_002&#10;ACGT..." required></textarea>
+            <span class="sequence-meta"><span>每条模板至少 80 nt；支持多条 FASTA</span><strong id="batchSequenceCount">0 条</strong></span>
+          </label>
+          <div class="batch-actions">
+            <button id="loadBatchExample" class="secondary-button" type="button">载入两靶标示例</button>
+            <button id="batchPreflightButton" class="primary-button" type="submit">解析并预检</button>
+          </div>
+        </form>
+        <section id="manifestPanel" class="manifest-panel" hidden aria-live="polite">
+          <div id="manifestSummary"></div>
+          <div id="manifestTargets" class="manifest-targets"></div>
+          <div class="manifest-footer">
+            <p id="manifestHint"></p>
+            <button id="confirmManifestButton" class="primary-button" type="button">确认并开始批量任务</button>
+          </div>
+        </section>
+      </section>
+    </main>
+
+    <footer>
+      <p>科研设计辅助工具 · 所有结果均需结合 BLAST、群体序列和实验验证</p>
+      <a href="/docs" target="_blank" rel="noreferrer">打开 API 文档</a>
+    </footer>
+  </div>
+  <script src="/assets/app.js?v=6" defer></script>
+</body>
+</html>

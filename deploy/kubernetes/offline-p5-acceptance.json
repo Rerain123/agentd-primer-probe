@@ -1,0 +1,148 @@
+{
+  "apiVersion": "batch/v1",
+  "kind": "Job",
+  "metadata": {
+    "name": "oligosmith-offline-p5-r01",
+    "namespace": "him-ws"
+  },
+  "spec": {
+    "backoffLimit": 0,
+    "activeDeadlineSeconds": 2400,
+    "template": {
+      "spec": {
+        "restartPolicy": "Never",
+        "automountServiceAccountToken": false,
+        "nodeSelector": {
+          "kubernetes.io/hostname": "k8s-a100-02"
+        },
+        "securityContext": {
+          "fsGroup": 10001,
+          "fsGroupChangePolicy": "OnRootMismatch"
+        },
+        "imagePullSecrets": [
+          {
+            "name": "harbor"
+          }
+        ],
+        "containers": [
+          {
+            "name": "acceptance",
+            "image": "harbor-core.base.svc.cluster.local/qcyz/oligosmith@sha256:a9f6e84ddc94c5a8e4fec647777fd3f2b8e6ce5219aa470b2e0ace98a5fe44b1",
+            "command": [
+              "python",
+              "/scripts/accept-offline-p5.py"
+            ],
+            "env": [
+              {
+                "name": "AGENTD_CONFIG",
+                "value": "/config/production.json"
+              },
+              {
+                "name": "AGENTD_DATABASE_CATALOG",
+                "value": "/config/database-catalog.json"
+              },
+              {
+                "name": "BLASTDB",
+                "value": "/data/blastdb/hosts-20261012/taxonomy:/data/blastdb/nt-20261006:/data/blastdb"
+              },
+              {
+                "name": "BLAST_USAGE_REPORT",
+                "value": "false"
+              }
+            ],
+            "resources": {
+              "limits": {
+                "cpu": "4",
+                "memory": "8Gi"
+              },
+              "requests": {
+                "cpu": "1",
+                "memory": "2Gi"
+              }
+            },
+            "volumeMounts": [
+              {
+                "mountPath": "/data/blastdb/hosts-20261012",
+                "name": "blast-hosts",
+                "readOnly": true,
+                "subPath": "hosts-20261012-r01"
+              },
+              {
+                "mountPath": "/data/blastdb/nt-20261006",
+                "name": "blast-nt",
+                "readOnly": true,
+                "subPath": "nt-download-20260929-r01/recovery-r02/oligosmith-nt-download-r02-5c6r4/db"
+              },
+              {
+                "mountPath": "/config",
+                "name": "server-config",
+                "readOnly": true
+              },
+              {
+                "mountPath": "/tmp",
+                "name": "tmp"
+              },
+              {
+                "name": "blast-hosts",
+                "mountPath": "/data/internal-controls",
+                "subPath": "internal-controls-20261012-curated-r01",
+                "readOnly": true
+              },
+              {
+                "name": "evidence",
+                "mountPath": "/evidence"
+              },
+              {
+                "name": "scripts",
+                "mountPath": "/scripts",
+                "readOnly": true
+              }
+            ]
+          }
+        ],
+        "volumes": [
+          {
+            "name": "blast-hosts",
+            "persistentVolumeClaim": {
+              "claimName": "oligosmith-blast-hosts",
+              "readOnly": true
+            }
+          },
+          {
+            "name": "blast-nt",
+            "persistentVolumeClaim": {
+              "claimName": "oligosmith-blast-nt",
+              "readOnly": true
+            }
+          },
+          {
+            "configMap": {
+              "defaultMode": 420,
+              "name": "oligosmith-server-config",
+              "optional": false
+            },
+            "name": "server-config"
+          },
+          {
+            "emptyDir": {
+              "sizeLimit": "512Mi"
+            },
+            "name": "tmp"
+          },
+          {
+            "name": "evidence",
+            "persistentVolumeClaim": {
+              "claimName": "oligosmith-blast-hosts"
+            }
+          },
+          {
+            "name": "scripts",
+            "configMap": {
+              "name": "oligosmith-offline-p5-r01"
+            }
+          }
+        ]
+      }
+    }
+  }
+}

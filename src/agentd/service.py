@@ -6,6 +6,7 @@ import copy
 import logging
 import os
 import time
+import threading
 from pathlib import Path
 from typing import Any
 from urllib.error import URLError
@@ -42,6 +43,7 @@ from .wf01_agent_view import (
     summarize_wf01_report,
 )
 from .wf01_v02 import WF01V02BatchService
+from .wf01_runtime import WF01BackgroundExecutor
 from .wf01_v02_m3 import (
     FINAL_RANK_TIE_BREAKERS,
     SCORING_POLICY_STATUS,
@@ -90,6 +92,90 @@ from agentd_workflow_snapshots.wf02_wf01_v1.agentd.ui_messages import (
 from agentd_workflow_snapshots.wf02_wf01_v1.agentd.wf01_agent_view import (
     next_stage_for_batch as wf02_snapshot_next_stage_for_batch,
     summarize_wf01_batch as summarize_wf02_snapshot_wf01_batch,
+)
+from agentd_workflow_snapshots.wf02_wf01_v2.agentd.database import (
+    DatabaseCatalog as WF02WF01SnapshotDatabaseCatalogV2,
+)
+from agentd_workflow_snapshots.wf02_wf01_v2.agentd.internal_control import (
+    InternalControlDesigner as WF02SnapshotInternalControlDesignerV2,
+)
+from agentd_workflow_snapshots.wf02_wf01_v2.agentd.multiplex import (
+    MultiplexEvaluator as WF02SnapshotMultiplexEvaluatorV2,
+)
+from agentd_workflow_snapshots.wf02_wf01_v2.agentd.primer3_tool import (
+    Primer3Adapter as WF02SnapshotPrimer3AdapterV2,
+)
+from agentd_workflow_snapshots.wf02_wf01_v2.agentd.specificity import (
+    P2_POLICY_VERSION as WF02_WF01_V2_SNAPSHOT_P2_POLICY_VERSION,
+)
+from agentd_workflow_snapshots.wf02_wf01_v2.agentd.structure import (
+    ViennaRNAAdapter as WF02SnapshotViennaRNAAdapterV2,
+)
+from agentd_workflow_snapshots.wf02_wf01_v2.agentd.wf01_v02 import (
+    WF01V02BatchService as WF02SnapshotWF01BatchServiceV2,
+)
+from agentd_workflow_snapshots.wf02_wf01_v2.agentd.ui_messages import (
+    ui_message_for_batch as wf02_v2_snapshot_ui_message_for_batch,
+)
+from agentd_workflow_snapshots.wf02_wf01_v2.agentd.wf01_agent_view import (
+    next_stage_for_batch as wf02_v2_snapshot_next_stage_for_batch,
+    summarize_wf01_batch as summarize_wf02_v2_snapshot_wf01_batch,
+)
+from agentd_workflow_snapshots.wf02_wf01_v3.agentd.database import (
+    DatabaseCatalog as WF02WF01SnapshotDatabaseCatalogV3,
+)
+from agentd_workflow_snapshots.wf02_wf01_v3.agentd.internal_control import (
+    InternalControlDesigner as WF02SnapshotInternalControlDesignerV3,
+)
+from agentd_workflow_snapshots.wf02_wf01_v3.agentd.multiplex import (
+    MultiplexEvaluator as WF02SnapshotMultiplexEvaluatorV3,
+)
+from agentd_workflow_snapshots.wf02_wf01_v3.agentd.primer3_tool import (
+    Primer3Adapter as WF02SnapshotPrimer3AdapterV3,
+)
+from agentd_workflow_snapshots.wf02_wf01_v3.agentd.specificity import (
+    P2_POLICY_VERSION as WF02_WF01_V3_SNAPSHOT_P2_POLICY_VERSION,
+)
+from agentd_workflow_snapshots.wf02_wf01_v3.agentd.structure import (
+    ViennaRNAAdapter as WF02SnapshotViennaRNAAdapterV3,
+)
+from agentd_workflow_snapshots.wf02_wf01_v3.agentd.wf01_v02 import (
+    WF01V02BatchService as WF02SnapshotWF01BatchServiceV3,
+)
+from agentd_workflow_snapshots.wf02_wf01_v3.agentd.ui_messages import (
+    ui_message_for_batch as wf02_v3_snapshot_ui_message_for_batch,
+)
+from agentd_workflow_snapshots.wf02_wf01_v3.agentd.wf01_agent_view import (
+    next_stage_for_batch as wf02_v3_snapshot_next_stage_for_batch,
+    summarize_wf01_batch as summarize_wf02_v3_snapshot_wf01_batch,
+)
+from agentd_workflow_snapshots.wf02_wf01_v4.agentd.database import (
+    DatabaseCatalog as WF02WF01SnapshotDatabaseCatalogV4,
+)
+from agentd_workflow_snapshots.wf02_wf01_v4.agentd.internal_control import (
+    InternalControlDesigner as WF02SnapshotInternalControlDesignerV4,
+)
+from agentd_workflow_snapshots.wf02_wf01_v4.agentd.multiplex import (
+    MultiplexEvaluator as WF02SnapshotMultiplexEvaluatorV4,
+)
+from agentd_workflow_snapshots.wf02_wf01_v4.agentd.primer3_tool import (
+    Primer3Adapter as WF02SnapshotPrimer3AdapterV4,
+)
+from agentd_workflow_snapshots.wf02_wf01_v4.agentd.specificity import (
+    P2_POLICY_VERSION as WF02_WF01_V4_SNAPSHOT_P2_POLICY_VERSION,
+)
+from agentd_workflow_snapshots.wf02_wf01_v4.agentd.structure import (
+    ViennaRNAAdapter as WF02SnapshotViennaRNAAdapterV4,
+)
+from agentd_workflow_snapshots.wf02_wf01_v4.agentd.wf01_v02 import (
+    WF01V02BatchService as WF02SnapshotWF01BatchServiceV4,
+)
+from agentd_workflow_snapshots.wf02_wf01_v4.agentd.ui_messages import (
+    ui_message_for_batch as wf02_v4_snapshot_ui_message_for_batch,
+)
+from agentd_workflow_snapshots.wf02_wf01_v4.agentd.wf01_agent_view import (
+    next_stage_for_batch as wf02_v4_snapshot_next_stage_for_batch,
+    summarize_wf01_batch as summarize_wf02_v4_snapshot_wf01_batch,
 )
 from agentd_workflow_snapshots.wf03_v1.agentd.database import (
     DatabaseCatalog as WF03SnapshotDatabaseCatalogV1,
@@ -171,6 +257,14 @@ class WF02WF01ExecutionSnapshotV1Gateway:
 
     SNAPSHOT_VERSION = "wf02-wf01-execution-snapshot-v1"
     SOURCE_RELEASE = "1.1.10"
+    vienna_adapter = WF02SnapshotViennaRNAAdapterV1
+    internal_designer = WF02SnapshotInternalControlDesignerV1
+    primer_adapter = WF02SnapshotPrimer3AdapterV1
+    multiplex_evaluator = WF02SnapshotMultiplexEvaluatorV1
+    p2_policy_version = WF02_WF01_SNAPSHOT_P2_POLICY_VERSION
+    ui_renderer = staticmethod(wf02_snapshot_ui_message_for_batch)
+    batch_summary = staticmethod(summarize_wf02_snapshot_wf01_batch)
+    next_stage = staticmethod(wf02_snapshot_next_stage_for_batch)
 
     def __init__(
         self,
@@ -180,8 +274,8 @@ class WF02WF01ExecutionSnapshotV1Gateway:
         self.owner = owner
         self.wf01_service = wf01_service
         self.catalog = wf01_service.catalog
-        self.config = copy.deepcopy(owner.config)
-        self.p6_vienna = WF02SnapshotViennaRNAAdapterV1(self.config)
+        self.config = copy.deepcopy(wf01_service.config)
+        self.p6_vienna = self.vienna_adapter(self.config)
 
     def dependency_contracts(self) -> dict[str, Any]:
         return {
@@ -189,7 +283,7 @@ class WF02WF01ExecutionSnapshotV1Gateway:
             "wf01_execution": {
                 "snapshot_version": self.SNAPSHOT_VERSION,
                 "source_release": self.SOURCE_RELEASE,
-                "p2_policy_version": WF02_WF01_SNAPSHOT_P2_POLICY_VERSION,
+                "p2_policy_version": self.p2_policy_version,
                 "new_child_storage": "WF02_DEDICATED_NAMESPACE",
                 "isolated_components": [
                     "FULL_WF01_PYTHON_PACKAGE",
@@ -219,7 +313,7 @@ class WF02WF01ExecutionSnapshotV1Gateway:
             return self.owner._with_wf01_ui_message(result)
         batch = result.get("batch") if isinstance(result.get("batch"), dict) else result
         result["ui_message"] = call_snapshot(
-            wf02_snapshot_ui_message_for_batch,
+            self.ui_renderer,
             batch,
         )
         if (
@@ -239,7 +333,7 @@ class WF02WF01ExecutionSnapshotV1Gateway:
     ) -> dict:
         if service is self.wf01_service:
             return call_snapshot(
-                summarize_wf02_snapshot_wf01_batch,
+                self.batch_summary,
                 batch,
                 executed_stages=executed_stages,
             )
@@ -250,7 +344,7 @@ class WF02WF01ExecutionSnapshotV1Gateway:
 
     def _next_stage(self, service: Any, batch: dict) -> str | None:
         if service is self.wf01_service:
-            return call_snapshot(wf02_snapshot_next_stage_for_batch, batch)
+            return call_snapshot(self.next_stage, batch)
         return next_stage_for_batch(batch)
 
     def _service_for_batch(self, batch_id: str) -> Any:
@@ -437,7 +531,7 @@ class WF02WF01ExecutionSnapshotV1Gateway:
             prepared,
         )
         designer = call_snapshot(
-            WF02SnapshotInternalControlDesignerV1,
+            self.internal_designer,
             self.config,
             self.catalog,
         )
@@ -456,7 +550,7 @@ class WF02WF01ExecutionSnapshotV1Gateway:
             )
         )
         primer3 = call_snapshot(
-            WF02SnapshotPrimer3AdapterV1,
+            self.primer_adapter,
             self.config,
             allow_fallback=allow_fallback,
         )
@@ -471,7 +565,7 @@ class WF02WF01ExecutionSnapshotV1Gateway:
             ),
         )
         evaluator = call_snapshot(
-            WF02SnapshotMultiplexEvaluatorV1,
+            self.multiplex_evaluator,
             primer3,
             self.config,
         )
@@ -494,6 +588,78 @@ class WF02WF01ExecutionSnapshotV1Gateway:
         result["status"] = "COMPLETED"
         result["tool_status"] = tool_status
         return result
+
+
+class WF02WF01ExecutionSnapshotV2Gateway(WF02WF01ExecutionSnapshotV1Gateway):
+    """New offline tasks; persisted v1 parents retain their dependency binding."""
+
+    SNAPSHOT_VERSION = "wf02-wf01-execution-snapshot-v2"
+    vienna_adapter = WF02SnapshotViennaRNAAdapterV2
+    internal_designer = WF02SnapshotInternalControlDesignerV2
+    primer_adapter = WF02SnapshotPrimer3AdapterV2
+    multiplex_evaluator = WF02SnapshotMultiplexEvaluatorV2
+    p2_policy_version = WF02_WF01_V2_SNAPSHOT_P2_POLICY_VERSION
+    ui_renderer = staticmethod(wf02_v2_snapshot_ui_message_for_batch)
+    batch_summary = staticmethod(summarize_wf02_v2_snapshot_wf01_batch)
+    next_stage = staticmethod(wf02_v2_snapshot_next_stage_for_batch)
+
+    def for_batch(self, batch: dict) -> Any:
+        version = ((batch.get("dependency_contracts") or {}).get("wf01_execution") or {}).get("snapshot_version")
+        if version == self.SNAPSHOT_VERSION:
+            return self
+        if version in (None, self.owner.wf02_wf01_gateway_v1.SNAPSHOT_VERSION):
+            return self.owner.wf02_wf01_gateway_v1
+        raise InputValidationError("未知 WF-02 执行快照版本", details={"snapshot_version": version})
+
+
+class WF02WF01ExecutionSnapshotV3Gateway(WF02WF01ExecutionSnapshotV1Gateway):
+    """Configurable BLAST runtime for new tasks; retain v1/v2 parent bindings."""
+
+    SNAPSHOT_VERSION = "wf02-wf01-execution-snapshot-v3"
+    vienna_adapter = WF02SnapshotViennaRNAAdapterV3
+    internal_designer = WF02SnapshotInternalControlDesignerV3
+    primer_adapter = WF02SnapshotPrimer3AdapterV3
+    multiplex_evaluator = WF02SnapshotMultiplexEvaluatorV3
+    p2_policy_version = WF02_WF01_V3_SNAPSHOT_P2_POLICY_VERSION
+    ui_renderer = staticmethod(wf02_v3_snapshot_ui_message_for_batch)
+    batch_summary = staticmethod(summarize_wf02_v3_snapshot_wf01_batch)
+    next_stage = staticmethod(wf02_v3_snapshot_next_stage_for_batch)
+
+    def for_batch(self, batch: dict) -> Any:
+        version = ((batch.get("dependency_contracts") or {}).get("wf01_execution") or {}).get("snapshot_version")
+        if version == self.SNAPSHOT_VERSION:
+            return self
+        if version == self.owner.wf02_wf01_gateway_v2.SNAPSHOT_VERSION:
+            return self.owner.wf02_wf01_gateway_v2
+        if version in (None, self.owner.wf02_wf01_gateway_v1.SNAPSHOT_VERSION):
+            return self.owner.wf02_wf01_gateway_v1
+        raise InputValidationError("未知 WF-02 执行快照版本", details={"snapshot_version": version})
+
+
+class WF02WF01ExecutionSnapshotV4Gateway(WF02WF01ExecutionSnapshotV1Gateway):
+    """Configurable BLAST runtime for new tasks; retain v1/v2 parent bindings."""
+
+    SNAPSHOT_VERSION = "wf02-wf01-execution-snapshot-v4"
+    vienna_adapter = WF02SnapshotViennaRNAAdapterV4
+    internal_designer = WF02SnapshotInternalControlDesignerV4
+    primer_adapter = WF02SnapshotPrimer3AdapterV4
+    multiplex_evaluator = WF02SnapshotMultiplexEvaluatorV4
+    p2_policy_version = WF02_WF01_V4_SNAPSHOT_P2_POLICY_VERSION
+    ui_renderer = staticmethod(wf02_v4_snapshot_ui_message_for_batch)
+    batch_summary = staticmethod(summarize_wf02_v4_snapshot_wf01_batch)
+    next_stage = staticmethod(wf02_v4_snapshot_next_stage_for_batch)
+
+    def for_batch(self, batch: dict) -> Any:
+        version = ((batch.get("dependency_contracts") or {}).get("wf01_execution") or {}).get("snapshot_version")
+        if version == self.SNAPSHOT_VERSION:
+            return self
+        if version == self.owner.wf02_wf01_gateway_v3.SNAPSHOT_VERSION:
+            return self.owner.wf02_wf01_gateway_v3
+        if version == self.owner.wf02_wf01_gateway_v2.SNAPSHOT_VERSION:
+            return self.owner.wf02_wf01_gateway_v2
+        if version in (None, self.owner.wf02_wf01_gateway_v1.SNAPSHOT_VERSION):
+            return self.owner.wf02_wf01_gateway_v1
+        raise InputValidationError("未知 WF-02 执行快照版本", details={"snapshot_version": version})
 
 
 class AgentDService:
@@ -589,21 +755,52 @@ class AgentDService:
             self,
             self.wf02_wf01_v1,
         )
+        self.wf02_wf01_catalog_v2 = WF02WF01SnapshotDatabaseCatalogV2(self.config)
+        self.wf02_wf01_v2 = WF02SnapshotWF01BatchServiceV2(
+            self.store.root / "workflow-snapshots" / "wf02-wf01-execution-snapshot-v2",
+            self.config, self.wf02_wf01_catalog_v2, self.wf01_v02.artifact_publisher,
+        )
+        self.wf02_wf01_gateway_v2 = WF02WF01ExecutionSnapshotV2Gateway(self, self.wf02_wf01_v2)
+        # v3 cannot interpret the v4 explicit-null timeout. Keep its finite
+        # default when a new deployment opts into unlimited v4 execution.
+        v3_config = copy.deepcopy(self.config)
+        v3_runtime = v3_config.get("tools", {}).get("blast_runtime", {})
+        if v3_runtime.get("timeout_seconds", 600) is None:
+            v3_runtime["timeout_seconds"] = 600
+        v3_runtime["mode_timeouts"] = {
+            key: value for key, value in v3_runtime.get("mode_timeouts", {}).items()
+            if value is not None
+        }
+        self.wf02_wf01_catalog_v3 = WF02WF01SnapshotDatabaseCatalogV3(v3_config)
+        self.wf02_wf01_v3 = WF02SnapshotWF01BatchServiceV3(
+            self.store.root / "workflow-snapshots" / "wf02-wf01-execution-snapshot-v3",
+            v3_config, self.wf02_wf01_catalog_v3, self.wf01_v02.artifact_publisher,
+        )
+        self.wf02_wf01_gateway_v3 = WF02WF01ExecutionSnapshotV3Gateway(self, self.wf02_wf01_v3)
+        self.wf02_wf01_catalog_v4 = WF02WF01SnapshotDatabaseCatalogV4(self.config)
+        self.wf02_wf01_v4 = WF02SnapshotWF01BatchServiceV4(
+            self.store.root / "workflow-snapshots" / "wf02-wf01-execution-snapshot-v4",
+            self.config, self.wf02_wf01_catalog_v4, self.wf01_v02.artifact_publisher,
+        )
+        self.wf02_wf01_gateway_v4 = WF02WF01ExecutionSnapshotV4Gateway(self, self.wf02_wf01_v4)
         self.wf02_v01 = WF02V01BatchService(
             self.store.root,
             self.config,
-            gateway=self.wf02_wf01_gateway_v1,
+            gateway=self.wf02_wf01_gateway_v4,
             artifact_resolver=self.input_artifacts.resolve,
             dependency_contracts=(
-                self.wf02_wf01_gateway_v1.dependency_contracts()
+                self.wf02_wf01_gateway_v4.dependency_contracts()
             ),
         )
-        self.wf02_background = WF02BackgroundExecutor(self.wf02_v01)
+        self._workflow_execution_lock = threading.RLock()
+        self.wf02_background = WF02BackgroundExecutor(
+            self.wf02_v01, execution_lock=self._workflow_execution_lock,
+        )
         self.workflow_runtime_contracts = {
             "WF-02": {
                 "runtime": "wf02-v0.1",
                 "embedded_dependency": (
-                    self.wf02_wf01_gateway_v1.SNAPSHOT_VERSION
+                    self.wf02_wf01_gateway_v4.SNAPSHOT_VERSION
                 ),
                 "state_root": str(self.wf02_v01.store.root),
             },
@@ -623,6 +820,8 @@ class AgentDService:
                 "state_root": str(self.wf05_state_root_v1),
             },
         }
+        self.wf01_background = WF01BackgroundExecutor(self)
+        self.wf01_background.recover()
         self.wf02_background.recover()
 
     @staticmethod
@@ -1250,7 +1449,12 @@ class AgentDService:
     def get_wf01_v02_agent_summary(self, batch_id: str) -> dict:
         """Return the bounded WF-01 control view safe for model context."""
         batch = self._with_wf01_ui_message(self.wf01_v02.get_batch(batch_id))
-        return summarize_wf01_batch(batch)
+        return self.wf01_background.decorate(summarize_wf01_batch(batch))
+
+    def run_wf01_v02_background(self, batch_id: str, stage_options: dict | None = None) -> dict:
+        """Persist and enqueue the request; scientific work never holds this call."""
+        self.wf01_background.start(batch_id, stage_options)
+        return self.get_wf01_v02_agent_summary(batch_id)
 
     def preflight_wf02_v01(self, payload: dict) -> dict:
         """Validate and echo WF-02 N01-N03 input without creating a task."""
@@ -1280,7 +1484,7 @@ class AgentDService:
     ) -> dict:
         """Return a bounded WF-02 control view safe for model context."""
         return summarize_wf02_batch(
-            self.wf02_v01.get_batch(batch_id),
+            self.wf02_v01.get_persisted_background_snapshot(batch_id),
             attachment_formats=attachment_formats,
         )
 
@@ -1314,10 +1518,10 @@ class AgentDService:
         self,
         batch_id: str,
         *,
-        wait_seconds: float = 235.0,
+        wait_seconds: float = 0.0,
         expected_resume_token: str | None = None,
     ) -> dict:
-        """Start durable WF-02 execution and wait for at most 235 seconds.
+        """Start durable WF-02 execution and return immediately by default.
 
         The daemon worker owns scientific progression after it is queued.  A
         request timeout therefore ends only the synchronous wait, never the
@@ -1795,7 +1999,7 @@ class AgentDService:
 
     def tool_status(self, *, allow_fallback: bool = False) -> dict:
         primer3 = Primer3Adapter(self.config, allow_fallback=allow_fallback)
-        blast = BlastAdapter(self.config["tools"]["blastn_executable"], allow_fallback=allow_fallback)
+        blast = BlastAdapter(self.config["tools"]["blastn_executable"], allow_fallback=allow_fallback, runtime_config=self.config["tools"].get("blast_runtime"))
         mafft = MafftAdapter(self.config["tools"]["mafft_executable"], allow_fallback=allow_fallback)
         mgb = MGBProbeEvaluator(primer3, self.config)
         vienna = self.p6_vienna
@@ -1821,6 +2025,7 @@ class AgentDService:
         }
 
     def capabilities(self) -> dict:
+        artifact_storage = self.wf01_v02.artifact_publisher.status()
         return {
             "service": "agentd-primer-probe",
             "version": __version__,
@@ -1844,7 +2049,7 @@ class AgentDService:
                 "database_catalog_env": "AGENTD_DATABASE_CATALOG",
                 "state_dir_env": "AGENTD_STATE_DIR",
                 "blast_db_env": "BLASTDB",
-                "artifact_storage": self.wf01_v02.artifact_publisher.status(),
+                "artifact_storage": copy.deepcopy(artifact_storage),
             },
             "input_file_transfer": {
                 "mcp_tool": "download_himat_file",
@@ -2234,7 +2439,9 @@ class AgentDService:
                 "attachment_publication": {
                     "provider": "rustfs-s3",
                     "download_url_mode": "ABSOLUTE_RUSTFS_OBJECT_URL",
-                    "public_base_url": "https://rustfs.ne.scqcyz.cn",
+                    "public_base_url": artifact_storage["public_base_url"],
+                    "bucket": artifact_storage["bucket"],
+                    "object_prefix": artifact_storage["object_prefix"],
                     "upload_required_when_enabled": True,
                     "integrity_check": "HEAD_OBJECT_SIZE_AND_SHA256_METADATA",
                 },

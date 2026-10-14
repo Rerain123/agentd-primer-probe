@@ -1,0 +1,107 @@
+# NCBI nt staging only. Apply separately from the OligoSmith Deployment.
+# Internet-connected staging only; do not apply in the isolated customer environment.
+# Transfer verified database files and metadata to the customer's offline PVC.
+# 2026-09-29 metadata: 383 archives, 1,001,214,994,022 compressed bytes,
+# 1,176,534,434,870 database bytes. 3 TiB includes staging/retry headroom.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: oligosmith-blast-nt
+  namespace: him-ws
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: ceph-rbd-retain
+  resources:
+    requests:
+      storage: 3Ti
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: oligosmith-nt-download-r01
+  namespace: him-ws
+spec:
+  backoffLimit: 2
+  activeDeadlineSeconds: 1209600
+  template:
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      nodeSelector:
+        kubernetes.io/arch: amd64
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        fsGroupChangePolicy: OnRootMismatch
+      containers:
+        - name: download
+          # Official ncbi/blast:2.17.0, digest verified on 2026-09-29.
+          image: ncbi/blast@sha256:81f118d2e4f7e11494d27fdbb99c9430423105afff50c4ae158db41d58a3fc57
+          command: ["/bin/sh", "-ec"]
+          args:
+            - |
+              mkdir -p /data/nt-download-20260929-r01/raw
+              cd /data/nt-download-20260929-r01
+              if [ -f DOWNLOAD_COMPLETE ]; then
+                cat DOWNLOAD_COMPLETE
+                exit 0
+              fi
+              source_url=https://ftp.ncbi.nlm.nih.gov/blast/db/nt-nucl-metadata.json
+              curl -fLsS --retry 5 --connect-timeout 30 --max-time 120 "$source_url" -o metadata.current.json
+              if [ -f metadata.before.json ]; then
+                if ! cmp -s metadata.before.json metadata.current.json; then
+                  echo 'SOURCE_CHANGED: preserve this PVC; use a new version directory after inspection.' >&2
+                  exit 1
+                fi
+              else
+                mv metadata.current.json metadata.before.json
+              fi
+              cat metadata.before.json
+              df -h .
+              blastn -version > blast-version.txt
+              cd raw
+              update_blastdb.pl --source ncbi --decompress nt
+              cd ..
+              curl -fLsS --retry 5 --connect-timeout 30 --max-time 120 "$source_url" -o metadata.after.json
+              if ! cmp -s metadata.before.json metadata.after.json; then
+                echo 'SOURCE_CHANGED: download not accepted; inspect before retrying.' >&2
+                exit 1
+              fi
+              blastdbcmd -db raw/nt -dbtype nucl -info > blastdb-info.txt
+              cat blastdb-info.txt
+              if ! blastdbcheck -db raw/nt -dbtype nucl > blastdbcheck.log 2>&1; then
+                cat blastdbcheck.log
+                exit 1
+              fi
+              cat blastdbcheck.log
+              date -u '+DOWNLOAD_COMPLETE %Y-%m-%dT%H:%M:%SZ' > DOWNLOAD_COMPLETE
+              cat DOWNLOAD_COMPLETE
+          env:
+            - name: BLAST_USAGE_REPORT
+              value: "false"
+          resources:
+            requests:
+              cpu: 500m
+              memory: 512Mi
+            limits:
+              cpu: "2"
+              memory: 8Gi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - name: database
+              mountPath: /data
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: database
+          persistentVolumeClaim:
+            claimName: oligosmith-blast-nt
+        - name: tmp
+          emptyDir:
+            sizeLimit: 1Gi

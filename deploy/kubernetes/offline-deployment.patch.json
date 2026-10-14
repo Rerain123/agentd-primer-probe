@@ -1,0 +1,28 @@
+{
+  "spec": {
+    "template": {
+      "spec": {
+        "containers": [
+          {
+            "name": "oligosmith",
+            "image": "harbor-core.base.svc.cluster.local/qcyz/oligosmith@sha256:a9f6e84ddc94c5a8e4fec647777fd3f2b8e6ce5219aa470b2e0ace98a5fe44b1",
+            "volumeMounts": [
+              {
+                "name": "blast-hosts",
+                "mountPath": "/data/internal-controls",
+                "subPath": "internal-controls-20261012-curated-r01",
+                "readOnly": true
+              }
+            ],
+            "env": [
+              {
+                "name": "AGENTD_REQUIRE_DATABASES",
+                "value": "true"
+              }
+            ]
+          }
+        ]
+      }
+    }
+  }
+}

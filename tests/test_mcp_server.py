@@ -127,6 +127,73 @@ class MCPServerTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "不符合"):
                 module._host_ui_result({"ui_message": invalid_payload})
 
+    def test_terminal_card_accepts_configured_http_storage_urls(self) -> None:
+        with tempfile.TemporaryDirectory(
+            prefix="oligosmith-card-configured-url-"
+        ) as state_dir:
+            self._load_app(state_dir)
+            module = sys.modules["agentd.mcp_server"]
+
+            for file_url in (
+                "https://objects.example.test/oligosmith-v2/reports/report.html",
+                "http://storage.internal:9000/custom-bucket/custom-prefix/"
+                "report.html?versionId=example",
+            ):
+                with self.subTest(file_url=file_url):
+                    payload = {
+                        "data": {
+                            "status": "COMPLETED",
+                            "reportTitle": "schema test",
+                            "summaryText": "completed",
+                            "primaryAttachmentId": "attachment_html",
+                            "attachments": [
+                                {
+                                    "attachmentId": "attachment_html",
+                                    "fileName": "report.html",
+                                    "fileType": "HTML",
+                                    "mimeType": "text/html; charset=utf-8",
+                                    "fileUrl": file_url,
+                                }
+                            ],
+                            "issues": [],
+                        },
+                        "type": "primer_design_output",
+                    }
+                    result = module._host_ui_result(
+                        {"ui_message": payload}
+                    ).model_dump(by_alias=True, exclude_none=True)
+
+                    self._assert_direct_himat_card(result, payload)
+
+    def test_terminal_card_rejects_unsafe_absolute_attachment_urls(self) -> None:
+        with tempfile.TemporaryDirectory(
+            prefix="oligosmith-card-unsafe-url-"
+        ) as state_dir:
+            self._load_app(state_dir)
+            module = sys.modules["agentd.mcp_server"]
+            invalid_payload = {
+                "data": {
+                    "status": "COMPLETED",
+                    "reportTitle": "schema test",
+                    "summaryText": "completed",
+                    "primaryAttachmentId": "attachment_html",
+                    "attachments": [
+                        {
+                            "attachmentId": "attachment_html",
+                            "fileName": "report.html",
+                            "fileType": "HTML",
+                            "mimeType": "text/html; charset=utf-8",
+                            "fileUrl": "javascript:alert(1)",
+                        }
+                    ],
+                    "issues": [],
+                },
+                "type": "primer_design_output",
+            }
+
+            with self.assertRaisesRegex(RuntimeError, "fileUrl"):
+                module._host_ui_result({"ui_message": invalid_payload})
+
     def test_health_is_public_and_mcp_requires_valid_jwt(self) -> None:
         with tempfile.TemporaryDirectory(prefix="oligosmith-mcp-") as state_dir:
             app = self._load_app(state_dir)
@@ -845,7 +912,7 @@ class MCPServerTests(unittest.TestCase):
             }
             with patch.object(
                 module.service,
-                "run_wf01_v02_until_blocked",
+                "run_wf01_v02_background",
                 return_value=control_summary,
             ):
                 direct_result = module.run_wf01_until_blocked("batch-final")
@@ -926,7 +993,7 @@ class MCPServerTests(unittest.TestCase):
                 wraps=original_materialize,
             ) as materialize_input, patch.object(
                 module.service,
-                "run_wf01_v02_until_blocked",
+                "run_wf01_v02_background",
                 side_effect=completed,
             ) as auto_run:
                 with TestClient(app) as client:
@@ -993,7 +1060,7 @@ class MCPServerTests(unittest.TestCase):
             }
             with patch.object(
                 module.service,
-                "run_wf01_v02_until_blocked",
+                "run_wf01_v02_background",
                 return_value=control_summary,
             ):
                 with TestClient(app) as client:
@@ -1070,7 +1137,7 @@ class MCPServerTests(unittest.TestCase):
                     "get_wf02_batch",
                     "run_wf02_until_blocked",
                     "后端持久化任务执行",
-                    "首次最多同步等待235秒",
+                    "提交后立即返回任务编号和后台状态",
                     "WAIT_FOR_BACKGROUND",
                     "只回复user_message",
                     "不轮询",
@@ -1381,7 +1448,7 @@ class MCPServerTests(unittest.TestCase):
                     if item["name"] == "run_wf02_until_blocked"
                 )
                 self.assertIn("持久化后台任务", bounded_tool["description"])
-                self.assertIn("同步等待235秒", bounded_tool["description"])
+                self.assertIn("提交后立即返回", bounded_tool["description"])
                 self.assertIn("后台继续", bounded_tool["description"])
                 wf02_export_tool = next(
                     item for item in listed.json()["result"]["tools"]
@@ -1476,7 +1543,7 @@ class MCPServerTests(unittest.TestCase):
                 module = sys.modules["agentd.mcp_server"]
                 with patch.object(
                     module.service,
-                    "run_wf01_v02_until_blocked",
+                    "run_wf01_v02_background",
                 ) as direct_auto_run:
                     direct_sequence = client.post(
                         "/mcp",
@@ -1501,7 +1568,7 @@ class MCPServerTests(unittest.TestCase):
 
                 with patch.object(
                     module.service,
-                    "run_wf01_v02_until_blocked",
+                    "run_wf01_v02_background",
                     side_effect=lambda batch_id: (
                         module.service.get_wf01_v02_agent_summary(batch_id)
                     ),
@@ -1535,7 +1602,7 @@ class MCPServerTests(unittest.TestCase):
 
                 with patch.object(
                     module.service,
-                    "run_wf01_v02_until_blocked",
+                    "run_wf01_v02_background",
                 ) as blocked_auto_run:
                     blocked = client.post(
                         "/mcp",
@@ -1609,7 +1676,7 @@ class MCPServerTests(unittest.TestCase):
             )
             with patch.object(
                 module.service,
-                "run_wf01_v02_until_blocked",
+                "run_wf01_v02_background",
                 side_effect=lambda batch_id: (
                     module.service.get_wf01_v02_agent_summary(batch_id)
                 ),
@@ -1879,7 +1946,7 @@ class MCPServerTests(unittest.TestCase):
             self.assertFalse(workflow_state["suppressAssistantText"])
             durable_run.assert_called_once_with(
                 batch_id,
-                wait_seconds=0.25,
+                wait_seconds=0.0,
                 expected_resume_token=None,
             )
 
@@ -2021,7 +2088,7 @@ class MCPServerTests(unittest.TestCase):
                 batch_id,
                 "A",
                 child_response,
-                bounded=True,
+                auto_resume=False,
             )
             durable_run.assert_called_once_with(
                 batch_id,
@@ -2081,7 +2148,7 @@ class MCPServerTests(unittest.TestCase):
                 "background_execution": {"state": "COMPLETED"},
                 "orchestration": {
                     "mode": "PERSISTENT_BACKGROUND",
-                    "synchronous_wait_seconds": 235.0,
+                    "synchronous_wait_seconds": 0.0,
                     "finished_within_window": True,
                     "background_continues": False,
                 },
@@ -2117,7 +2184,7 @@ class MCPServerTests(unittest.TestCase):
             )
             durable_run.assert_called_once_with(
                 batch_id,
-                wait_seconds=235.0,
+                wait_seconds=0.0,
                 expected_resume_token="a" * 64,
             )
 
@@ -2174,7 +2241,7 @@ class MCPServerTests(unittest.TestCase):
             self.assertFalse(result["tool_control"]["call_again"])
             durable_run.assert_called_once_with(
                 batch_id,
-                wait_seconds=235.0,
+                wait_seconds=0.0,
                 expected_resume_token="a" * 64,
             )
 
@@ -2235,7 +2302,10 @@ class MCPServerTests(unittest.TestCase):
                     },
                 )
                 self.assertEqual(resumed.status_code, 200, resumed.text)
-                resumed_result = resumed.json()["result"]
+                module = sys.modules["agentd.mcp_server"]
+                module.service.wf02_background._queue.join()
+                resumed_summary = resumed.json()["result"]["structuredContent"]
+                resumed_result = module.get_wf02_batch(resumed_summary.get("batch_id") or resumed_summary["taskId"]).model_dump()
                 self.assertFalse(resumed_result["isError"], resumed.text)
                 target_interaction = resumed_result["structuredContent"]
                 self.assertEqual(target_interaction["type"], "agent_interaction")
@@ -2272,7 +2342,8 @@ class MCPServerTests(unittest.TestCase):
                     },
                 )
                 self.assertEqual(next_target.status_code, 200, next_target.text)
-                next_result = next_target.json()["result"]
+                module.service.wf02_background._queue.join()
+                next_result = module.get_wf02_batch(batch_id).model_dump()
                 self.assertFalse(next_result["isError"], next_target.text)
                 next_interaction = next_result["structuredContent"]
                 self.assertEqual(next_interaction["type"], "agent_interaction")

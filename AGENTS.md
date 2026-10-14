@@ -28,7 +28,7 @@
 1. 可执行的代码、`schemas/` 与通过的测试共同定义当前行为。
 2. `docs/workflows/` 记录单个工作流的现行路线和施工边界。
 3. `docs/architecture/` 与 `docs/operations/` 解释跨模块结构和运行环境。
-4. `docs/source-materials/` 是未改写的原始设计输入，可能早于当前代码。
+4. GitHub 的 `docs/source-materials/` 仅保留分发范围说明，不上传专家原稿及归档包。
 5. `docs/history/` 和 Git 用于追溯，不得覆盖现行契约。
 
 发现冲突时，不要猜测或复制第二套规则：用测试复现，确定代码实际行为，再同步唯一的现行文档。

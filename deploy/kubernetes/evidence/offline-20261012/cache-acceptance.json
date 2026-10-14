@@ -1,0 +1,29 @@
+{
+  "status": "PASSED",
+  "results": [
+    {
+      "case": "first",
+      "seconds": 2.2607,
+      "cache_status": "STORED",
+      "exact_result_equal": true
+    },
+    {
+      "case": "repeat",
+      "seconds": 0.0066,
+      "cache_status": "HIT",
+      "exact_result_equal": true
+    },
+    {
+      "case": "new-provider",
+      "seconds": 0.0061,
+      "cache_status": "HIT",
+      "exact_result_equal": true
+    },
+    {
+      "case": "version-change",
+      "seconds": 2.2636,
+      "cache_status": "STORED",
+      "exact_result_equal": true
+    }
+  ]
+}

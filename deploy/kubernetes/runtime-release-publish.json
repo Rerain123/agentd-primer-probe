@@ -1,0 +1,101 @@
+{
+  "metadata": {
+    "namespace": "him-ws",
+    "name": "oligosmith-offline-publish-r03"
+  },
+  "kind": "Job",
+  "apiVersion": "batch/v1",
+  "spec": {
+    "template": {
+      "spec": {
+        "volumes": [
+          {
+            "persistentVolumeClaim": {
+              "claimName": "oligosmith-blast-hosts"
+            },
+            "name": "data"
+          },
+          {
+            "configMap": {
+              "name": "oligosmith-offline-publish-r03"
+            },
+            "name": "scripts"
+          },
+          {
+            "name": "registry",
+            "secret": {
+              "secretName": "harbor",
+              "items": [
+                {
+                  "key": ".dockerconfigjson",
+                  "path": "config.json"
+                }
+              ]
+            }
+          }
+        ],
+        "restartPolicy": "Never",
+        "securityContext": {
+          "runAsGroup": 10001,
+          "fsGroup": 10001,
+          "runAsUser": 10001
+        },
+        "imagePullSecrets": [
+          {
+            "name": "harbor"
+          }
+        ],
+        "automountServiceAccountToken": false,
+        "containers": [
+          {
+            "volumeMounts": [
+              {
+                "name": "data",
+                "mountPath": "/context",
+                "subPath": "offline-release-r03",
+                "readOnly": true
+              },
+              {
+                "name": "scripts",
+                "mountPath": "/scripts",
+                "readOnly": true
+              },
+              {
+                "name": "registry",
+                "mountPath": "/registry",
+                "readOnly": true
+              }
+            ],
+            "command": [
+              "python",
+              "/scripts/publish-offline-image.py"
+            ],
+            "name": "download",
+            "image": "harbor-core.base.svc.cluster.local/qcyz/oligosmith@sha256:a4654140604d08a9b0d60e05a13471375a61ed8600d935a997966c8740df1eec",
+            "resources": {
+              "limits": {
+                "cpu": "1",
+                "memory": "1Gi"
+              },
+              "requests": {
+                "cpu": "100m",
+                "memory": "256Mi"
+              }
+            },
+            "env": [
+              {
+                "name": "OLIGOSMITH_RELEASE_TAG",
+                "value": "offline-20261012-r03"
+              }
+            ]
+          }
+        ],
+        "nodeSelector": {
+          "kubernetes.io/hostname": "k8s-a100-02"
+        }
+      }
+    },
+    "backoffLimit": 0,
+    "activeDeadlineSeconds": 7200
+  }
+}

@@ -9,6 +9,10 @@
 
 字段级结构以 `schemas/` 中的 JSON Schema 为机器可读依据；若实现发生变化，代码、Schema、测试和本文必须在同一次变更中同步更新。
 
+2026-10-12 宿主预检修订：M1 识别猪、牛、鸡、绵羊、山羊的中英文、学名和 taxid，
+补齐 sheep/goat 后不再误报不支持。M1 的名单只用于名称规范化；实际文件存在、版本和
+数据库解析仍由 M4 决定，不将名称识别等同于特异性通过。未知宿主的提示也明确这一边界。
+
 ## 1. 实现入口与权威来源
 
 | 主题 | 当前实现 |
@@ -59,7 +63,7 @@ flowchart TD
     P2 --> M4B["M4：原样映射 P2 结果 → 重排"]
     M4B --> M5["M5：靶标/批次状态与可交付候选汇总"]
     D4 --> M5
-    M5 --> M6["M6：规范报告、4 个默认附件"]
+    M5 --> M6["M6：规范报告、3 个默认附件"]
     M6 --> O["primer_design_output：COMPLETED"]
     O --> P["get_wf01_report / candidate / export"]
     O --> V["create_wf01_version：可选重设计"]
@@ -68,7 +72,7 @@ flowchart TD
 
 图左侧的“只使用 Primer3”是独立 P1/REST 支线：它只校验一条模板及参数、调用一次 Primer3 并返回原始候选，不创建 WF-01 批次，也不执行规则过滤、去重排序、特异性、报告或版本管理。它不是 `DESIGN_ONLY`，也不是完整 WF-01 的降级结果。
 
-正常新任务由 `create_wf01_batch` 在建批成功后自动调用推进器，依次执行 M2～M6，并要求所有靶标走 `FULL_SPECIFICITY`。图中的虚线 `DESIGN_ONLY` 只表示历史批次和底层兼容调用仍可恢复的批次内路线，当前 REST、MCP 和 WF-02 子任务的新建入口不会进入它。逐阶段 HTTP 端点主要用于后台控制、测试和故障恢复，不要求对话模型手工串联。
+正常新任务由 `create_wf01_batch` 在建批成功后提交持久化后台队列并立即返回任务编号，由服务器依次执行 M2～M6，并要求所有靶标走 `FULL_SPECIFICITY`。图中的虚线 `DESIGN_ONLY` 只表示历史批次和底层兼容调用仍可恢复的批次内路线，当前 REST、MCP 和 WF-02 子任务的新建入口不会进入它。逐阶段 HTTP 端点主要用于后台控制、测试和故障恢复，不要求对话模型手工串联。
 
 ## 3. 输入方式、模板组织与科学路线
 
@@ -347,6 +351,11 @@ M6 的唯一规范数据模型为 `wf01-prd-v0.2-canonical-report-v2`，导出�
 
 ## 13. 验证与维护
 
+BLAST 的计算资源参数由 `tools.blast_runtime` 配置：`num_threads` 默认 1、
+`timeout_seconds` 默认 600；`mode_timeouts` 可单独覆盖 `RELATED_BACKGROUND_NT` 等
+模式的限时。仅改变执行资源，不改变 P2 阈值、库范围或命中筛选。FASTA `-subject`
+模式不传不兼容的线程参数。实际限时与线程数写入工具证据，超时继续标记未完成。
+
 WF-01 当前行为由以下测试组覆盖：
 
 - `tests/test_wf01_v02_preflight.py`
@@ -365,3 +374,10 @@ WF-01 当前行为由以下测试组覆盖：
 3. 模板组织方式、`execution_path`、默认附件或状态机发生变化时，必须同步修改根 README 与 MCP 文档中的摘要。
 4. 发布历史只写入 `CHANGELOG.md`；不再创建 `RELEASE_x.y.z.md`。
 5. 历史设计通过 Git 查询，不在 `docs/` 根目录保留第二套现行说明。
+
+
+2026-10-12 源码新增可选成功 BLAST 批量缓存；WF02 新任务绑定 v4，旧任务保留版本绑定。
+缓存不改变阈值，P1/P2 每次重算；显式 null 可关闭检索执行时限。部署配置与实测边界见
+[运维记录](../../operations/KUBERNETES_HIMAT_DEPLOYMENT.md#912-成功检索缓存与-wf02-v42026-10-12)。
+
+2026-10-13：WF-01 后台提交后可断开 HiMat；“查询进度”只调用 `get_wf01_batch`，读取阶段及后台状态。重启恢复依赖持久 jobs 卷；失败查询不会自动重试。REST 提供 `/v1/wf01/tasks/{batch_id}/progress`。

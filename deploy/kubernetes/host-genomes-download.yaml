@@ -1,0 +1,79 @@
+# Create the ConfigMap from build-host-genomes.sh and host-genomes-20261012.tsv first.
+# This creates a new PVC; it does not change oligosmith or its existing nt files.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: oligosmith-blast-hosts
+  namespace: him-ws
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: ceph-rbd-retain
+  resources:
+    requests:
+      storage: 100Gi
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: oligosmith-host-build-r01
+  namespace: him-ws
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: 172800
+  template:
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      nodeSelector:
+        kubernetes.io/hostname: k8s-a100-02
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        fsGroupChangePolicy: OnRootMismatch
+      containers:
+        - name: build
+          image: ncbi/blast@sha256:81f118d2e4f7e11494d27fdbb99c9430423105afff50c4ae158db41d58a3fc57
+          command: [/bin/bash, /scripts/build-host-genomes.sh]
+          env:
+            - name: BLAST_USAGE_REPORT
+              value: "false"
+          resources:
+            requests:
+              cpu: "1"
+              memory: 2Gi
+            limits:
+              cpu: "2"
+              memory: 8Gi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - name: hosts
+              mountPath: /data
+            - name: nt
+              mountPath: /nt
+              subPath: nt-download-20260929-r01/recovery-r02/oligosmith-nt-download-r02-5c6r4/db
+              readOnly: true
+            - name: scripts
+              mountPath: /scripts
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: hosts
+          persistentVolumeClaim:
+            claimName: oligosmith-blast-hosts
+        - name: nt
+          persistentVolumeClaim:
+            claimName: oligosmith-blast-nt
+            readOnly: true
+        - name: scripts
+          configMap:
+            name: oligosmith-host-build-r01
+        - name: tmp
+          emptyDir:
+            sizeLimit: 1Gi

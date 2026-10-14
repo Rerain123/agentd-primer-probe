@@ -2,6 +2,7 @@
 
 | 任务 | 文档 |
 |---|---|
+| 新服务器 Rancher/Kubernetes、HiMat 内部接入和 Codeup `test` 自动部署 | [Kubernetes 与 HiMat 部署](KUBERNETES_HIMAT_DEPLOYMENT.md) |
 | 连接 MCP、配置 JWT、查工具范围 | [MCP 服务](MCP_SERVER.md) |
 | 理解请求、反向代理、容器和外部依赖 | [服务器请求与容器部署](SERVER_REQUEST_AND_DEPLOYMENT.md) |
 | 首次安装、离线交付、升级和回滚 | [服务器安装与交付](SERVER_INSTALL.md) |

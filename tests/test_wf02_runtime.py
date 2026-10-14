@@ -6,6 +6,7 @@ import tempfile
 import threading
 import time
 import unittest
+from unittest.mock import patch
 
 from agentd.config import load_config
 from agentd.service import AgentDService
@@ -230,6 +231,9 @@ class WF02RuntimeTests(unittest.TestCase):
                     created["batch_id"],
                     wait_seconds=0.05,
                 )
+                with patch.object(service.wf02_v01, "get_batch", side_effect=AssertionError("blocking read")):
+                    queried = service.get_wf02_v01_agent_summary(created["batch_id"])
+                self.assertEqual(queried["background_execution"]["state"], "RUNNING")
             finally:
                 gateway.release.set()
                 timer.cancel()

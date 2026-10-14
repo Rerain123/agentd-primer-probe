@@ -237,7 +237,7 @@ class WF01SingleTarget:
         design_overrides = self._design_parameter_overrides(payload)
         allow_fallback = bool(payload.get("allow_fallback", self.config["tools"]["allow_development_fallback"]))
         primer3 = Primer3Adapter(self.config, allow_fallback=allow_fallback)
-        blast = BlastAdapter(self.config["tools"]["blastn_executable"], allow_fallback=allow_fallback)
+        blast = BlastAdapter(self.config["tools"]["blastn_executable"], allow_fallback=allow_fallback, runtime_config=self.config["tools"].get("blast_runtime"))
         mafft = MafftAdapter(self.config["tools"]["mafft_executable"], allow_fallback=allow_fallback)
         specificity_evaluator = SpecificityEvaluator(blast, primer3)
         mgb = MGBProbeEvaluator(primer3, self.config)

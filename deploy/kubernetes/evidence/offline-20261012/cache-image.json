@@ -1,0 +1,6 @@
+{
+  "image": "harbor-core.base.svc.cluster.local/qcyz/oligosmith@sha256:61b9ea5adafa96e49d9a23d3bf781e2c4547c2e12c251771d4819b0d740858d3",
+  "tag": "offline-20261012-r04",
+  "base": "sha256:a4654140604d08a9b0d60e05a13471375a61ed8600d935a997966c8740df1eec",
+  "source_layer": "sha256:7839107a29f6f78e0a465aa8e9ddb95031a6eaa98d9e60ae9d2f981d73abd968"
+}

@@ -1,0 +1,51 @@
+{
+  "scope": "live API preflight and design-only report transport; not full scientific acceptance",
+  "batch_id": "7bfc0fbb-9132-451c-88cd-897482748a64",
+  "host_preflight": {
+    "pig": {
+      "http_status": 200,
+      "can_auto_run": true
+    },
+    "cattle": {
+      "http_status": 200,
+      "can_auto_run": true
+    },
+    "chicken": {
+      "http_status": 200,
+      "can_auto_run": true
+    },
+    "sheep": {
+      "http_status": 200,
+      "can_auto_run": true
+    },
+    "goat": {
+      "http_status": 200,
+      "can_auto_run": true
+    }
+  },
+  "report_http_status": 200,
+  "exports": {
+    "html": {
+      "name": "2026-10-12_11-39-52_引物探针设计报告.html",
+      "bytes": 100651,
+      "http_status": 200,
+      "content_type": "text/html; charset=utf-8",
+      "sha256": "4b94b548cb7c58436a9cdc945311f837f226ea790bacffdf4bce4b6cecc1a055"
+    },
+    "process_html": {
+      "name": "2026-10-12_11-39-52_科学过程详情报告.html",
+      "bytes": 1344351,
+      "http_status": 200,
+      "content_type": "text/html; charset=utf-8",
+      "sha256": "853b703514e5354f9c950fddb4a4170d4a6676df3137e9ef82d73bed7cb2b840"
+    },
+    "scientific_data": {
+      "name": "2026-10-12_11-39-52_科学工具原始数据.zip",
+      "bytes": 35467,
+      "http_status": 200,
+      "content_type": "application/zip",
+      "sha256": "f2ad59e48aa1c51d802b40cb72f132cb3af670c90495d654c264a9dbf3d33039"
+    }
+  },
+  "report_status": null
+}

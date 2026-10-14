@@ -1,0 +1,20 @@
+{
+  "scope": "transport_only_gated_scientific_standins",
+  "workflows": {
+    "wf01": {
+      "submission_seconds": 0.015,
+      "query_while_computing_seconds": 0.016,
+      "continued_after_client_disconnect": true,
+      "duplicate_did_not_restart": true,
+      "terminal_state_observed": true
+    },
+    "wf02": {
+      "submission_seconds": 0.016,
+      "query_while_computing_seconds": 0.0,
+      "continued_after_client_disconnect": true,
+      "duplicate_did_not_restart": true,
+      "terminal_state_observed": true
+    }
+  },
+  "status": "PASS"
+}

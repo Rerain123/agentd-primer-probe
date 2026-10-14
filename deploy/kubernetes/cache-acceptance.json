@@ -1,0 +1,108 @@
+{
+  "apiVersion": "batch/v1",
+  "kind": "Job",
+  "metadata": {
+    "name": "oligosmith-cache-accept-r05",
+    "namespace": "him-ws"
+  },
+  "spec": {
+    "backoffLimit": 0,
+    "template": {
+      "spec": {
+        "automountServiceAccountToken": false,
+        "containers": [
+          {
+            "command": [
+              "python",
+              "/scripts/verify-blast-cache.py"
+            ],
+            "image": "harbor-core.base.svc.cluster.local/qcyz/oligosmith@sha256:a4654140604d08a9b0d60e05a13471375a61ed8600d935a997966c8740df1eec",
+            "imagePullPolicy": "IfNotPresent",
+            "name": "download",
+            "resources": {
+              "requests": {
+                "cpu": "16",
+                "memory": "16Gi"
+              },
+              "limits": {
+                "cpu": "16",
+                "memory": "32Gi"
+              }
+            },
+            "terminationMessagePath": "/dev/termination-log",
+            "terminationMessagePolicy": "File",
+            "volumeMounts": [
+              {
+                "mountPath": "/data",
+                "name": "data"
+              },
+              {
+                "mountPath": "/scripts",
+                "name": "scripts",
+                "readOnly": true
+              }
+            ],
+            "env": [
+              {
+                "name": "PYTHONPATH",
+                "value": "/data/offline-release-r04/src"
+              },
+              {
+                "name": "BLAST_USAGE_REPORT",
+                "value": "false"
+              }
+            ]
+          }
+        ],
+        "dnsPolicy": "ClusterFirst",
+        "enableServiceLinks": true,
+        "imagePullSecrets": [
+          {
+            "name": "harbor"
+          }
+        ],
+        "nodeSelector": {
+          "kubernetes.io/hostname": "k8s-a100-02"
+        },
+        "preemptionPolicy": "PreemptLowerPriority",
+        "priority": 0,
+        "restartPolicy": "Never",
+        "schedulerName": "default-scheduler",
+        "securityContext": {
+          "fsGroup": 10001,
+          "runAsGroup": 10001,
+          "runAsUser": 10001
+        },
+        "terminationGracePeriodSeconds": 30,
+        "tolerations": [
+          {
+            "effect": "NoExecute",
+            "key": "node.kubernetes.io/not-ready",
+            "operator": "Exists",
+            "tolerationSeconds": 300
+          },
+          {
+            "effect": "NoExecute",
+            "key": "node.kubernetes.io/unreachable",
+            "operator": "Exists",
+            "tolerationSeconds": 300
+          }
+        ],
+        "volumes": [
+          {
+            "name": "data",
+            "persistentVolumeClaim": {
+              "claimName": "oligosmith-blast-hosts"
+            }
+          },
+          {
+            "name": "scripts",
+            "configMap": {
+              "name": "oligosmith-cache-accept-r05"
+            }
+          }
+        ]
+      }
+    }
+  }
+}

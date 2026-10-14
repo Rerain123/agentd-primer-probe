@@ -11,8 +11,8 @@ description: 使用 OligoSmith WF-01 新建、恢复、查询或导出基础设�
 
 1. 新任务调用 `create_wf01_batch`；有附件时先调用 `download_himat_file`，再传递其返回的引用。
 2. 仅在后端明确返回待处理交互时调用 `revise_wf01_target_manifest` 或 `submit_wf01_interaction_response`。
-3. 仅为恢复已有任务调用 `run_wf01_until_blocked`。
-4. 用户后续明确请求查看、详情、导出或新版本时，分别调用 `get_wf01_batch`、`get_wf01_report`、`get_wf01_candidate`、`get_wf01_export` 或 `create_wf01_version`。
+3. 提交后立即返回任务编号，计算在服务器后台持续进行，不需要保持 HiMat 连接。收到 `WAIT_FOR_BACKGROUND` 时仅回复 `user_message` 并结束本轮；不得自动轮询。仅为用户明确要求恢复已有任务调用 `run_wf01_until_blocked`。
+4. 用户输入“查询进度”时，用当前 `batch_id` 只调用一次 `get_wf01_batch`，返回阶段和状态；不要重新提交设计或调用运行工具。任务不明确时先确认任务编号。用户后续明确请求查看、详情、导出或新版本时，分别调用 `get_wf01_batch`、`get_wf01_report`、`get_wf01_candidate`、`get_wf01_export` 或 `create_wf01_version`。
 5. 根据工具返回的继续、等待或完成状态行动；收到终态结果时按下方交付规则回复后立即结束。
 
 ## 边界
